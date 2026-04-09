@@ -31,6 +31,9 @@ class VaultConfig:
         ]
     )
 
+    # Web provider
+    web_provider: str = "builtin"
+
     # Index
     auto_build_index: bool = True
     index_pages: list[str] = field(
@@ -48,6 +51,7 @@ class VaultConfig:
         sync = data.get("sync", {})
         index = data.get("index", {})
         search = data.get("search", {})
+        web = data.get("web", {})
 
         return cls(
             name=vault.get("name", cls.name),
@@ -60,6 +64,7 @@ class VaultConfig:
             search_boost_evergreen=search.get("boost_evergreen", cls.search_boost_evergreen),
             search_penalize_deprecated=search.get("penalize_deprecated", cls.search_penalize_deprecated),
             search_penalize_stale=search.get("penalize_stale", cls.search_penalize_stale),
+            web_provider=web.get("provider", cls.web_provider),
             auto_sync=sync.get("auto_sync", cls.auto_sync),
             exclude_patterns=sync.get("exclude_patterns", cls().exclude_patterns),
             auto_build_index=index.get("auto_build", cls.auto_build_index),
@@ -86,6 +91,9 @@ class VaultConfig:
             f"boost_evergreen = {self.search_boost_evergreen}",
             f"penalize_deprecated = {self.search_penalize_deprecated}",
             f"penalize_stale = {self.search_penalize_stale}",
+            "",
+            "[web]",
+            f'provider = "{self.web_provider}"',
             "",
             "[sync]",
             f"auto_sync = {'true' if self.auto_sync else 'false'}",

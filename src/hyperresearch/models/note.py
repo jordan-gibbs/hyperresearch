@@ -48,6 +48,9 @@ class NoteMeta(BaseModel):
     created: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated: datetime | None = None
     source: str | None = None
+    source_domain: str | None = None
+    fetched_at: datetime | None = None
+    fetch_provider: str | None = None
     status: NoteStatus = NoteStatus.DRAFT
     type: NoteType = NoteType.NOTE
     aliases: list[str] = Field(default_factory=list)

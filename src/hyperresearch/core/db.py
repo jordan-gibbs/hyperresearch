@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
@@ -98,6 +98,20 @@ CREATE TABLE IF NOT EXISTS tag_aliases (
     alias     TEXT PRIMARY KEY,
     canonical TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS sources (
+    url          TEXT PRIMARY KEY,
+    note_id      TEXT REFERENCES notes(id) ON DELETE SET NULL,
+    domain       TEXT,
+    fetched_at   TEXT,
+    provider     TEXT,
+    content_hash TEXT,
+    status       TEXT NOT NULL DEFAULT 'active'
+                     CHECK (status IN ('active', 'dead', 'redirected'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_sources_domain ON sources(domain);
+CREATE INDEX IF NOT EXISTS idx_sources_note ON sources(note_id);
 
 """
 

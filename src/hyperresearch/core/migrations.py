@@ -13,6 +13,20 @@ CREATE TABLE IF NOT EXISTS tag_aliases (
     canonical TEXT NOT NULL
 );
 """,
+    3: """
+CREATE TABLE IF NOT EXISTS sources (
+    url          TEXT PRIMARY KEY,
+    note_id      TEXT REFERENCES notes(id) ON DELETE SET NULL,
+    domain       TEXT,
+    fetched_at   TEXT,
+    provider     TEXT,
+    content_hash TEXT,
+    status       TEXT NOT NULL DEFAULT 'active'
+                     CHECK (status IN ('active', 'dead', 'redirected'))
+);
+CREATE INDEX IF NOT EXISTS idx_sources_domain ON sources(domain);
+CREATE INDEX IF NOT EXISTS idx_sources_note ON sources(note_id);
+""",
 }
 
 

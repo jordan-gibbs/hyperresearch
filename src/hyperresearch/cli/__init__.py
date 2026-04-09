@@ -38,12 +38,16 @@ from hyperresearch.cli.repair import repair as _repair
 from hyperresearch.cli.search import search as _search
 from hyperresearch.cli.serve import serve as _serve
 from hyperresearch.cli.tag import tag_list as _tags
+from hyperresearch.cli.fetch import fetch as _fetch
+from hyperresearch.cli.install import install as _install
 from hyperresearch.cli.watch import watch as _watch
 
+app.command("install")(_install)
 app.command("init")(_init)
 app.command("status")(_status)
 app.command("sync")(_sync)
 app.command("search")(_search)
+app.command("fetch")(_fetch)
 app.command("tags")(_tags)
 app.command("show", hidden=True)(_show)
 app.command("dedup")(_dedup)

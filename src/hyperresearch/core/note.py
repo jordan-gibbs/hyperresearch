@@ -59,14 +59,16 @@ def write_note(
     parent: str | None = None,
     source: str | None = None,
     summary: str | None = None,
+    extra_frontmatter: dict | None = None,
 ) -> Path:
     """Create a new note file on disk. Returns the file path.
 
     Args:
         notes_dir: The directory to write into (e.g. vault.notes_dir).
+        extra_frontmatter: Additional fields to set on NoteMeta (e.g. source_domain, fetched_at).
     """
     nid = note_id or slugify(title)
-    meta = NoteMeta(
+    kwargs: dict = dict(
         title=title,
         id=nid,
         tags=tags or [],
@@ -77,6 +79,9 @@ def write_note(
         summary=summary,
         created=datetime.now(UTC),
     )
+    if extra_frontmatter:
+        kwargs.update(extra_frontmatter)
+    meta = NoteMeta(**kwargs)
 
     # Determine output path, avoid collisions
     target_dir = notes_dir
