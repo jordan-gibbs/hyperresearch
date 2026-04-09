@@ -1,6 +1,6 @@
 """Tests for link parsing and graph operations."""
 
-from hyperresearch.core.note import WIKI_LINK_RE, CODE_BLOCK_RE, INLINE_CODE_RE
+from hyperresearch.core.note import CODE_BLOCK_RE, INLINE_CODE_RE, WIKI_LINK_RE
 
 
 def test_wiki_link_regex_simple():

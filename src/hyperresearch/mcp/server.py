@@ -233,3 +233,44 @@ def lint_vault(rule: str = "") -> str:
         for r in conn.execute("SELECT id FROM notes WHERE type NOT IN ('index','raw') AND id NOT IN (SELECT DISTINCT target_id FROM links WHERE target_id IS NOT NULL) AND id NOT IN (SELECT DISTINCT source_id FROM links)"):
             issues.append({"rule": "orphaned-notes", "severity": "info", "note_id": r["id"], "message": "No links"})
     return json.dumps({"issues": issues, "total": len(issues), "warnings": sum(1 for i in issues if i["severity"] == "warning")})
+
+
+@server.tool()
+def check_source(url: str) -> str:
+    """Check if a URL has already been fetched into the research base.
+
+    Args:
+        url: The URL to check
+    """
+    vault = _get_vault()
+    row = vault.db.execute(
+        "SELECT url, note_id, domain, fetched_at, provider FROM sources WHERE url = ?",
+        (url,),
+    ).fetchone()
+    if row:
+        return json.dumps({"exists": True, **dict(row)})
+    return json.dumps({"exists": False, "url": url})
+
+
+@server.tool()
+def list_sources(domain: str = "", limit: int = 50) -> str:
+    """List fetched web sources, optionally filtered by domain.
+
+    Args:
+        domain: Filter by domain (e.g. "arxiv.org"). Leave empty for all.
+        limit: Max results (default 50)
+    """
+    vault = _get_vault()
+    if domain:
+        rows = vault.db.execute(
+            "SELECT url, note_id, domain, fetched_at, provider, status "
+            "FROM sources WHERE domain = ? ORDER BY fetched_at DESC LIMIT ?",
+            (domain, limit),
+        ).fetchall()
+    else:
+        rows = vault.db.execute(
+            "SELECT url, note_id, domain, fetched_at, provider, status "
+            "FROM sources ORDER BY fetched_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return json.dumps([dict(r) for r in rows])

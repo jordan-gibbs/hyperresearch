@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Protocol, runtime_checkable
 
 
@@ -14,7 +14,7 @@ class WebResult:
     url: str
     title: str
     content: str  # clean markdown or plain text
-    fetched_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    fetched_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     raw_html: str | None = None
     metadata: dict = field(default_factory=dict)  # author, date, domain, etc.
 

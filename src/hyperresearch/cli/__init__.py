@@ -28,18 +28,19 @@ def main(
 
 # Root-level commands
 from hyperresearch.cli.dedup import dedup as _dedup
+from hyperresearch.cli.fetch import fetch as _fetch
 from hyperresearch.cli.import_cmd import import_vault as _import
+from hyperresearch.cli.install import install as _install
 from hyperresearch.cli.main import init as _init
 from hyperresearch.cli.main import status as _status
 from hyperresearch.cli.main import sync as _sync
 from hyperresearch.cli.mcp_cmd import mcp as _mcp
 from hyperresearch.cli.note import note_show as _show
 from hyperresearch.cli.repair import repair as _repair
+from hyperresearch.cli.research import research as _research
 from hyperresearch.cli.search import search as _search
 from hyperresearch.cli.serve import serve as _serve
 from hyperresearch.cli.tag import tag_list as _tags
-from hyperresearch.cli.fetch import fetch as _fetch
-from hyperresearch.cli.install import install as _install
 from hyperresearch.cli.watch import watch as _watch
 
 app.command("install")(_install)
@@ -48,6 +49,7 @@ app.command("status")(_status)
 app.command("sync")(_sync)
 app.command("search")(_search)
 app.command("fetch")(_fetch)
+app.command("research")(_research)
 app.command("tags")(_tags)
 app.command("show", hidden=True)(_show)
 app.command("dedup")(_dedup)
@@ -81,3 +83,7 @@ app.add_typer(batch_app, name="batch", help="Bulk operations.")
 app.add_typer(template_app, name="template", help="Note templates.")
 app.add_typer(git_app, name="git", help="Git integration.")
 app.add_typer(tag_app, name="tag", help="Tag management.")
+
+from hyperresearch.cli.sources import app as sources_app
+
+app.add_typer(sources_app, name="sources", help="Fetched web sources.")

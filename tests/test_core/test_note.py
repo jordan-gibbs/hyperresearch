@@ -1,8 +1,7 @@
 """Tests for note read/write operations."""
 
-from pathlib import Path
 
-from hyperresearch.core.note import read_note, write_note, strip_markdown
+from hyperresearch.core.note import read_note, strip_markdown, write_note
 from hyperresearch.models.note import slugify
 
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from firecrawl import FirecrawlApp
 
@@ -30,7 +30,7 @@ class FirecrawlProvider:
             title=result.get("metadata", {}).get("title", ""),
             content=result.get("markdown", ""),
             raw_html=result.get("html"),
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
             metadata=result.get("metadata", {}),
         )
 

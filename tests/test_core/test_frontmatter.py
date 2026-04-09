@@ -1,6 +1,6 @@
 """Tests for frontmatter parsing and serialization."""
 
-from hyperresearch.core.frontmatter import parse_frontmatter, serialize_frontmatter, render_note
+from hyperresearch.core.frontmatter import parse_frontmatter, render_note, serialize_frontmatter
 from hyperresearch.models.note import NoteMeta
 
 
@@ -22,7 +22,7 @@ def test_parse_missing_frontmatter():
 
 def test_parse_empty_frontmatter():
     content = "---\n---\n\nBody here."
-    meta, body = parse_frontmatter(content)
+    meta, _body = parse_frontmatter(content)
     assert meta.title == "Untitled"
 
 

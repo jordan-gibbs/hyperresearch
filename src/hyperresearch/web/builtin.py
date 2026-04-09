@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from html.parser import HTMLParser
 
 from hyperresearch.web.base import WebResult
@@ -60,7 +60,7 @@ class BuiltinProvider:
             title=title,
             content=content,
             raw_html=html,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         )
 
     def search(self, query: str, max_results: int = 5) -> list[WebResult]:

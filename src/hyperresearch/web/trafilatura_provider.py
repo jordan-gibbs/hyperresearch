@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import trafilatura
 
@@ -38,7 +38,7 @@ class TrafilaturaProvider:
             title=title,
             content=content,
             raw_html=downloaded,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
             metadata=meta_dict,
         )
 

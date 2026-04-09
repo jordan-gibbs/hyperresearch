@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from tavily import TavilyClient
 
@@ -30,7 +30,7 @@ class TavilyProvider:
                 url=url,
                 title=r.get("title", ""),
                 content=r.get("raw_content", r.get("text", "")),
-                fetched_at=datetime.now(timezone.utc),
+                fetched_at=datetime.now(UTC),
                 metadata={"source": "tavily-extract"},
             )
         raise RuntimeError(f"Tavily extract returned no results for {url}")
@@ -48,7 +48,7 @@ class TavilyProvider:
                     url=r["url"],
                     title=r.get("title", ""),
                     content=r.get("raw_content", r.get("content", "")),
-                    fetched_at=datetime.now(timezone.utc),
+                    fetched_at=datetime.now(UTC),
                     metadata={"score": r.get("score", 0), "source": "tavily-search"},
                 )
             )

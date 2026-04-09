@@ -1,7 +1,7 @@
 """Tests for full-text search."""
 
-from hyperresearch.search.fts import search_fts, preprocess_query
 from hyperresearch.search.filters import SearchFilters
+from hyperresearch.search.fts import preprocess_query, search_fts
 
 
 def test_preprocess_simple_query():

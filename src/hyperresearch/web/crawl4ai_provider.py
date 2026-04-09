@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from crawl4ai import CrawlerStrategy, WebCrawler
+from crawl4ai import WebCrawler
 
 from hyperresearch.web.base import WebResult
 
@@ -23,7 +23,7 @@ class Crawl4AIProvider:
             title=result.metadata.get("title", "") if result.metadata else "",
             content=result.markdown or result.extracted_content or "",
             raw_html=result.html,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
             metadata=result.metadata or {},
         )
 

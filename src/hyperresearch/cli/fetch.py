@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import sys
-from datetime import datetime, timezone
-from pathlib import Path
 from urllib.parse import urlparse
 
 import typer
