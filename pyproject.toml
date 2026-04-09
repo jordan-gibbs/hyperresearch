@@ -1,0 +1,80 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hyperresearch"
+version = "0.1.0"
+description = "Agent-driven research knowledge base. Browse, collect, and synthesize web sources into a searchable wiki."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{name = "Jordan Gibbs", email = "jordan@jordangibbs.xyz"}]
+keywords = ["research", "knowledge-base", "wiki", "llm", "markdown", "cli", "agent", "zettelkasten"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
+dependencies = [
+    "typer>=0.9.0",
+    "rich>=13.0",
+    "pyyaml>=6.0",
+    "pydantic>=2.0",
+    "jinja2>=3.1",
+    "platformdirs>=4.0",
+]
+
+[project.optional-dependencies]
+crawl4ai = ["Crawl4AI>=0.4"]
+tavily = ["tavily-python>=0.5"]
+firecrawl = ["firecrawl>=1.0"]
+trafilatura = ["trafilatura>=2.0"]
+mcp = ["mcp>=1.6"]
+all = ["hyperresearch[crawl4ai,tavily,firecrawl,trafilatura,mcp]"]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.3",
+    "mypy>=1.8",
+]
+
+[project.scripts]
+hyperresearch = "hyperresearch.cli:app"
+hpr = "hyperresearch.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/jordan-gibbs/hyperresearch"
+Repository = "https://github.com/jordan-gibbs/hyperresearch"
+Issues = "https://github.com/jordan-gibbs/hyperresearch/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hyperresearch"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "E501",
+    "B008",
+    "B904",
+    "E402",
+    "N817",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q --strict-markers"
