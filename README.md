@@ -68,12 +68,16 @@ hyperresearch install --platform all    # Hook every platform at once
 ## Key features
 
 - **Real headless browser** — crawl4ai runs local Chromium. Handles JavaScript, bypasses bot detection, renders SPAs. Not a simple HTTP fetch.
+- **Native PDF extraction** — fetches PDFs directly, extracts full text with pymupdf, saves raw files to `research/raw/`. Academic papers, whitepapers, reports — all first-class citizens.
 - **Authenticated crawling** — log into LinkedIn, Twitter, paywalled news. Your sessions persist across fetches.
-- **Auto-curation** — every fetched note gets auto-tagged, auto-summarized, and auto-linked to related notes
+- **Agent-driven curation** — fetcher subagents read each source, write real summaries, add meaningful tags, and flag junk. No keyword-matching shortcuts.
+- **Junk detection** — Cloudflare captchas, error pages, cookie walls, binary garbage, login redirects all caught and rejected before saving.
+- **Multi-round deep research** — the agent does multiple rounds of search → fetch → follow links, with a source checkpoint that forces breadth before synthesis.
+- **Gap analysis + adversarial audit** — after drafting, the agent re-reads the original query to find gaps, then spawns two auditor subagents (comprehensiveness + logic) to tear the draft apart. Runs twice.
+- **Cheap parallel fetching** — ships a Haiku-powered subagent that fetches, summarizes, and quality-checks URLs in parallel for pennies. Spawn 10-20 per round.
+- **Scholarly API guidance** — agent docs encourage use of arXiv, Semantic Scholar, CrossRef, and PubMed APIs for academic topics.
+- **`/research` skill** — scripted deep research workflow. Clarifies ambiguous requests, searches broadly, fetches aggressively, follows rabbit holes, audits, synthesizes.
 - **Smart SPA wait** — polls DOM stability instead of fixed delays. Fast pages finish instantly, SPAs get up to 10 seconds.
-- **Cheap parallel fetching** — ships a Haiku-powered subagent that fetches URLs in parallel for pennies
-- **`/research` skill** — scripted deep research workflow. Clarifies ambiguous requests, searches broadly, fetches aggressively, follows rabbit holes, curates, synthesizes.
-- **Login wall detection** — detects auth redirects and tells you to set up a profile instead of saving junk
 - **FTS5 search** — instant full-text search across thousands of notes with BM25 ranking
 - **Knowledge graph** — `[[wiki-links]]`, backlinks, hub detection, auto-linking
 - **MCP server** — 13 tools (read + write) for Claude Desktop, Cursor, or any MCP client

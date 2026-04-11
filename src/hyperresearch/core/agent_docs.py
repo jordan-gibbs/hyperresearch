@@ -16,7 +16,7 @@ HYPERRESEARCH_SECTION_END = "<!-- hyperresearch:end -->"
 HYPERRESEARCH_BLURB = """\
 
 {marker}
-## Research Base (hyperresearch)
+## Research Base (hyperresearch) — Today is {today}
 
 **CLI path: `{hpr}`** — use this exact path for all hyperresearch commands below. It may not be on your system PATH.
 
@@ -27,6 +27,27 @@ This project uses hyperresearch as an agent-driven research knowledge base. The 
 When the user asks you to research a topic, **you MUST follow this workflow**. Do NOT use WebFetch for source pages — use `{hpr} fetch` instead. It runs a real headless browser, handles JavaScript, bypasses bot detection, saves full content with screenshots and images, and indexes everything for future sessions.
 
 **This is a deep research tool.** Your job is to go down rabbit holes, cast a wide net, and collect as much raw source material as possible. **Over-collect, then prune.** It is always better to have too many sources than too few — you can deprecate notes later, but you can't un-skip a source you never fetched.
+
+**There is no time limit.** Deep research can run for hours if the topic demands it. Do multiple rounds of research — as new subtopics, angles, and questions reveal themselves, launch new rounds of fetcher subagents in parallel to chase them down. The first round uncovers the landscape; the second round digs into what you found; the third round fills gaps. Keep going.
+
+**CHECKPOINT: Before you start writing ANY draft, stop and take stock.** Run:
+```bash
+{hpr} note list -j
+```
+Don't collect sources just to hit a number. Instead, review what you have and ask:
+- What angles, subtopics, or perspectives are NOT yet covered?
+- Which existing notes reference papers, data, or sources I haven't fetched yet?
+- Are there counterarguments, alternative viewpoints, or competing theories I'm missing?
+- Do I have primary sources, or just secondhand summaries?
+
+If the answer to any of these is "yes, there's more to get" — go back and get it. Spawn more fetcher agents, search new angles, follow links from existing notes. Keep going until you genuinely can't find anything new worth adding.
+
+Quality over quantity — but on complex topics, true comprehensiveness requires quantity. If you've only collected 15-25 sources on a PhD-level question, you've barely scratched the surface. Expect to need:
+- Simple factual question: 20-30 sources
+- Complex or technical topic: 50-80 sources
+- PhD-level research question: 80-100+ sources
+
+If you've exhausted every angle and there's genuinely nothing left to find, that's fine — move on. But be honest with yourself about whether you've actually exhausted it or just stopped early.
 
 **Step 1: Check what's already known**
 ```bash
@@ -45,7 +66,7 @@ Use the hyperresearch-fetcher agent to fetch these URLs with tag "<topic>":
 - https://example.com/article2
 ```
 
-**Spawn multiple fetcher agents in parallel** — one per URL or small batch. They run on Haiku, so this is fast and cheap. Err on the side of fetching too many pages.
+**Spawn 10-20 fetcher agents in parallel per round** — give each agent 2-3 URLs max. They run on Haiku and cost fractions of a cent each. After each web search, immediately spawn fetchers for ALL promising URLs from the results — don't cherry-pick, fetch everything. Then do another round of searches and another round of fetchers. Repeat until you hit the source checkpoint.
 
 If the `hyperresearch-fetcher` agent is not available (other platforms), fall back to running the command directly:
 ```bash
@@ -64,15 +85,56 @@ Look for links in the content that point to **primary sources, references, relat
 - A paper cites 3 key references? Fetch all 3.
 - A profile mentions a company? Fetch the company page.
 - Found a related topic that might be relevant? Fetch it. You can always deprecate it later.
+- A page links to raw data, CSV files, or datasets? Fetch those and analyze them.
+- A source references specific statistics without citing them? Search for and fetch the primary data.
+
+**Follow links deeply.** Don't stop at the first page. When a fetched page links to more detailed sources, primary research, raw data, or technical documentation — follow those links and fetch them too. The best insights come from primary sources, not secondhand summaries.
+
+**Run analysis when needed.** If you find raw data (tables, CSVs, statistics), don't just quote numbers — write and run code to compute real figures, verify claims, calculate trends, and produce original analysis. Concrete numbers from actual data are worth more than vague summaries.
 
 **The goal is exhaustive collection.** You are building a knowledge base that future agents will rely on. Missing a source is worse than having one extra note. Prune later during curation.
+
+**Do NOT stop collecting until you are certain you have enough breadth.** After each round of fetching, ask yourself: "Are there major angles, subtopics, or perspectives I haven't covered yet?" If yes, search and fetch more. If a topic has 5 facets, you need sources on all 5 — not just the first 2 you found. Keep going until you can confidently say the collection covers the full scope of the topic. A half-covered topic is worse than no coverage at all.
 
 **Step 5: Synthesize** — Once you have the raw sources indexed, search and read them to build your synthesis:
 ```bash
 {hpr} search "topic" --include-body -j
 ```
 
-**Step 6: Prune** — After synthesis, deprecate notes that turned out to be irrelevant:
+Write a draft report with inline URL citations.
+
+**Step 6: Gap analysis (MANDATORY)** — After writing your draft, stop and compare it against the original query. Re-read the user's request word by word. Ask yourself:
+- What specific questions did they ask that I haven't fully answered?
+- What subtopics or angles did I miss entirely?
+- Where did I make claims without strong enough evidence?
+- What would an expert in this field say is missing?
+
+Then launch a new round of research to fill every gap — web search, fetch, follow links, the full workflow. Spawn fetcher subagents in parallel for the new URLs. Add the new material to your draft.
+
+**Step 7: Adversarial audit (MANDATORY — do this twice)** — After the gap-filling round, launch two subagents in parallel to audit the revised draft. This runs up to 2 loops.
+
+Spawn two agents in parallel:
+- **Agent 1 — Comprehensiveness auditor:** "Read this report and search the research base (`{hpr} search` and `{hpr} note show`) to find gaps. What subtopics, angles, data points, or counterarguments are missing? What claims lack citations? What sections are shallow? Compare against the original query and be ruthless — list every gap."
+- **Agent 2 — Logic and structure auditor:** "Read this report as a domain expert. Does the argument flow logically? Are conclusions supported by the evidence presented? Are there logical leaps, unsupported claims, or contradictions? Is the structure optimal for the topic? Be specific — list every weakness."
+
+Pass your full draft report text to both agents. They search the research base independently and report back.
+
+**After each audit round:**
+1. Read both agents' feedback
+2. If they identified missing topics or weak arguments — do another round of web search and fetching to fill the gaps
+3. Rewrite the report incorporating new sources and fixing structural issues
+4. Run the audit again (second loop) on the revised report
+
+**You MUST do at least one audit loop. Do two if the first audit found significant gaps.** Only after the auditors have no major complaints should you finalize the report.
+
+**While audit agents are running, don't idle.** Use the wait time productively:
+- Improve summaries on notes that have weak or missing summaries
+- Add more specific tags to notes that only have one generic tag
+- Add `[[wiki-links]]` between related notes to build the knowledge graph
+- Run `{hpr} lint -j` and fix any issues it finds
+- Read notes you haven't read yet and look for links worth following in future rounds
+
+**Step 8: Prune** — After the final report is done, deprecate notes that turned out to be irrelevant:
 ```bash
 {hpr} note update <id> --status deprecated -j
 ```
@@ -81,6 +143,27 @@ This keeps the KB clean without losing anything permanently.
 ### Why {hpr} fetch, not WebFetch
 
 `{hpr} fetch` runs a real headless Chromium browser — it bypasses bot detection, saves full content with formatting, persists across sessions, and tracks URLs to prevent re-fetching. **Use WebFetch only for quick one-off lookups you don't need to save.**
+
+### PDFs are fully supported — fetch them directly
+
+`{hpr} fetch` automatically detects PDF URLs and extracts full text using pymupdf — no browser needed. **Fetch PDFs aggressively:**
+- arXiv papers (both `/abs/` and `/pdf/` links work — auto-converted)
+- NBER working papers, SSRN papers, direct `.pdf` links
+- Conference proceedings, technical reports, whitepapers
+
+PDF extraction is fast and produces clean text from all pages. **Do not skip a source just because it's a PDF.** If a paper is behind a paywall, look for preprint versions on arXiv, SSRN, ResearchGate, or the author's personal page.
+
+Raw files are automatically saved to `research/raw/<note-id>.pdf` and linked from the note's frontmatter (`raw_file: raw/<note-id>.pdf`). You can read the raw PDF directly if you need to verify content or extract figures.
+
+### Use scholarly APIs when available
+
+For academic research, use APIs to find and access papers programmatically:
+- **arXiv API** — `https://export.arxiv.org/api/query?search_query=...` returns XML with abstracts, authors, PDF links
+- **Semantic Scholar API** — `https://api.semanticscholar.org/graph/v1/paper/search?query=...` returns structured paper data with citations
+- **CrossRef API** — `https://api.crossref.org/works?query=...` for DOI lookups and metadata
+- **PubMed/NCBI API** — for biomedical research
+
+Write code to call these APIs when the topic is academic. The structured data (citation counts, related papers, abstracts) is often more useful than scraping a webpage. Fetch the actual papers via their PDF links after finding them through the API.
 
 ### Raw content is king
 
@@ -149,16 +232,18 @@ to recreate the profile, or `playwright install chromium` to reinstall the brows
 
 The research base is a **long-lived knowledge investment**, not a scratchpad. Every future agent session benefits from well-organized notes. **After fetching sources, you MUST do a curation pass.**
 
-**Step 1: Tag and summarize every new note**
-Fetched notes arrive as drafts with no summary. Fix each one:
+**Step 1: Read and summarize every new note**
+Fetched notes arrive as drafts with no summary. **You must read each note and write a real summary** — not a generic label but a specific description of what the source contains:
 ```bash
 {hpr} note list --status draft -j                         # Find unprocessed notes
-{hpr} note update <id> --summary "One-line summary" -j    # Add summary
-{hpr} note update <id> --add-tag <topic> -j               # Add tags
+{hpr} note show <id> -j                                   # Read the note content
+{hpr} note update <id> --summary "One-line summary" -j    # Add YOUR summary after reading it
+{hpr} note update <id> --add-tag <topic> -j               # Add meaningful tags
 ```
-- REUSE existing tags: `{hpr} tags -j` — do not invent new ones unless truly novel
+- **Read the content first**, then write a summary that captures what's actually in it. "Maskin & Riley prove existence and uniqueness of equilibrium in asymmetric first-price auctions via ODE system" — not "Paper about auctions"
+- REUSE existing tags: `{hpr} tags -j` — do not invent new ones unless truly novel, but add multiple relevant tags per note
 - Every note MUST have: at least one tag, a summary (under 120 chars), a source URL
-- Summaries should be specific and searchable, not generic ("Overview of X" is useless; "X achieves Y by doing Z" is useful)
+- For PDF notes, check the `raw_file` field in the frontmatter — it points to the actual PDF in `research/raw/`. You can read it directly if the extracted text is incomplete
 
 **Step 2: Connect related notes with wiki-links**
 Read through new notes and add `[[other-note-id]]` links to connect related material:
@@ -224,16 +309,15 @@ AGENT_FILES = {
 
 
 def _resolve_executable() -> str:
-    """Find the absolute path to the hyperresearch executable."""
+    """Find the absolute path to the hyperresearch executable.
+
+    Priority: venv sibling of current python > PATH > bare name.
+    """
     import shutil
     import sys
 
-    # Check if it's on PATH already
-    which = shutil.which("hyperresearch")
-    if which:
-        return which
-
-    # Find it relative to the current Python interpreter (works for venv installs)
+    # First: find it relative to the current Python interpreter (venv installs).
+    # This takes priority over PATH to avoid picking up a system-wide install.
     python_dir = Path(sys.executable).parent
     for name in ("hyperresearch", "hyperresearch.exe"):
         candidate = python_dir / name
@@ -244,6 +328,11 @@ def _resolve_executable() -> str:
         candidate = python_dir / "Scripts" / name
         if candidate.exists():
             return str(candidate)
+
+    # Second: check PATH
+    which = shutil.which("hyperresearch")
+    if which:
+        return which
 
     # Fallback — bare name, hope it's on PATH
     return "hyperresearch"
@@ -267,10 +356,12 @@ def inject_agent_docs(
     hpr_path = _resolve_executable()
     # Use forward slashes — bash on Windows eats backslashes
     hpr_path = hpr_path.replace("\\", "/")
+    from datetime import date
     blurb = HYPERRESEARCH_BLURB.format(
         marker=HYPERRESEARCH_SECTION_MARKER,
         end_marker=HYPERRESEARCH_SECTION_END,
         hpr=hpr_path,
+        today=date.today().isoformat(),
     )
     modified = []
 

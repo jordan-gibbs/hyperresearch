@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.3.0] - 2026-04-11
+
+### New
+
+- **Native PDF extraction** — PDFs detected by URL pattern, downloaded directly with httpx, text extracted with pymupdf. No browser needed. arXiv `/abs/` links auto-convert to `/pdf/`.
+- **Raw file storage** — PDF bytes saved to `research/raw/<note-id>.pdf`, linked from note frontmatter via `raw_file:` field. Agent can read the raw PDF directly.
+- **Junk page detection** — `WebResult.looks_like_junk()` catches Cloudflare captchas, error pages, cookie walls, binary garbage, reCAPTCHA, and empty content before saving. Returns `JUNK_CONTENT` error instead of creating useless notes.
+- **Gap analysis step** — after drafting the report, agent re-reads the original query word by word, identifies gaps, and does another full round of research to fill them.
+- **Adversarial audit** — two subagents (comprehensiveness auditor + logic/structure auditor) review the draft in parallel. Runs up to 2 loops. Agent uses wait time productively to improve summaries and tags.
+- **Source checkpoint** — agent must review collected sources before writing any draft. Checks coverage breadth, missing angles, uncited references. Expects 50-100+ sources on complex topics.
+- **Scholarly API guidance** — CLAUDE.md and `/research` skill now encourage use of arXiv, Semantic Scholar, CrossRef, and PubMed APIs for academic research.
+- **Date injection** — today's date injected programmatically into CLAUDE.md at install time.
+- **Multi-round research emphasis** — agent docs stress multiple rounds of search → fetch → follow links, spawning 10-20 fetcher agents per round.
+
+### Changed
+
+- **Agent-driven curation replaces auto-enrich** — removed the keyword-matching `enrich_note_file()` from the fetch pipeline. Fetcher subagents now read content, write real summaries, add meaningful tags, and quality-check each source (deprecating junk/off-topic notes).
+- **Fetcher subagent quality gate** — subagent now checks relevance, content quality, and duplicates. Deprecates bad notes instead of leaving them as drafts.
+- **`_resolve_executable()` prioritizes venv** — checks venv `Scripts/` dir before PATH, preventing system-wide installs from overriding the project's venv.
+- **PDF binary detection improved** — checks for `endstream`, `endobj`, `/FlateDecode`, `%PDF-` markers and non-printable character ratios. Catches binary garbage in both single-fetch and batch-fetch paths.
+- **Junk detection thresholds raised** — empty content threshold: 100→300 chars, cookie page threshold: 500→1500 chars. Added `recaptcha`, `checking your browser`, `verify you are human` to bot detection signals.
+- **SSL verification disabled for PDF downloads** — academic sites often have self-signed certs. `httpx.get(verify=False)` for PDF fetches only.
+- **PDF fetch logging** — `_fetch_pdf` failures now logged via `logging.getLogger("hyperresearch.pdf")` instead of silently returning None.
+- **Fetcher subagent continues on failure** — no longer stops on first fetch error, tries all URLs and reports failures individually.
+
+### Added dependencies
+
+- `pymupdf>=1.24` — PDF text extraction
+- `httpx>=0.27` — direct HTTP downloads for PDFs (bypasses browser)
+
 ## [0.2.0] - 2026-04-10
 
 ### New
@@ -68,5 +98,6 @@ Initial release. Forked from [llm-kasten](https://github.com/jordan-gibbs/llm-ka
 - Web viewer with force-directed knowledge graph
 - 70 tests
 
+[0.3.0]: https://github.com/jordan-gibbs/hyperresearch/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jordan-gibbs/hyperresearch/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jordan-gibbs/hyperresearch/releases/tag/v0.1.0

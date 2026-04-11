@@ -57,16 +57,25 @@ For each URL you are given:
 2. If not already fetched, fetch it:
    PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> -j
 
-3. After fetching, read the note and look for links worth following:
+3. After fetching, read the note content:
    PYTHONIOENCODING=utf-8 {hpr_path} note show <note-id> -j
 
-4. Report back: the note ID, title, word count, AND a list of links found
-   in the content that look like they lead to primary sources, references,
-   related material, or deeper content. Be aggressive — list anything that
-   might be worth fetching. The parent agent will decide what to pursue.
+4. **Quality check** — read the content and decide:
+   - Is this actually relevant to the research topic? If it's completely off-topic, deprecate it:
+     PYTHONIOENCODING=utf-8 {hpr_path} note update <note-id> --status deprecated -j
+   - Is the content meaningful (not binary garbage, not a cookie page, not just nav elements)?
+     If it's junk, deprecate it and report "junk content" to the parent agent.
+   - Is this a duplicate of another source? If so, deprecate the worse copy.
 
-If the first fetch fails with a browser error, stop and report the error.
-Do not attempt remaining URLs.
+5. If the content is good, write a real summary and add tags:
+   PYTHONIOENCODING=utf-8 {hpr_path} note update <note-id> --summary "<specific summary>" -j
+   PYTHONIOENCODING=utf-8 {hpr_path} note update <note-id> --add-tag <specific-tag> -j
+
+   The summary must be specific — "Proves existence/uniqueness of equilibrium in asymmetric first-price auctions via coupled ODE system" NOT "Paper about auctions". Add multiple relevant tags based on the actual content.
+
+6. Report back: the note ID, title, word count, your summary, quality verdict (good/junk/off-topic), AND a list of links found in the content that look like they lead to primary sources, references, related material, or deeper content. The parent agent will decide what to pursue.
+
+If a fetch fails (JUNK_CONTENT, FETCH_ERROR, AUTH_REQUIRED), report the failure and move on to the next URL. Do NOT stop on first failure — try all URLs.
 
 If given multiple URLs and fetching works, process them sequentially. Report results for each.
 

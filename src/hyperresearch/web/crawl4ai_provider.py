@@ -30,6 +30,108 @@ if sys.platform == "win32":
                 pass
 
 
+def _is_pdf_url(url: str) -> bool:
+    """Check if URL likely points to a PDF."""
+    from urllib.parse import urlparse, parse_qs
+
+    parsed = urlparse(url.lower())
+    path = parsed.path
+    # Direct .pdf links
+    if path.endswith(".pdf"):
+        return True
+    # Common academic PDF patterns
+    if "/pdf/" in path or "/pdfs/" in path:
+        return True
+    # arXiv PDF links
+    if "arxiv.org" in parsed.netloc and ("/pdf/" in path or "/abs/" in path):
+        return True
+    return False
+
+
+def _looks_like_binary(text: str) -> bool:
+    """Check if extracted 'content' is actually binary garbage from a PDF."""
+    if not text:
+        return False
+    sample = text[:2000]
+    # PDF internal structure markers — dead giveaway
+    pdf_markers = ("endstream", "endobj", "/Filter", "/FlateDecode", "stream\nx", "%PDF-")
+    if any(m in sample for m in pdf_markers):
+        return True
+    # High ratio of non-printable or replacement chars
+    non_printable = sum(1 for c in sample if ord(c) > 127 or c in '\x00\x01\x02\x03\x04\x05')
+    return non_printable > len(sample) * 0.15
+
+
+def _fetch_pdf(url: str) -> WebResult | None:
+    """Download a PDF and extract text using pymupdf. Returns None if extraction fails."""
+    try:
+        import pymupdf
+    except ImportError:
+        return None
+
+    import httpx
+
+    try:
+        # Convert arXiv abs links to PDF links
+        if "arxiv.org/abs/" in url:
+            url = url.replace("/abs/", "/pdf/")
+            if not url.endswith(".pdf"):
+                url += ".pdf"
+
+        resp = httpx.get(url, follow_redirects=True, timeout=30, verify=False, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        })
+        if resp.status_code != 200:
+            return None
+
+        content_type = resp.headers.get("content-type", "")
+        if "pdf" not in content_type and not url.lower().endswith(".pdf"):
+            return None  # Not actually a PDF
+
+        pdf_bytes = resp.content
+        if len(pdf_bytes) < 100:
+            return None
+
+        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+
+        # Extract text from all pages
+        pages = []
+        for page in doc:
+            text = page.get_text("text")
+            if text.strip():
+                pages.append(text)
+
+        doc.close()
+
+        if not pages:
+            return None
+
+        # Build markdown from extracted text
+        full_text = "\n\n---\n\n".join(pages)
+        title = ""
+        # Try to get title from first page (first non-empty line)
+        for line in pages[0].split("\n"):
+            line = line.strip()
+            if len(line) > 10:
+                title = line
+                break
+
+        return WebResult(
+            url=url,
+            title=title or f"PDF: {url.split('/')[-1]}",
+            content=full_text,
+            fetched_at=datetime.now(UTC),
+            metadata={"content_type": "application/pdf", "pages": len(pages)},
+            raw_bytes=pdf_bytes,
+            raw_content_type="application/pdf",
+        )
+
+    except Exception as e:
+        import logging
+        logging.getLogger("hyperresearch.pdf").warning(f"PDF extraction failed for {url}: {e}")
+        return None
+
+
 class Crawl4AIProvider:
     name = "crawl4ai"
 
@@ -84,10 +186,27 @@ class Crawl4AIProvider:
         )
 
     def fetch(self, url: str) -> WebResult:
+        # PDF detection: fetch directly with httpx, extract text with pymupdf
+        if _is_pdf_url(url):
+            result = _fetch_pdf(url)
+            if result is not None:
+                return result
+            # Fallback to browser if PDF fetch failed (might be a landing page, not actual PDF)
+
         # When visible + profile: use Playwright directly (crawl4ai managed browser ignores headless=False)
         if not self._headless and self._data_dir:
             return asyncio.run(self._fetch_visible(url))
-        return asyncio.run(self._fetch_async(url))
+
+        result = asyncio.run(self._fetch_async(url))
+
+        # Post-fetch PDF detection: if the browser got binary garbage (PDF served
+        # inline without proper content-type handling), re-fetch as a direct PDF download.
+        if result.content and _looks_like_binary(result.content):
+            pdf_result = _fetch_pdf(url)
+            if pdf_result is not None:
+                return pdf_result
+
+        return result
 
     async def _fetch_visible(self, url: str) -> WebResult:
         """Fetch using Playwright directly with a visible browser window.
@@ -205,44 +324,64 @@ class Crawl4AIProvider:
         return asyncio.run(self._fetch_many_async(urls))
 
     async def _fetch_many_async(self, urls: list[str]) -> list[WebResult]:
-        async with AsyncWebCrawler(config=self._browser_config) as crawler:
-            results = await crawler.arun_many(urls=urls, config=self._run_config)
-            web_results = []
-            for cr, url in zip(results, urls, strict=False):
-                if not cr.success:
-                    continue
-                metadata = cr.metadata or {}
-                md = cr.markdown
-                if md and hasattr(md, "raw_markdown"):
-                    content = md.raw_markdown or ""
-                elif isinstance(md, str):
-                    content = md
-                else:
-                    content = ""
+        # Split: PDFs go direct, rest go through browser
+        pdf_urls = [u for u in urls if _is_pdf_url(u)]
+        html_urls = [u for u in urls if not _is_pdf_url(u)]
 
-                media_raw = cr.media or {}
-                media = media_raw.get("images", []) if isinstance(media_raw, dict) else []
+        web_results = []
 
-                screenshot_bytes = None
-                if cr.screenshot:
-                    import base64
+        # Fetch PDFs directly (no browser needed)
+        for url in pdf_urls:
+            pdf_result = _fetch_pdf(url)
+            if pdf_result is not None:
+                web_results.append(pdf_result)
 
-                    try:
-                        screenshot_bytes = base64.b64decode(cr.screenshot)
-                    except Exception:
-                        pass
+        # Fetch HTML pages with browser
+        if html_urls:
+            async with AsyncWebCrawler(config=self._browser_config) as crawler:
+                results = await crawler.arun_many(urls=html_urls, config=self._run_config)
+                for cr, url in zip(results, html_urls, strict=False):
+                    if not cr.success:
+                        continue
+                    metadata = cr.metadata or {}
+                    md = cr.markdown
+                    if md and hasattr(md, "raw_markdown"):
+                        content = md.raw_markdown or ""
+                    elif isinstance(md, str):
+                        content = md
+                    else:
+                        content = ""
 
-                web_results.append(WebResult(
-                    url=cr.url or url,
-                    title=metadata.get("title", ""),
-                    content=content,
-                    raw_html=cr.html,
-                    fetched_at=datetime.now(UTC),
-                    metadata=metadata,
-                    media=media,
-                    screenshot=screenshot_bytes,
-                ))
-            return web_results
+                    # Post-fetch binary check — browser may have fetched a PDF inline
+                    if content and _looks_like_binary(content):
+                        pdf_result = _fetch_pdf(url)
+                        if pdf_result is not None:
+                            web_results.append(pdf_result)
+                            continue
+
+                    media_raw = cr.media or {}
+                    media = media_raw.get("images", []) if isinstance(media_raw, dict) else []
+
+                    screenshot_bytes = None
+                    if cr.screenshot:
+                        import base64
+
+                        try:
+                            screenshot_bytes = base64.b64decode(cr.screenshot)
+                        except Exception:
+                            pass
+
+                    web_results.append(WebResult(
+                        url=cr.url or url,
+                        title=metadata.get("title", ""),
+                        content=content,
+                        raw_html=cr.html,
+                        fetched_at=datetime.now(UTC),
+                        metadata=metadata,
+                        media=media,
+                        screenshot=screenshot_bytes,
+                    ))
+        return web_results
 
     def search(self, query: str, max_results: int = 5) -> list[WebResult]:
         raise NotImplementedError(

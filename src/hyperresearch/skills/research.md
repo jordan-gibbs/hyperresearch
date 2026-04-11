@@ -67,6 +67,20 @@ Each fetcher will report back with note IDs and interesting links found in the c
 
 **Over-collect.** It is always better to have too many sources than too few. You can deprecate notes later.
 
+**There is no time limit.** Do multiple rounds of fetching — as new subtopics and questions reveal themselves, launch new rounds of fetcher subagents in parallel to chase them down. The first round uncovers the landscape, the second digs into what you found, the third fills gaps. Keep going until you've exhausted the topic. Do not rush.
+
+**CHECKPOINT: Before writing any draft, stop and take stock:**
+```bash
+$HPR note list -j
+```
+Review what you have. Don't chase a number — chase completeness:
+- What angles or subtopics are NOT yet covered?
+- Which notes reference sources you haven't fetched?
+- Are there counterarguments or alternative viewpoints missing?
+- Do you have primary sources or just secondhand summaries?
+
+If there's more to get, go get it. If you've genuinely exhausted the topic, move on. But be honest — on complex topics, expect 50-80+ sources before you've truly covered it.
+
 ## Step 4: Go down rabbit holes
 
 Read the fetched notes and follow links to deeper material:
@@ -76,13 +90,30 @@ $HPR note show <note-id> -j
 ```
 
 For each note, look for:
-- **Papers cited** → fetch them
+- **Papers cited** → fetch them (PDFs are fully supported — fetch directly)
 - **Documentation linked** → fetch it
 - **GitHub repos mentioned** → fetch the README
 - **Related topics referenced** → search and fetch
 - **People/companies mentioned** → fetch their pages
+- **Raw data, CSVs, datasets linked** → fetch and analyze them
+- **Statistics without primary sources** → search for and fetch the original data
 
-Spawn more fetcher agents for these secondary sources. Keep going until you've exhausted the link trail or have 20+ sources.
+**PDFs work natively.** arXiv papers, NBER working papers, conference proceedings — fetch them directly. The tool auto-detects PDFs and extracts full text. Don't skip sources because they're PDFs.
+
+**Use scholarly APIs for academic topics.** When the research is academic, use APIs to find papers:
+- arXiv API: `https://export.arxiv.org/api/query?search_query=...`
+- Semantic Scholar API: `https://api.semanticscholar.org/graph/v1/paper/search?query=...`
+- CrossRef API: `https://api.crossref.org/works?query=...`
+
+Write code to call these, get structured paper data (citations, related work, abstracts), then fetch the actual PDFs.
+
+Follow links deeply — don't stop at the first page. When a source links to more detailed material, primary research, or raw data, follow those links and fetch them too.
+
+**Run analysis when needed.** If you find raw data (tables, CSVs, statistics), write and run code to compute real figures, verify claims, calculate trends, and produce original analysis. Concrete numbers from actual data beat vague summaries.
+
+Spawn more fetcher agents for these secondary sources.
+
+**Do NOT stop collecting until you are certain you have enough breadth.** After each round of fetching, ask yourself: "Are there major angles, subtopics, or perspectives I haven't covered yet?" If yes, search and fetch more. If a topic has 5 facets, you need sources on all 5 — not just the first 2 you found. Keep going until you can confidently say the collection covers the full scope of the topic.
 
 ## Step 5: Auto-link and curate
 
@@ -114,7 +145,7 @@ $HPR graph hubs -j
 $HPR graph backlinks <most-linked-note-id> -j
 ```
 
-## Step 7: Synthesize and report
+## Step 7: Synthesize draft report
 
 Search the full research base with bodies:
 
@@ -122,9 +153,58 @@ Search the full research base with bodies:
 $HPR search "<topic>" --include-body -j
 ```
 
-Read the top notes and build a comprehensive synthesis. Then **save the synthesis as a note**:
+Read the top notes and write a comprehensive draft report with inline URL citations.
 
-Write your synthesis to a temp file and save it:
+## Step 8: Gap analysis (MANDATORY)
+
+After writing your draft, stop and compare it against the original query. Re-read the user's request word by word:
+- What specific questions did they ask that I haven't fully answered?
+- What subtopics or angles did I miss entirely?
+- Where did I make claims without strong enough evidence?
+- What would an expert in this field say is missing?
+
+Launch a new round of research to fill every gap — web search, fetch, follow links, spawn fetcher subagents in parallel. Add the new material to your draft.
+
+## Step 9: Adversarial audit (MANDATORY — do this twice)
+
+After the gap-filling round, launch two subagents in parallel to audit the revised draft:
+
+**Agent 1 — Comprehensiveness auditor:**
+```
+Read this report and search the research base ($HPR search, $HPR note show) to find gaps.
+What subtopics, angles, data points, or counterarguments are missing? What claims lack
+citations? What sections are shallow? Compare against the original query and be ruthless —
+list every gap you find.
+```
+
+**Agent 2 — Logic and structure auditor:**
+```
+Read this report as a domain expert. Does the argument flow logically? Are conclusions
+supported by the evidence presented? Are there logical leaps, unsupported claims, or
+contradictions? Is the structure optimal for the topic? Be specific — list every weakness.
+```
+
+Pass your full draft report text to both agents.
+
+**After each audit round:**
+1. Read both agents' feedback
+2. If they found missing topics or weak arguments — do another round of web search + fetching
+3. Rewrite the report with new sources and structural fixes
+4. Run the audit again (second loop) on the revised report
+
+**Do at least one audit loop. Do two if the first found significant gaps.** Only finalize after auditors have no major complaints.
+
+**While audit agents are running, don't idle.** Use the wait time to:
+- Improve weak or missing summaries on notes (`$HPR note update <id> --summary "..." -j`)
+- Add more specific tags to under-tagged notes (`$HPR note update <id> --add-tag <tag> -j`)
+- Add `[[wiki-links]]` between related notes
+- Run `$HPR lint -j` and fix issues
+- Read notes you haven't reviewed yet for links worth following
+
+## Step 10: Save the final report
+
+Save the final reviewed report as a synthesis note:
+
 ```bash
 cat > /tmp/synthesis.md << 'SYNTHESIS'
 # <Topic> — Research Synthesis
@@ -142,7 +222,7 @@ SYNTHESIS
 $HPR note new "Synthesis: <topic>" --tag <topic> --tag synthesis --type moc --status review --body-file /tmp/synthesis.md --summary "<one-line summary of findings>" -j
 ```
 
-## Step 8: Present to user
+## Step 11: Present to user
 
 Present your findings with:
 

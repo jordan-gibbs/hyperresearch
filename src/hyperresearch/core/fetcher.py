@@ -22,7 +22,6 @@ def fetch_and_save(
         ValueError: If URL is already fetched.
         RuntimeError: If fetch fails.
     """
-    from hyperresearch.core.enrich import enrich_note_file
     from hyperresearch.core.note import write_note
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.web.base import get_provider
@@ -65,6 +64,11 @@ def fetch_and_save(
             "Run 'hyperresearch setup' and create a new login profile."
         )
 
+    # Detect junk pages — captcha, error pages, binary garbage, empty content
+    junk_reason = result.looks_like_junk()
+    if junk_reason:
+        raise RuntimeError(f"Skipped junk content: {junk_reason}")
+
     # Write note
     note_title = title or result.title or urlparse(url).path.split("/")[-1] or "Untitled"
     domain = result.domain
@@ -89,8 +93,39 @@ def fetch_and_save(
         extra_frontmatter=extra_meta,
     )
 
-    # Auto-enrich
-    enrich_note_file(note_path, conn, tags)
+    # Save raw file (PDF, etc.) if present
+    raw_file_path = None
+    if result.raw_bytes and result.raw_content_type:
+        ext_map = {
+            "application/pdf": ".pdf",
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+        }
+        ext = ext_map.get(result.raw_content_type, "")
+        if ext:
+            raw_dir = vault.root / "research" / "raw"
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            raw_filename = note_path.stem + ext
+            raw_file = raw_dir / raw_filename
+            raw_file.write_bytes(result.raw_bytes)
+            raw_file_path = f"raw/{raw_filename}"
+
+    # Note: tagging and summarization is the agent's job, not an automatic process.
+
+    # Add raw_file reference to frontmatter AFTER enrich (enrich rewrites frontmatter)
+    if raw_file_path:
+        note_text = note_path.read_text(encoding="utf-8")
+        if note_text.startswith("---") and "raw_file:" not in note_text:
+            end = note_text.find("---", 3)
+            if end != -1:
+                note_text = (
+                    note_text[:end]
+                    + f"raw_file: {raw_file_path}\n"
+                    + note_text[end:]
+                )
+                note_path.write_text(note_text, encoding="utf-8")
 
     # Sync
     note_id = note_path.stem
@@ -124,4 +159,5 @@ def fetch_and_save(
         "path": str(note_path.relative_to(vault.root)),
         "word_count": len(result.content.split()),
         "assets": saved_assets,
+        "raw_file": raw_file_path,
     }
