@@ -10,7 +10,7 @@ Initial release. Forked from [llm-kasten](https://github.com/jordan-gibbs/llm-ka
 - **`hyperresearch fetch <url>`** — Fetch a URL, extract content, save as a research note with source tracking
 - **`hyperresearch research <topic>`** — Deep research: web search, fetch results, follow links, save as linked notes, generate synthesis MOC
 - **`hyperresearch sources list/check`** — List and query fetched web sources
-- **Web provider plugin system** — Pluggable backends: builtin (stdlib), crawl4ai, tavily, firecrawl, trafilatura
+- **Web provider plugin system** — Pluggable backends: builtin (stdlib), crawl4ai (local headless browser)
 - **Agent hook system** — PreToolUse hooks that remind agents to check the research base before web searches
 - **Sources table** — URL deduplication, domain tracking, fetch metadata
 - **Extended frontmatter** — `source_domain`, `fetched_at`, `fetch_provider` fields

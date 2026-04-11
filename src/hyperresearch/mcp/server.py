@@ -274,3 +274,131 @@ def list_sources(domain: str = "", limit: int = 50) -> str:
             (limit,),
         ).fetchall()
     return json.dumps([dict(r) for r in rows])
+
+
+@server.tool()
+def fetch_url(url: str, tags: str = "", provider: str = "") -> str:
+    """Fetch a URL and save it as a research note.
+
+    Args:
+        url: The URL to fetch
+        tags: Comma-separated tags (e.g. "ml,transformers")
+        provider: Web provider override (leave empty for default)
+    """
+    from hyperresearch.core.fetcher import fetch_and_save
+
+    vault = _get_vault()
+    vault.auto_sync()
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+
+    try:
+        result = fetch_and_save(
+            vault, url, tags=tag_list,
+            provider_name=provider or None,
+        )
+        return json.dumps({"ok": True, "data": result})
+    except ValueError as e:
+        return json.dumps({"ok": False, "error": str(e), "error_code": "DUPLICATE_URL"})
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e), "error_code": "FETCH_ERROR"})
+
+
+@server.tool()
+def create_note(title: str, body: str, tags: str = "", source: str = "", summary: str = "") -> str:
+    """Create a new research note.
+
+    Args:
+        title: Note title
+        body: Note body content (markdown)
+        tags: Comma-separated tags
+        source: Source URL (if from the web)
+        summary: One-line summary (auto-generated if empty)
+    """
+    from hyperresearch.core.enrich import enrich_note_file
+    from hyperresearch.core.note import write_note
+    from hyperresearch.core.sync import compute_sync_plan, execute_sync
+
+    vault = _get_vault()
+    vault.auto_sync()
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+
+    extra = {}
+    if source:
+        extra["source"] = source
+
+    note_path = write_note(
+        vault.notes_dir,
+        title=title,
+        body=body,
+        tags=tag_list,
+        status="draft",
+        source=source or None,
+        summary=summary or None,
+        extra_frontmatter=extra if extra else None,
+    )
+
+    enrich_note_file(note_path, vault.db, tag_list)
+
+    plan = compute_sync_plan(vault)
+    if plan.to_add or plan.to_update:
+        execute_sync(vault, plan)
+
+    note_id = note_path.stem
+    return json.dumps({"ok": True, "data": {
+        "note_id": note_id,
+        "title": title,
+        "path": str(note_path.relative_to(vault.root)),
+    }})
+
+
+@server.tool()
+def update_note(note_id: str, status: str = "", add_tags: str = "", remove_tags: str = "", summary: str = "") -> str:
+    """Update a note's metadata.
+
+    Args:
+        note_id: The note ID to update
+        status: New status (draft/review/evergreen/stale/deprecated/archive)
+        add_tags: Comma-separated tags to add
+        remove_tags: Comma-separated tags to remove
+        summary: New summary text
+    """
+    from hyperresearch.core.frontmatter import parse_frontmatter, serialize_frontmatter
+    from hyperresearch.core.sync import compute_sync_plan, execute_sync
+
+    vault = _get_vault()
+    vault.auto_sync()
+
+    row = vault.db.execute("SELECT path FROM notes WHERE id = ?", (note_id,)).fetchone()
+    if not row:
+        return json.dumps({"ok": False, "error": f"Note not found: {note_id}", "error_code": "NOT_FOUND"})
+
+    file_path = vault.root / row["path"]
+    content = file_path.read_text(encoding="utf-8-sig")
+    meta, body = parse_frontmatter(content)
+
+    changed = []
+    if status:
+        meta.status = status
+        changed.append(f"status={status}")
+    for t in [t.strip() for t in add_tags.split(",") if t.strip()]:
+        if t.lower() not in meta.tags:
+            meta.tags.append(t.lower())
+            changed.append(f"+tag:{t}")
+    for t in [t.strip() for t in remove_tags.split(",") if t.strip()]:
+        if t.lower() in meta.tags:
+            meta.tags.remove(t.lower())
+            changed.append(f"-tag:{t}")
+    if summary:
+        meta.summary = summary
+        changed.append("summary")
+
+    if not changed:
+        return json.dumps({"ok": True, "data": {"note_id": note_id, "changes": []}})
+
+    file_path.write_text(serialize_frontmatter(meta) + "\n" + body, encoding="utf-8")
+
+    plan = compute_sync_plan(vault)
+    if plan.to_add or plan.to_update:
+        execute_sync(vault, plan)
+
+    return json.dumps({"ok": True, "data": {"note_id": note_id, "changes": changed}})

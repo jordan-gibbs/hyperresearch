@@ -33,6 +33,8 @@ class VaultConfig:
 
     # Web provider
     web_provider: str = "builtin"
+    web_profile: str = ""  # crawl4ai browser profile name (created via `crwl profiles`)
+    web_magic: bool = False  # crawl4ai magic mode (anti-bot stealth)
 
     # Index
     auto_build_index: bool = True
@@ -65,6 +67,8 @@ class VaultConfig:
             search_penalize_deprecated=search.get("penalize_deprecated", cls.search_penalize_deprecated),
             search_penalize_stale=search.get("penalize_stale", cls.search_penalize_stale),
             web_provider=web.get("provider", cls.web_provider),
+            web_profile=web.get("profile", cls.web_profile),
+            web_magic=web.get("magic", cls.web_magic),
             auto_sync=sync.get("auto_sync", cls.auto_sync),
             exclude_patterns=sync.get("exclude_patterns", cls().exclude_patterns),
             auto_build_index=index.get("auto_build", cls.auto_build_index),
@@ -94,6 +98,8 @@ class VaultConfig:
             "",
             "[web]",
             f'provider = "{self.web_provider}"',
+            f'profile = "{self.web_profile}"',
+            f"magic = {'true' if self.web_magic else 'false'}",
             "",
             "[sync]",
             f"auto_sync = {'true' if self.auto_sync else 'false'}",

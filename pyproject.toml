@@ -32,11 +32,8 @@ dependencies = [
 
 [project.optional-dependencies]
 crawl4ai = ["Crawl4AI>=0.4"]
-tavily = ["tavily-python>=0.5"]
-firecrawl = ["firecrawl>=1.0"]
-trafilatura = ["trafilatura>=2.0"]
 mcp = ["mcp>=1.6"]
-all = ["hyperresearch[crawl4ai,tavily,firecrawl,trafilatura,mcp]"]
+all = ["hyperresearch[crawl4ai,mcp]"]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",

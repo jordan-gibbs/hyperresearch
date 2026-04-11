@@ -28,10 +28,21 @@ def install(
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
     """Install hyperresearch: init vault + inject agent docs + install hooks."""
+    import sys
+
     from hyperresearch.core.hooks import install_hooks
     from hyperresearch.core.vault import Vault, VaultError
 
     root = Path(path).resolve()
+
+    # First-time install in an interactive terminal → run the setup TUI instead
+    is_new = not (root / ".hyperresearch").exists()
+    is_interactive = not json_output and sys.stdin.isatty()
+    if is_new and is_interactive:
+        from hyperresearch.cli.setup import setup
+
+        setup(path=path, json_output=False)
+        return
 
     # Step 1: Init vault (skip if already exists)
     try:
@@ -48,15 +59,28 @@ def install(
                 console.print(f"[red]Error:[/] {e}")
             raise typer.Exit(1)
 
-    # Step 2: Install hooks
-    hook_actions = install_hooks(root, platforms=platforms)
+    # Step 2: Resolve the hyperresearch executable path
+    from hyperresearch.core.agent_docs import _resolve_executable, inject_agent_docs
 
-    # Step 3: Report
+    hpr_path = _resolve_executable()
+
+    # Step 3: Always re-inject agent docs (updates CLAUDE.md etc. with latest blurb + path)
+    doc_actions = inject_agent_docs(root, agents=agents)
+
+    # Step 4: Install hooks (with resolved path baked in)
+    hook_actions = install_hooks(root, platforms=platforms, hpr_path=hpr_path)
+
+    # Step 3: Auto-configure crawl4ai if installed
+    crawl4ai_status = _setup_crawl4ai(vault)
+
+    # Step 5: Report
     data = {
         "vault_path": str(vault.root),
         "vault": vault_action,
+        "agent_docs": doc_actions,
         "hooks_installed": hook_actions,
         "platforms": platforms,
+        "crawl4ai": crawl4ai_status,
     }
 
     if json_output:
@@ -67,6 +91,11 @@ def install(
         else:
             console.print(f"[dim]Vault exists:[/] {vault.root}")
 
+        if doc_actions:
+            console.print("[green]Agent docs:[/]")
+            for action in doc_actions:
+                console.print(f"  {action}")
+
         if hook_actions:
             console.print("[green]Hooks installed:[/]")
             for action in hook_actions:
@@ -74,4 +103,58 @@ def install(
         else:
             console.print("[dim]All hooks already installed.[/]")
 
+        if crawl4ai_status == "configured":
+            console.print("[green]crawl4ai:[/] detected, set as default provider + browser ready")
+        elif crawl4ai_status == "browser_installed":
+            console.print("[green]crawl4ai:[/] browser installed + set as default provider")
+        elif crawl4ai_status == "not_installed":
+            console.print(
+                "[dim]crawl4ai:[/] not installed. "
+                "For local headless browsing: pip install hyperresearch[crawl4ai]"
+            )
+
         console.print("\n[bold]Ready.[/] Agents will now check the research base before web searches.")
+        console.print("[dim]Tip: Run 'hyperresearch setup' for interactive configuration (profile, stealth, etc.)[/]")
+
+
+def _setup_crawl4ai(vault) -> str:
+    """Detect crawl4ai, install browser if needed, set as default provider.
+
+    Returns: 'configured' (already ready), 'browser_installed' (just set up),
+             'not_installed' (crawl4ai not available).
+    """
+    try:
+        import crawl4ai  # noqa: F401
+    except ImportError:
+        return "not_installed"
+
+    # Set crawl4ai as the default provider if still on builtin
+    if vault.config.web_provider == "builtin":
+        vault.config.web_provider = "crawl4ai"
+        vault.config.save(vault.config_path)
+
+    # Check if browser is already installed
+    try:
+        from playwright.sync_api import sync_playwright
+
+        pw = sync_playwright().start()
+        browser = pw.chromium.launch(headless=True)
+        browser.close()
+        pw.stop()
+        return "configured"
+    except Exception:
+        pass
+
+    # Try to install the browser
+    import subprocess
+    import sys
+
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            check=True,
+            capture_output=True,
+        )
+        return "browser_installed"
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "configured"  # best effort — user can install manually

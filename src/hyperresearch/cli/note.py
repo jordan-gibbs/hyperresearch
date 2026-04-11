@@ -24,7 +24,6 @@ def note_new(
     status: str = typer.Option("draft", "--status", "-s", help="Initial status"),
     summary: str | None = typer.Option(None, "--summary", help="One-line summary"),
     source: str | None = typer.Option(None, "--source", help="Source URL or path"),
-    confidence: float | None = typer.Option(None, "--confidence", help="Confidence 0.0-1.0"),
     template: str | None = typer.Option(None, "--template", "-T", help="Template: note|concept|reference|guide|comparison|moc"),
     edit: bool = typer.Option(False, "--edit", "-e", help="Open in $EDITOR"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
@@ -335,8 +334,6 @@ def note_update(
     set_summary: str | None = typer.Option(None, "--summary", help="Set summary"),
     set_parent: str | None = typer.Option(None, "--parent", "-p", help="Set parent topic"),
     set_source: str | None = typer.Option(None, "--source", help="Set source URL/path"),
-    set_confidence: float | None = typer.Option(None, "--confidence", help="Set confidence 0.0-1.0"),
-    set_superseded_by: str | None = typer.Option(None, "--superseded-by", help="Mark as superseded"),
     deprecate: bool = typer.Option(False, "--deprecate", help="Mark as deprecated"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
@@ -383,12 +380,6 @@ def note_update(
     if set_source is not None:
         meta.source = set_source
         changed.append("source")
-    if set_confidence is not None:
-        meta.confidence = set_confidence
-        changed.append(f"confidence={set_confidence}")
-    if set_superseded_by is not None:
-        meta.superseded_by = set_superseded_by
-        changed.append(f"superseded_by={set_superseded_by}")
     if deprecate:
         meta.deprecated = True
         meta.status = "deprecated"

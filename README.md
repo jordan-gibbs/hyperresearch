@@ -35,7 +35,7 @@ hyperresearch install --platform all         # Hook all supported platforms
 
 # Collect
 hyperresearch fetch <url> --tag t -j         # Save a URL as a note
-hyperresearch research "topic" --max 5 -j    # Search → fetch → link → synthesize (needs tavily)
+hyperresearch research "topic" --max 5 -j    # Search → fetch → link → synthesize (needs crawl4ai)
 
 # Search & read
 hyperresearch search "query" -j              # Full-text search
@@ -70,19 +70,35 @@ The hook doesn't block — it reminds the agent to check the research base first
 
 ## Web providers
 
-By default, agents use their own web tools (WebSearch, WebFetch) and pipe content into hyperresearch. For standalone/headless use, optional providers add direct fetching:
+By default, agents use their own web tools (WebSearch, WebFetch) and pipe content into hyperresearch. For JS-rendered pages, blocked sites, or authenticated content, install crawl4ai (local headless Chromium):
 
 ```bash
-pip install hyperresearch[tavily]       # Search + extract API ($0.008/credit, 1k free/mo)
-pip install hyperresearch[crawl4ai]     # Free, open-source, JS rendering
-pip install hyperresearch[firecrawl]    # AI-optimized markdown extraction
-pip install hyperresearch[trafilatura]  # Lightweight text extraction
+pip install hyperresearch[crawl4ai]
+crawl4ai-setup                        # Install browser (one-time)
 ```
 
 Configure in `.hyperresearch/config.toml`:
 ```toml
 [web]
-provider = "tavily"    # or "crawl4ai", "firecrawl", "trafilatura", "builtin"
+provider = "crawl4ai"    # or "builtin" (stdlib urllib, no JS)
+profile = ""             # Browser profile name for authenticated crawling (optional)
+magic = false            # Anti-bot stealth mode (recommended for social media)
+```
+
+### Authenticated crawling
+
+Access login-gated content (LinkedIn, Twitter, paywalled sites) by creating a login profile:
+
+```bash
+hyperresearch setup       # Choose option 1 — browser opens, log into your sites, done
+# Or manually:
+crwl profiles             # Create profile, log in, press q when done
+```
+
+```toml
+# .hyperresearch/config.toml
+[web]
+profile = "research"      # Your profile name
 ```
 
 ## MCP server

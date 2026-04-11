@@ -56,7 +56,6 @@ status: draft
 type: raw
 source: ""
 summary: ""
-confidence: 0.7
 created: {{ created }}
 ---
 

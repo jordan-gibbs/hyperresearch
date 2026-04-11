@@ -41,7 +41,11 @@ def research(
 
     vault.auto_sync()
     conn = vault.db
-    prov = get_provider(provider_name or vault.config.web_provider)
+    prov = get_provider(
+        provider_name or vault.config.web_provider,
+        profile=vault.config.web_profile,
+        magic=vault.config.web_magic,
+    )
 
     # Step 1: Search
     if not json_output:
@@ -55,7 +59,7 @@ def research(
             output(
                 error(
                     f"Provider '{prov.name}' does not support web search. "
-                    "Use --provider tavily or let your agent search and use 'hyperresearch fetch' instead.",
+                    "Use your agent's built-in search, then pipe URLs into 'hyperresearch fetch'.",
                     "NO_SEARCH",
                 ),
                 json_mode=True,
@@ -63,7 +67,7 @@ def research(
         else:
             console.print(
                 f"[red]Provider '{prov.name}' cannot search.[/] "
-                "Use --provider tavily, or have your agent search and 'hyperresearch fetch' each URL."
+                "Use your agent's built-in search, then pipe URLs into 'hyperresearch fetch'."
             )
         raise typer.Exit(1)
 
@@ -175,6 +179,36 @@ def research(
         if not json_output:
             console.print(f"\n[bold green]Synthesis:[/] [[{moc_id}]]")
 
+    # Step 6: Holistic auto-linking across all new notes
+    if created_notes:
+        from hyperresearch.core.linker import auto_link
+
+        note_ids = [n["note_id"] for n in created_notes]
+        link_report = auto_link(vault, note_ids)
+        if link_report:
+            plan = compute_sync_plan(vault)
+            if plan.to_add or plan.to_update:
+                execute_sync(vault, plan)
+            if not json_output:
+                total_links = sum(len(v) for v in link_report.values())
+                console.print(f"[green]Auto-linked:[/] {total_links} connections across {len(link_report)} notes")
+
+    # Step 7: Surface hub notes
+    hubs = []
+    if created_notes:
+        hub_rows = conn.execute(
+            "SELECT target_id, COUNT(*) as cnt FROM links "
+            "WHERE target_id IS NOT NULL GROUP BY target_id ORDER BY cnt DESC LIMIT 5"
+        ).fetchall()
+        for row in hub_rows:
+            title_row = conn.execute("SELECT title FROM notes WHERE id = ?", (row["target_id"],)).fetchone()
+            if title_row:
+                hubs.append({"id": row["target_id"], "title": title_row["title"], "inbound_links": row["cnt"]})
+        if hubs and not json_output:
+            console.print("\n[bold]Hub notes[/] (most connected):")
+            for h in hubs:
+                console.print(f"  [{h['inbound_links']} links] [[{h['id']}]] {h['title']}")
+
     # Output
     data = {
         "topic": topic,
@@ -182,6 +216,7 @@ def research(
         "notes_created": created_notes,
         "total_fetched": pages_fetched,
         "depth": depth,
+        "hubs": hubs,
     }
 
     if json_output:
@@ -198,6 +233,10 @@ def _save_result(vault, conn, prov, result, tags, parent) -> dict | None:
     from hyperresearch.core.note import write_note
 
     url = result.url
+
+    # Skip login redirects
+    if result.looks_like_login_wall(url):
+        return None
 
     # Skip if already fetched
     existing = conn.execute("SELECT note_id FROM sources WHERE url = ?", (url,)).fetchone()
@@ -226,7 +265,19 @@ def _save_result(vault, conn, prov, result, tags, parent) -> dict | None:
         extra_frontmatter=extra_meta,
     )
 
+    # Auto-enrich: add suggested tags and summary before sync
+    from hyperresearch.core.enrich import enrich_note_file
+
+    enrich_note_file(note_path, conn, tags)
+
+    # Sync so the note exists in the notes table (needed for FK on sources)
+    from hyperresearch.core.sync import compute_sync_plan, execute_sync
+
     note_id = note_path.stem
+    plan = compute_sync_plan(vault)
+    if plan.to_add or plan.to_update:
+        execute_sync(vault, plan)
+
     conn.execute(
         """INSERT OR IGNORE INTO sources (url, note_id, domain, fetched_at, provider, content_hash)
            VALUES (?, ?, ?, ?, ?, ?)""",

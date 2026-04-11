@@ -27,6 +27,26 @@ CREATE TABLE IF NOT EXISTS sources (
 CREATE INDEX IF NOT EXISTS idx_sources_domain ON sources(domain);
 CREATE INDEX IF NOT EXISTS idx_sources_note ON sources(note_id);
 """,
+    4: """
+CREATE TABLE IF NOT EXISTS assets (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_id      TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+    type         TEXT NOT NULL CHECK (type IN ('image', 'screenshot', 'pdf', 'other')),
+    filename     TEXT NOT NULL,
+    url          TEXT,
+    alt_text     TEXT,
+    content_type TEXT,
+    size_bytes   INTEGER,
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_assets_note ON assets(note_id);
+CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
+""",
+    5: """
+-- Dead fields (confidence, superseded_by, llm_compiled, llm_model, compile_source)
+-- removed from code. Left as vestigial columns in existing DBs for compatibility.
+-- New vaults won't have them. No structural changes needed.
+""",
 }
 
 

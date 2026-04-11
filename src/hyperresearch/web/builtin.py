@@ -66,8 +66,7 @@ class BuiltinProvider:
     def search(self, query: str, max_results: int = 5) -> list[WebResult]:
         raise NotImplementedError(
             "Builtin provider does not support web search. "
-            "Install a search-capable provider: pip install hyperresearch[tavily] "
-            "or pip install hyperresearch[crawl4ai]"
+            "Use your agent's built-in search, then pipe URLs into 'hyperresearch fetch'."
         )
 
     def _download(self, url: str) -> tuple[str, str]:

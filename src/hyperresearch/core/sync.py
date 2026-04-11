@@ -155,19 +155,15 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
     conn.execute(
         """
         INSERT INTO notes
-            (id, title, path, status, type, source, parent, confidence,
-             superseded_by, deprecated, reviewed, expires,
-             llm_compiled, llm_model, compile_source, word_count, summary,
+            (id, title, path, status, type, source, parent,
+             deprecated, reviewed, expires, word_count, summary,
              created, updated, file_mtime, content_hash, synced_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title=excluded.title, path=excluded.path, status=excluded.status,
             type=excluded.type, source=excluded.source, parent=excluded.parent,
-            confidence=excluded.confidence,
-            superseded_by=excluded.superseded_by, deprecated=excluded.deprecated,
+            deprecated=excluded.deprecated,
             reviewed=excluded.reviewed, expires=excluded.expires,
-            llm_compiled=excluded.llm_compiled,
-            llm_model=excluded.llm_model, compile_source=excluded.compile_source,
             word_count=excluded.word_count, summary=excluded.summary,
             created=excluded.created, updated=excluded.updated,
             file_mtime=excluded.file_mtime, content_hash=excluded.content_hash,
@@ -175,10 +171,8 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
         """,
         (
             meta.id, meta.title, note.path, meta.status, meta.type,
-            meta.source, meta.parent, meta.confidence,
-            meta.superseded_by, 1 if meta.deprecated else 0,
+            meta.source, meta.parent, 1 if meta.deprecated else 0,
             reviewed_iso, expires_iso,
-            1 if meta.llm_compiled else 0, meta.llm_model, meta.compile_source,
             note.word_count, meta.summary, created_iso, updated_iso,
             file_mtime, note.content_hash, synced_at,
         ),
@@ -194,13 +188,6 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
         pass
     for tag in meta.tags:
         resolved = alias_map.get(tag, tag)
-        # Auto-normalize plurals: "transformers" -> "transformer" if singular exists
-        if resolved.endswith("s") and len(resolved) > 3:
-            singular = resolved[:-1]
-            if singular in alias_map.values() or conn.execute(
-                "SELECT 1 FROM tags WHERE tag = ? LIMIT 1", (singular,)
-            ).fetchone():
-                resolved = singular
         conn.execute("INSERT OR IGNORE INTO tags (note_id, tag) VALUES (?, ?)", (meta.id, resolved))
 
     # Update aliases

@@ -1,12 +1,20 @@
-"""Content deduplication — find near-duplicate notes."""
+"""Content deduplication — find near-duplicate notes using MinHash+LSH."""
 
 from __future__ import annotations
 
 import typer
 
 from hyperresearch.cli._output import console, output
-from hyperresearch.core.similarity import jaccard, shingle
+from hyperresearch.core.similarity import (
+    jaccard,
+    lsh_candidates,
+    minhash_signature,
+    shingle,
+)
 from hyperresearch.models.output import success
+
+# Use MinHash+LSH for vaults above this size, O(n^2) below
+LSH_THRESHOLD = 200
 
 
 def dedup(
@@ -44,27 +52,23 @@ def dedup(
         return
 
     # Build shingle sets
-    notes = []
+    notes = {}
     for row in rows:
         shingles = shingle(row["body_plain"])
-        notes.append({
+        notes[row["id"]] = {
             "id": row["id"],
             "title": row["title"],
             "word_count": row["word_count"],
             "shingles": shingles,
-        })
+        }
 
-    # Compare all pairs
-    pairs = []
-    for i in range(len(notes)):
-        for j in range(i + 1, len(notes)):
-            sim = jaccard(notes[i]["shingles"], notes[j]["shingles"])
-            if sim >= threshold:
-                pairs.append({
-                    "similarity": round(sim, 3),
-                    "note_a": {"id": notes[i]["id"], "title": notes[i]["title"], "words": notes[i]["word_count"]},
-                    "note_b": {"id": notes[j]["id"], "title": notes[j]["title"], "words": notes[j]["word_count"]},
-                })
+    # Choose algorithm based on vault size
+    if len(notes) >= LSH_THRESHOLD:
+        pairs = _dedup_lsh(notes, threshold)
+        method = "minhash+lsh"
+    else:
+        pairs = _dedup_brute(notes, threshold)
+        method = "brute-force"
 
     pairs.sort(key=lambda p: p["similarity"], reverse=True)
     pairs = pairs[:limit]
@@ -73,16 +77,18 @@ def dedup(
 
     if json_output:
         output(
-            success({"pairs": pairs, "total_compared": total_compared, "threshold": threshold},
-                    count=len(pairs), vault=str(vault.root)),
+            success(
+                {"pairs": pairs, "total_compared": total_compared, "threshold": threshold, "method": method},
+                count=len(pairs), vault=str(vault.root),
+            ),
             json_mode=True,
         )
     else:
         if not pairs:
-            console.print(f"[green]No duplicates found (threshold {threshold:.0%}, compared {total_compared} pairs).[/]")
+            console.print(f"[green]No duplicates found (threshold {threshold:.0%}, {method}).[/]")
             return
 
-        console.print(f"[bold]Similar notes (>{threshold:.0%}):[/]\n")
+        console.print(f"[bold]Similar notes (>{threshold:.0%}, {method}):[/]\n")
         for p in pairs:
             a, b = p["note_a"], p["note_b"]
             console.print(
@@ -90,4 +96,43 @@ def dedup(
                 f"[cyan]{a['id']}[/] ({a['words']}w) "
                 f"<-> [cyan]{b['id']}[/] ({b['words']}w)"
             )
-        console.print(f"\n[dim]Compared {total_compared} pairs.[/]")
+        console.print(f"\n[dim]{len(notes)} notes, {method}.[/]")
+
+
+def _dedup_brute(notes: dict, threshold: float) -> list[dict]:
+    """O(n^2) brute-force comparison for small vaults."""
+    note_list = list(notes.values())
+    pairs = []
+    for i in range(len(note_list)):
+        for j in range(i + 1, len(note_list)):
+            sim = jaccard(note_list[i]["shingles"], note_list[j]["shingles"])
+            if sim >= threshold:
+                pairs.append(_make_pair(note_list[i], note_list[j], sim))
+    return pairs
+
+
+def _dedup_lsh(notes: dict, threshold: float) -> list[dict]:
+    """MinHash+LSH for large vaults — approximate but O(n)."""
+    # Compute signatures
+    signatures = {}
+    for nid, note in notes.items():
+        signatures[nid] = minhash_signature(note["shingles"])
+
+    # Find candidate pairs via LSH
+    candidates = lsh_candidates(signatures)
+
+    # Verify candidates with exact Jaccard
+    pairs = []
+    for id_a, id_b in candidates:
+        sim = jaccard(notes[id_a]["shingles"], notes[id_b]["shingles"])
+        if sim >= threshold:
+            pairs.append(_make_pair(notes[id_a], notes[id_b], sim))
+    return pairs
+
+
+def _make_pair(a: dict, b: dict, sim: float) -> dict:
+    return {
+        "similarity": round(sim, 3),
+        "note_a": {"id": a["id"], "title": a["title"], "words": a["word_count"]},
+        "note_b": {"id": b["id"], "title": b["title"], "words": b["word_count"]},
+    }

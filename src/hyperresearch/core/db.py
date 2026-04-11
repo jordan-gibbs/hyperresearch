@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 5
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
@@ -26,14 +26,9 @@ CREATE TABLE IF NOT EXISTS notes (
                      CHECK (type IN ('note','raw','index','moc')),
     source       TEXT,
     parent       TEXT,
-    confidence   REAL,
-    superseded_by TEXT,
     deprecated   INTEGER NOT NULL DEFAULT 0,
     reviewed     TEXT,
     expires      TEXT,
-    llm_compiled INTEGER NOT NULL DEFAULT 0,
-    llm_model    TEXT,
-    compile_source TEXT,
     word_count   INTEGER NOT NULL DEFAULT 0,
     summary      TEXT,
     created      TEXT NOT NULL,
@@ -112,6 +107,21 @@ CREATE TABLE IF NOT EXISTS sources (
 
 CREATE INDEX IF NOT EXISTS idx_sources_domain ON sources(domain);
 CREATE INDEX IF NOT EXISTS idx_sources_note ON sources(note_id);
+
+CREATE TABLE IF NOT EXISTS assets (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_id      TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+    type         TEXT NOT NULL CHECK (type IN ('image', 'screenshot', 'pdf', 'other')),
+    filename     TEXT NOT NULL,
+    url          TEXT,
+    alt_text     TEXT,
+    content_type TEXT,
+    size_bytes   INTEGER,
+    created_at   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_assets_note ON assets(note_id);
+CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
 
 """
 

@@ -24,6 +24,9 @@ def config_show(
         "vault_name": config.name,
         "vault_path": str(vault.root),
         "research_dir": config.research_dir,
+        "web_provider": config.web_provider,
+        "web_profile": config.web_profile or "(none)",
+        "web_magic": config.web_magic,
         "auto_sync": config.auto_sync,
         "auto_build_index": config.auto_build_index,
         "search_boost_evergreen": config.search_boost_evergreen,
@@ -54,6 +57,9 @@ def config_set(
     key_map = {
         "vault.name": "name",
         "vault.research_dir": "research_dir",
+        "web.provider": "web_provider",
+        "web.profile": "web_profile",
+        "web.magic": "web_magic",
         "search.boost_evergreen": "search_boost_evergreen",
         "search.penalize_deprecated": "search_penalize_deprecated",
         "sync.auto_sync": "auto_sync",
@@ -67,7 +73,7 @@ def config_set(
         raise typer.Exit(1)
 
     # Type coercion
-    if attr in ("auto_sync", "auto_build_index"):
+    if attr in ("auto_sync", "auto_build_index", "web_magic"):
         value = value.lower() in ("true", "1", "yes")
 
     setattr(config, attr, value)
@@ -93,6 +99,9 @@ def config_get(
     key_map = {
         "vault.name": "name",
         "vault.research_dir": "research_dir",
+        "web.provider": "web_provider",
+        "web.profile": "web_profile",
+        "web.magic": "web_magic",
         "search.boost_evergreen": "search_boost_evergreen",
         "search.penalize_deprecated": "search_penalize_deprecated",
         "sync.auto_sync": "auto_sync",

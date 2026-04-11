@@ -1,8 +1,10 @@
-"""Auto-enrichment: keyword-based tagging and first-line summary extraction."""
+"""Auto-enrichment: keyword-based tagging, summary extraction, and note enrichment."""
 
 from __future__ import annotations
 
 import re
+import sqlite3
+from pathlib import Path
 
 
 def auto_tag(body_plain: str, existing_tags: list[dict]) -> list[str]:
@@ -68,3 +70,41 @@ def auto_summary(body: str) -> str | None:
             return clean[:117] + "..."
         return clean
     return None
+
+
+def enrich_note_file(note_path: Path, conn: sqlite3.Connection, user_tags: list[str]) -> bool:
+    """Auto-enrich a note file with tags and summary. Rewrites frontmatter in place.
+
+    Called after write_note() but before sync. Returns True if the file was modified.
+    """
+    from hyperresearch.core.frontmatter import parse_frontmatter, serialize_frontmatter
+
+    content = note_path.read_text(encoding="utf-8-sig")
+    meta, body = parse_frontmatter(content)
+
+    changed = False
+
+    # Auto-tag: merge user tags with auto-suggested tags (cap at 8 total)
+    tag_vocab = [
+        {"tag": row["tag"], "count": row["c"]}
+        for row in conn.execute("SELECT tag, COUNT(*) as c FROM tags GROUP BY tag ORDER BY c DESC")
+    ]
+    body_plain = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", body)  # strip markdown links
+    body_plain = re.sub(r"[*_`#]", "", body_plain)
+    suggested = auto_tag(body_plain, tag_vocab)
+    merged = list(dict.fromkeys(user_tags + suggested))[:8]
+    if set(merged) != set(meta.tags):
+        meta.tags = merged
+        changed = True
+
+    # Auto-summary: only if not already set
+    if not meta.summary:
+        summary = auto_summary(body)
+        if summary:
+            meta.summary = summary
+            changed = True
+
+    if changed:
+        note_path.write_text(serialize_frontmatter(meta) + "\n" + body, encoding="utf-8")
+
+    return changed

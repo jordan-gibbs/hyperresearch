@@ -225,7 +225,6 @@ def batch_set_status(
 
 @app.command("deprecate")
 def batch_deprecate(
-    superseded_by: str | None = typer.Option(None, "--superseded-by", help="Note ID of replacement"),
     status: str | None = typer.Option(None, "--status", "-s", help="Filter by status"),
     tag: str | None = typer.Option(None, "--tag", "-t", help="Filter by tag"),
     parent: str | None = typer.Option(None, "--parent", "-p", help="Filter by parent topic"),
@@ -239,7 +238,7 @@ def batch_deprecate(
 
     if dry_run:
         if json_output:
-            output(success({"action": "deprecate", "superseded_by": superseded_by,
+            output(success({"action": "deprecate",
                             "would_modify": [n["id"] for n in notes]},
                            count=len(notes), vault=str(vault.root)), json_mode=True)
         else:
@@ -247,8 +246,6 @@ def batch_deprecate(
         return
 
     updates = {"status": "deprecated", "deprecated": True}
-    if superseded_by:
-        updates["superseded_by"] = superseded_by
 
     for n in notes:
         _update_file_frontmatter(vault.root, n["path"], updates)

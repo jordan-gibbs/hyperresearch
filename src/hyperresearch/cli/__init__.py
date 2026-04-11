@@ -1,5 +1,21 @@
 """Hyperresearch CLI — main typer application."""
 
+import os
+import sys
+
+# Fix Windows console encoding — crawl4ai's rich logger uses Unicode chars that
+# crash on Windows cp1252 consoles. Reconfigure streams to UTF-8 at startup.
+if sys.platform == "win32":
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+    os.environ["PYTHONUTF8"] = "1"
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name)
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
 import typer
 
 from hyperresearch import __version__
@@ -44,11 +60,19 @@ from hyperresearch.cli.tag import tag_list as _tags
 from hyperresearch.cli.watch import watch as _watch
 
 app.command("install")(_install)
+
+from hyperresearch.cli.setup import setup as _setup
+
+app.command("setup")(_setup)
 app.command("init")(_init)
 app.command("status")(_status)
 app.command("sync")(_sync)
 app.command("search")(_search)
 app.command("fetch")(_fetch)
+
+from hyperresearch.cli.fetch_batch import fetch_batch as _fetch_batch
+
+app.command("fetch-batch")(_fetch_batch)
 app.command("research")(_research)
 app.command("tags")(_tags)
 app.command("show", hidden=True)(_show)
@@ -84,6 +108,10 @@ app.add_typer(template_app, name="template", help="Note templates.")
 app.add_typer(git_app, name="git", help="Git integration.")
 app.add_typer(tag_app, name="tag", help="Tag management.")
 
+from hyperresearch.cli.assets import app as assets_app
+from hyperresearch.cli.link import app as link_app
 from hyperresearch.cli.sources import app as sources_app
 
 app.add_typer(sources_app, name="sources", help="Fetched web sources.")
+app.add_typer(assets_app, name="assets", help="Downloaded images, screenshots, and media.")
+app.add_typer(link_app, name="link", help="Auto-discover and insert wiki-links.")

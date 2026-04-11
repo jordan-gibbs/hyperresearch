@@ -22,9 +22,7 @@ RULES = {
     "empty-notes": "Notes with no body content",
     "stale-indexes": "Index pages that need rebuilding",
     "expired-notes": "Notes past their expiry date",
-    "deprecated-no-successor": "Deprecated notes without a superseded_by link",
     "stale-reviews": "Notes not reviewed in over 90 days",
-    "low-confidence": "Notes with confidence < 0.5",
 }
 
 
@@ -168,19 +166,6 @@ def lint(
                 "message": f"Note expired on {row['expires']}. Review or update.",
             })
 
-    if "deprecated-no-successor" in rules_to_run:
-        for row in conn.execute(
-            "SELECT id, path FROM notes "
-            "WHERE (deprecated = 1 OR status = 'deprecated') AND superseded_by IS NULL"
-        ):
-            issues.append({
-                "rule": "deprecated-no-successor",
-                "severity": "warning",
-                "note_id": row["id"],
-                "note_path": row["path"],
-                "message": "Deprecated but no superseded_by link. What replaces this?",
-            })
-
     if "stale-reviews" in rules_to_run:
         from datetime import datetime, timedelta
         cutoff = (datetime.now(UTC) - timedelta(days=90)).isoformat()
@@ -195,19 +180,6 @@ def lint(
                 "note_id": row["id"],
                 "note_path": row["path"],
                 "message": f"Last reviewed {row['reviewed'][:10]}. Consider re-reviewing.",
-            })
-
-    if "low-confidence" in rules_to_run:
-        for row in conn.execute(
-            "SELECT id, path, confidence FROM notes "
-            "WHERE confidence IS NOT NULL AND confidence < 0.5 AND status != 'deprecated'"
-        ):
-            issues.append({
-                "rule": "low-confidence",
-                "severity": "info",
-                "note_id": row["id"],
-                "note_path": row["path"],
-                "message": f"Low confidence ({row['confidence']:.1%}). Verify or flag.",
             })
 
     summary = {

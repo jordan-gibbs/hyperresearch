@@ -36,6 +36,9 @@ def slugify(text: str) -> str:
         # Fallback for titles with only special/non-ASCII characters
         import hashlib
         result = "note-" + hashlib.sha256(text.encode()).hexdigest()[:8]
+    # Truncate to avoid Windows MAX_PATH issues (keep well under 260 chars total)
+    if len(result) > 80:
+        result = result[:80].rstrip("-")
     return result
 
 
@@ -55,14 +58,9 @@ class NoteMeta(BaseModel):
     type: NoteType = NoteType.NOTE
     aliases: list[str] = Field(default_factory=list)
     parent: str | None = None
-    confidence: float | None = None
-    superseded_by: str | None = None    # Note ID that replaces this one
     deprecated: bool = False             # Explicitly marked as outdated
     reviewed: datetime | None = None     # Last time a human verified accuracy
     expires: datetime | None = None      # Auto-stale after this date
-    llm_compiled: bool = False
-    llm_model: str | None = None
-    compile_source: str | None = None
     summary: str | None = None
 
     @field_validator("tags", mode="before")
@@ -77,7 +75,7 @@ class NoteMeta(BaseModel):
             return slugify(v)
         return v
 
-    model_config = {"use_enum_values": True}
+    model_config = {"use_enum_values": True, "extra": "ignore"}
 
 
 class Note(BaseModel):

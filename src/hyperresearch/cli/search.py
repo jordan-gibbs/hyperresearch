@@ -27,6 +27,7 @@ def search(
     no_body: bool = typer.Option(False, "--no-body", help="Disable auto body inclusion in JSON mode"),
     limit: int = typer.Option(20, "--limit", "-l", help="Max results"),
     offset: int = typer.Option(0, "--offset", help="Offset for pagination"),
+    max_tokens: int | None = typer.Option(None, "--max-tokens", help="Truncate results to fit token budget (1 token ~ 4 chars)"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
     """Full-text search across all notes."""
@@ -79,6 +80,26 @@ def search(
                 "SELECT body FROM note_content WHERE note_id = ?", (r["id"],)
             ).fetchone()
             r["body"] = row["body"] if row else ""
+
+    # Token budget: truncate results to fit within limit
+    if max_tokens and results:
+        budget_chars = max_tokens * 4  # ~4 chars per token
+        used = 0
+        trimmed = []
+        for r in results:
+            overhead = 200 + len(r.get("title", "")) + len(r.get("id", ""))
+            body = r.get("body", "")
+            remaining = budget_chars - used - overhead
+            if remaining <= 0:
+                break
+            if body and len(body) > remaining:
+                r["body"] = body[:remaining] + "\n... [truncated]"
+                r["truncated"] = True
+                trimmed.append(r)
+                break
+            used += overhead + len(body)
+            trimmed.append(r)
+        results = trimmed
 
     if json_output:
         output(
