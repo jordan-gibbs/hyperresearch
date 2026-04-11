@@ -1,132 +1,155 @@
-# Hyperresearch
-
-Agent-driven research knowledge base. Install it, and your AI coding agent can collect, search, and synthesize web research into a persistent, searchable wiki — across sessions.
-
-```bash
-pip install hyperresearch
-hyperresearch install    # init vault + hook your agent
+```ansi
+[38;2;255;105;180m██╗  ██╗[38;2;240;90;200m██╗   ██╗[38;2;217;70;239m██████╗ [38;2;180;70;240m███████╗[38;2;139;92;246m██████╗[0m
+[38;2;255;105;180m██║  ██║[38;2;240;90;200m╚██╗ ██╔╝[38;2;217;70;239m██╔══██╗[38;2;180;70;240m██╔════╝[38;2;139;92;246m██╔══██╗[0m
+[38;2;255;105;180m███████║[38;2;240;90;200m ╚████╔╝ [38;2;217;70;239m██████╔╝[38;2;180;70;240m█████╗  [38;2;139;92;246m██████╔╝[0m
+[38;2;255;105;180m██╔══██║[38;2;240;90;200m  ╚██╔╝  [38;2;217;70;239m██╔═══╝ [38;2;180;70;240m██╔══╝  [38;2;139;92;246m██╔══██╗[0m
+[38;2;255;105;180m██║  ██║[38;2;240;90;200m   ██║   [38;2;217;70;239m██║     [38;2;180;70;240m███████╗[38;2;139;92;246m██║  ██║[0m
+[38;2;255;105;180m╚═╝  ╚═╝[38;2;240;90;200m   ╚═╝   [38;2;217;70;239m╚═╝     [38;2;180;70;240m╚══════╝[38;2;139;92;246m╚═╝  ╚═╝[0m
+[38;2;180;70;240m██████╗ [38;2;160;80;243m███████╗[38;2;139;92;246m███████╗[38;2;100;120;240m███████╗[38;2;59;130;246m █████╗ [38;2;30;150;230m██████╗ [38;2;6;182;212m ██████╗[38;2;6;182;212m██╗  ██╗[0m
+[38;2;180;70;240m██╔══██╗[38;2;160;80;243m██╔════╝[38;2;139;92;246m██╔════╝[38;2;100;120;240m██╔════╝[38;2;59;130;246m██╔══██╗[38;2;30;150;230m██╔══██╗[38;2;6;182;212m██╔════╝[38;2;6;182;212m██║  ██║[0m
+[38;2;180;70;240m██████╔╝[38;2;160;80;243m█████╗  [38;2;139;92;246m███████╗[38;2;100;120;240m█████╗  [38;2;59;130;246m███████║[38;2;30;150;230m██████╔╝[38;2;6;182;212m██║     [38;2;6;182;212m███████║[0m
+[38;2;180;70;240m██╔══██╗[38;2;160;80;243m██╔══╝  [38;2;139;92;246m╚════██║[38;2;100;120;240m██╔══╝  [38;2;59;130;246m██╔══██║[38;2;30;150;230m██╔══██╗[38;2;6;182;212m██║     [38;2;6;182;212m██╔══██║[0m
+[38;2;180;70;240m██║  ██║[38;2;160;80;243m███████╗[38;2;139;92;246m███████║[38;2;100;120;240m███████╗[38;2;59;130;246m██║  ██║[38;2;30;150;230m██║  ██║[38;2;6;182;212m╚██████╗[38;2;6;182;212m██║  ██║[0m
+[38;2;180;70;240m╚═╝  ╚═╝[38;2;160;80;243m╚══════╝[38;2;139;92;246m╚══════╝[38;2;100;120;240m╚══════╝[38;2;59;130;246m╚═╝  ╚═╝[38;2;30;150;230m╚═╝  ╚═╝[38;2;6;182;212m ╚═════╝[38;2;6;182;212m╚═╝  ╚═╝[0m
 ```
 
-That's it. Your agent now checks the research base before searching the web, saves useful findings automatically, and builds a knowledge graph over time.
+<h3 align="center">Deep, persistent web research for AI agents</h3>
+
+<p align="center">
+  <a href="https://pypi.org/project/hyperresearch/"><img src="https://img.shields.io/pypi/v/hyperresearch" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/hyperresearch/"><img src="https://img.shields.io/pypi/pyversions/hyperresearch" alt="Python 3.11+"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/jordan-gibbs/hyperresearch" alt="License: MIT"></a>
+  <a href="https://github.com/jordan-gibbs/hyperresearch"><img src="https://img.shields.io/github/stars/jordan-gibbs/hyperresearch?style=social" alt="GitHub stars"></a>
+</p>
+
+---
+
+Your AI agent searches the web, finds great sources, synthesizes an answer — then the session ends and everything is gone. Next time, it starts from zero.
+
+**Hyperresearch makes research persist.** Every source your agent finds is fetched with a real headless browser, saved as searchable markdown, and indexed into a knowledge base that compounds across sessions.
+
+```bash
+pip install hyperresearch[crawl4ai]
+hyperresearch install
+```
+
+## What people use it for
+
+- **In-depth topic research** — "Research the latest advances in state space models" → agent fetches 20+ papers, docs, and blog posts, follows citations to primary sources, builds a linked knowledge graph
+- **News tracking over time** — run research sessions weekly on a topic, each session builds on what's already collected, nothing gets re-fetched
+- **State-of-the-art surveys** — "What's the current SOTA for speech recognition?" → agent goes down rabbit holes, collects benchmarks, papers, and implementations
+- **Competitive analysis** — scrape company pages, LinkedIn profiles, product docs, news articles into a persistent, searchable corpus
+- **Due diligence** — aggregate everything about a person, company, or technology from across the web with authenticated crawling (LinkedIn, Twitter, paywalled sites)
 
 ## How it works
 
-1. **Agent finds something useful** (via its own web search, browsing, or your input)
-2. **Agent saves it**: `hyperresearch fetch "https://..." --tag ml -j` or `hyperresearch note new "Title" --body-file content.md -j`
-3. **Next time it needs info**, the PreToolUse hook reminds it: *"check hyperresearch first"*
-4. **Agent searches the KB**: `hyperresearch search "attention mechanisms" -j`
-5. **Knowledge compounds** across sessions — no redundant fetches, no lost context
+1. **You ask your agent to research something**
+2. **Agent searches the web** — multiple queries, different angles
+3. **Fetches every source** with a real headless browser (crawl4ai) — JS rendering, bot detection bypass, login-gated content
+4. **Saves each page** as a searchable markdown note with tags, summary, and source tracking
+5. **Follows links** to primary sources — the paper, not the blog post about the paper
+6. **Auto-links related notes** with `[[wiki-links]]` across the knowledge graph
+7. **Synthesizes findings** into a summary note linking all sources
+8. **Next session** — agent checks the KB before searching the web. Knowledge compounds.
 
 ```
 your-repo/
-  .hyperresearch/        # Hidden: config, SQLite index, hook script
+  .hyperresearch/        # Config + SQLite FTS5 index (rebuildable)
   research/
-    notes/               # Markdown notes (source of truth)
+    notes/               # Markdown notes — the source of truth
     index/               # Auto-generated wiki pages
   CLAUDE.md              # Agent docs (auto-injected)
 ```
 
+## Works with every major agent
+
+`hyperresearch install` hooks into your agent in one step:
+
+| Platform | Hook | Trigger |
+|----------|------|---------|
+| **Claude Code** | `.claude/settings.json` + `/research` skill | Before WebSearch, WebFetch |
+| **Codex** | `.codex/hooks.json` | Before Bash |
+| **Cursor** | `.cursor/rules/hyperresearch.mdc` | Always-apply rule |
+| **Gemini CLI** | `.gemini/settings.json` | Before tool calls |
+
+```bash
+hyperresearch install --platform all    # Hook every platform at once
+```
+
+## Key features
+
+- **Real headless browser** — crawl4ai runs local Chromium. Handles JavaScript, bypasses bot detection, renders SPAs. Not a simple HTTP fetch.
+- **Authenticated crawling** — log into LinkedIn, Twitter, paywalled news. Your sessions persist across fetches.
+- **Auto-curation** — every fetched note gets auto-tagged, auto-summarized, and auto-linked to related notes
+- **Smart SPA wait** — polls DOM stability instead of fixed delays. Fast pages finish instantly, SPAs get up to 10 seconds.
+- **Cheap parallel fetching** — ships a Haiku-powered subagent that fetches URLs in parallel for pennies
+- **`/research` skill** — scripted deep research workflow. Clarifies ambiguous requests, searches broadly, fetches aggressively, follows rabbit holes, curates, synthesizes.
+- **Login wall detection** — detects auth redirects and tells you to set up a profile instead of saving junk
+- **FTS5 search** — instant full-text search across thousands of notes with BM25 ranking
+- **Knowledge graph** — `[[wiki-links]]`, backlinks, hub detection, auto-linking
+- **MCP server** — 13 tools (read + write) for Claude Desktop, Cursor, or any MCP client
+- **Note lifecycle** — draft → review → evergreen → stale → deprecated → archive
+
 ## Commands
 
 ```bash
-# Setup
-hyperresearch install                        # Init + hooks (Claude Code, Cursor, Codex, Gemini)
-hyperresearch install --platform all         # Hook all supported platforms
+# Research
+hyperresearch fetch <url> --tag t -j           # Fetch a URL into the KB
+hyperresearch fetch-batch <urls...> -j         # Fetch many URLs at once
+hyperresearch research "topic" --max 5 -j      # Full pipeline: search → fetch → link → synthesize
 
-# Collect
-hyperresearch fetch <url> --tag t -j         # Save a URL as a note
-hyperresearch research "topic" --max 5 -j    # Search → fetch → link → synthesize (needs crawl4ai)
+# Search
+hyperresearch search "query" -j                # Full-text search
+hyperresearch search "query" --max-tokens 8000 # Stay within context budget
+hyperresearch note show <id> -j                # Read a note
 
-# Search & read
-hyperresearch search "query" -j              # Full-text search
-hyperresearch note show <id> -j              # Read a note
-hyperresearch note list --tag ml -j          # List notes by tag
+# Knowledge graph
+hyperresearch link --auto -j                   # Auto-link related notes
+hyperresearch graph hubs -j                    # Most-connected notes
+hyperresearch graph backlinks <id> -j          # What links to this note
 
 # Manage
-hyperresearch sources list -j                # What URLs have been fetched
-hyperresearch sources check <url> -j         # Has this URL been fetched?
-hyperresearch repair -j                      # Fix links, promote notes, rebuild indexes
-hyperresearch status -j                      # Vault health overview
+hyperresearch sources list -j                  # Every URL ever fetched
+hyperresearch lint -j                          # Health check
+hyperresearch repair -j                        # Fix links, rebuild indexes
 ```
 
 Every command returns `{"ok": true, "data": {...}}` with `-j`.
 
-## Agent integration
+## Authenticated crawling
 
-`hyperresearch install` does three things:
-
-1. **Creates the vault** (`.hyperresearch/` + `research/`)
-2. **Injects usage docs** into CLAUDE.md (or AGENTS.md, GEMINI.md, copilot-instructions.md)
-3. **Installs PreToolUse hooks** that fire before web searches:
-
-| Platform | Hook | Trigger |
-|----------|------|---------|
-| Claude Code | `.claude/settings.json` | Before Glob, Grep, WebSearch, WebFetch |
-| Codex | `.codex/hooks.json` | Before Bash |
-| Cursor | `.cursor/rules/hyperresearch.mdc` | Always-apply rule |
-| Gemini CLI | `.gemini/settings.json` | Before tool calls |
-
-The hook doesn't block — it reminds the agent to check the research base first.
-
-## Web providers
-
-By default, agents use their own web tools (WebSearch, WebFetch) and pipe content into hyperresearch. For JS-rendered pages, blocked sites, or authenticated content, install crawl4ai (local headless Chromium):
+Fetch from LinkedIn, Twitter, paywalled sites — anything you can log into:
 
 ```bash
-pip install hyperresearch[crawl4ai]
-crawl4ai-setup                        # Install browser (one-time)
-```
-
-Configure in `.hyperresearch/config.toml`:
-```toml
-[web]
-provider = "crawl4ai"    # or "builtin" (stdlib urllib, no JS)
-profile = ""             # Browser profile name for authenticated crawling (optional)
-magic = false            # Anti-bot stealth mode (recommended for social media)
-```
-
-### Authenticated crawling
-
-Access login-gated content (LinkedIn, Twitter, paywalled sites) by creating a login profile:
-
-```bash
-hyperresearch setup       # Choose option 1 — browser opens, log into your sites, done
-# Or manually:
-crwl profiles             # Create profile, log in, press q when done
+hyperresearch setup       # Browser opens. Log into your sites. Done.
 ```
 
 ```toml
 # .hyperresearch/config.toml
 [web]
-profile = "research"      # Your profile name
+provider = "crawl4ai"
+profile = "research"
 ```
 
-## MCP server
-
-For Claude Desktop, Cursor inline, or any MCP-compatible agent:
-
-```bash
-pip install hyperresearch[mcp]
-```
-
-```json
-{"mcpServers": {"hyperresearch": {"command": "hyperresearch", "args": ["mcp"]}}}
-```
-
-10 tools: `search_notes`, `read_note`, `read_many`, `list_notes`, `get_backlinks`, `get_hubs`, `vault_status`, `lint_vault`, `check_source`, `list_sources`.
+LinkedIn, Twitter, Facebook, Instagram, and TikTok automatically use a visible browser to avoid session kills.
 
 ## Philosophy
 
-- **The agent IS the LLM** — hyperresearch is a dumb tool that stores, indexes, and searches. It never calls an LLM.
-- **Files are truth** — markdown notes survive the tool dying. SQLite is a rebuildable cache.
-- **Agents already have web access** — hyperresearch is where they *store* what they find, not how they find it.
-- **Check before you fetch** — the hook system prevents redundant web searches across sessions.
+- **No LLM calls.** Hyperresearch stores, indexes, and searches. Your agent is the LLM.
+- **Markdown is truth.** Notes are plain files. SQLite is a rebuildable cache.
+- **Over-collect, then prune.** Fetch aggressively. Deprecate what you don't need.
+- **Check before you fetch.** Hooks kill redundant searches across sessions.
+- **Raw content is king.** Save the original with formatting, not a rewritten summary.
 
 ## Requirements
 
 - Python 3.11+
-- Works on Windows, macOS, Linux
+- Windows, macOS, Linux
 
 ## License
 
 [MIT](LICENSE)
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=jordan-gibbs/hyperresearch&type=Date)](https://star-history.com/#jordan-gibbs/hyperresearch&Date)
