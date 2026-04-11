@@ -28,12 +28,12 @@ dependencies = [
     "pydantic>=2.0",
     "jinja2>=3.1",
     "platformdirs>=4.0",
+    "Crawl4AI>=0.4",
 ]
 
 [project.optional-dependencies]
-crawl4ai = ["Crawl4AI>=0.4"]
 mcp = ["mcp>=1.6"]
-all = ["hyperresearch[crawl4ai,mcp]"]
+all = ["hyperresearch[mcp]"]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",

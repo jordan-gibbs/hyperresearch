@@ -18,7 +18,7 @@ Your AI agent searches the web, finds great sources, synthesizes an answer — t
 **Hyperresearch makes research persist.** Every source your agent finds is fetched with a real headless browser, saved as searchable markdown, and indexed into a knowledge base that compounds across sessions.
 
 ```bash
-pip install hyperresearch[crawl4ai]
+pip install hyperresearch
 hyperresearch install
 ```
 
