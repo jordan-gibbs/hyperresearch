@@ -2,7 +2,7 @@
   <img src="assets/banner.png" alt="HYPERRESEARCH" width="700">
 </p>
 
-<h3 align="center">Deep, persistent web research for AI agents</h3>
+<h3 align="center">Ultra deep, persistent web research for AI coding agents</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/hyperresearch/"><img src="https://img.shields.io/pypi/v/hyperresearch" alt="PyPI version"></a>
@@ -15,7 +15,7 @@
 
 Your AI agent searches the web, finds great sources, synthesizes an answer — then the session ends and everything is gone. Next time, it starts from zero.
 
-**Hyperresearch makes research persist.** Every source your agent finds is fetched with a real headless browser, saved as searchable markdown, and indexed into a knowledge base that compounds across sessions.
+**Hyperresearch makes research persist.** Every source your agent finds is fetched with a real headless browser, saved as searchable markdown, and indexed into a knowledge base that compounds across sessions. Hyperresearch can follow maps of links to digest paths of information that current agent web searching isn't capable of.
 
 ```bash
 pip install hyperresearch
