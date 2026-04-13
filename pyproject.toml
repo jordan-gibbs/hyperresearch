@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hyperresearch"
-version = "0.3.0"
+version = "0.4.0"
 description = "Agent-driven research knowledge base. Browse, collect, and synthesize web sources into a searchable wiki."
 readme = "README.md"
 license = "MIT"

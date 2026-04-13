@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0] - 2026-04-13
+
+### New
+
+- **Request-type classification (Step 0)** — The research workflow now starts by classifying the user's request into one of 7 types (Canonical Knowledge Retrieval, Market / Landscape Mapping, Engineering / Technical How-To, Interpretive / Humanities Analysis, Comparative Evaluation, Emerging / Cutting-Edge Research, Forecast / Strategy / Recommendation) plus a General fallback. Classification happens before any searching and governs the rest of the workflow.
+- **Type-specific parameter blocks** — Each of the 7 types specifies its own source strategy (count + primary/secondary mix), target length, opening-section shape, H2 heading count, analytical mode, and special rules. A humanities analysis wants 6–10 long thematic sections; a market landscape wants 8–14 vendor-cluster sections with a mandatory comparison matrix; a cutting-edge research request wants primary-heavy preprint reading with a "What we don't know yet" section. One workflow, seven parameterizations.
+- **Primary-heavy vs. secondary-heavy source policy** — New explicit axis: Types 1/4/5/6 are primary-heavy (cite originals, engage deeply, prune irrelevant secondary coverage), Types 2/7 are secondary-heavy (triangulate across many descriptions), Type 3 is balanced. Source count is now a function of request type, not topic complexity.
+- **Conceptual scaffold step (before writing)** — Agent must answer four questions in a scratch file before drafting: the hard question, the naive answer, the structural tension, and a dependency-ordered heading sketch. The final report's opening section must be a framework section, not a definition.
+- **Cross-source comparison step** — Before writing the body, agent finds 3–5 places where sources actually disagree and captures short comparison blocks. Sources earn citations by being compared, not listed. These become the backbone of body sections.
+- **Writing-draft hard constraints** — Target 400–600 words per H2, 12–20 H2s on a 10K-word report, never one-section-per-source, every section ends with an analytical beat, comparison tables not fact tables. Type-specific blocks override these (Type 4 Humanities targets 800–1500 words per section across 6–10 sections).
+- **Frontmatter-first note triage (Step 4.5)** — Six-level protocol for reading notes efficiently. Always start with `note list -j` for summaries, use `note show --meta -j` for frontmatter-only reads, `search --include-body --max-tokens 6000 -j` for token-capped multi-note pulls, and **delegate notes with `word_count > 6000` to a fresh Sonnet subagent** with a pointed extraction prompt (~40× context savings per large note). Rely on the summary field first; read the body only when it earns its place.
+- **Type-aware adversarial audit** — The structure-auditor subagent now checks whether the draft honors its declared type's parameter block: thematic sections for Humanities, mandatory comparison matrix for Comparative, "What we don't know yet" for Emerging, a position on winners for Market. Flags every type violation.
+
+### Changed
+
+- **`fit_markdown` via PruningContentFilter** — crawl4ai provider now uses `DefaultMarkdownGenerator` with `PruningContentFilter` so fetched notes contain just the main content, stripping navigation, footers, and sidebar chrome. Both `AsyncWebCrawler.arun()` and the Playwright visible-browser path use the same generator for consistent output. Applied to single fetch, batch fetch, and visible browser paths.
+- **Skip numeric wiki-links in note parser** — `[[100]]`-style citation markers in bibliographies and academic papers are no longer extracted as note references. Avoids thousands of spurious broken-link warnings on papers that use numbered references.
+- **"Over-collect, then prune" reframed as "over-collect, then engage deeply"** — A report built from 30 sources that disagree and force you to take positions is worth more than a report built from 80 sources that each contribute one bullet of description. Collection is a means to an argument, not the goal.
+- **Scaffold and comparison artifacts are ephemeral, NOT hyperresearch notes** — Both the conceptual scaffold and the cross-source comparison blocks live in `/tmp/scaffold.md` or working memory, explicitly not as notes. Protects the research base from pre-writing scratch work.
+
 ## [0.3.0] - 2026-04-11
 
 ### New
@@ -98,6 +118,7 @@ Initial release. Forked from [llm-kasten](https://github.com/jordan-gibbs/llm-ka
 - Web viewer with force-directed knowledge graph
 - 70 tests
 
+[0.4.0]: https://github.com/jordan-gibbs/hyperresearch/releases/tag/v0.4.0
 [0.3.0]: https://github.com/jordan-gibbs/hyperresearch/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jordan-gibbs/hyperresearch/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jordan-gibbs/hyperresearch/releases/tag/v0.1.0

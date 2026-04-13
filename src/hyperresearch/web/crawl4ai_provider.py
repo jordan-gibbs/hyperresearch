@@ -14,7 +14,8 @@ import pathlib
 import sys
 from datetime import UTC, datetime
 
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, DefaultMarkdownGenerator
+from crawl4ai.content_filter_strategy import PruningContentFilter
 
 from hyperresearch.web.base import WebResult
 
@@ -177,12 +178,17 @@ class Crawl4AIProvider:
             "  }, 2000);"
             "})"
         )
+        # Use PruningContentFilter to populate fit_markdown (strips nav/footer chrome)
+        self._md_generator = DefaultMarkdownGenerator(
+            content_filter=PruningContentFilter(),
+        )
         self._run_config = CrawlerRunConfig(
             magic=magic,
             simulate_user=True,
             screenshot=True,
             page_timeout=30000,
             wait_for=self._wait_js,
+            markdown_generator=self._md_generator,
         )
 
     def fetch(self, url: str) -> WebResult:
@@ -249,12 +255,12 @@ class Crawl4AIProvider:
             await context.close()
 
         # Convert HTML to markdown using crawl4ai's markdown generator
-        from crawl4ai import DefaultMarkdownGenerator
-
-        md_gen = DefaultMarkdownGenerator()
-        md_result = md_gen.generate_markdown(html, base_url=final_url)
+        # Prefer fit_markdown (main content, no nav/footer chrome) over raw_markdown.
+        md_result = self._md_generator.generate_markdown(html, base_url=final_url)
         content = ""
-        if md_result and hasattr(md_result, "raw_markdown"):
+        if md_result and hasattr(md_result, "fit_markdown"):
+            content = md_result.fit_markdown or md_result.raw_markdown or ""
+        elif md_result and hasattr(md_result, "raw_markdown"):
             content = md_result.raw_markdown or ""
         elif isinstance(md_result, str):
             content = md_result
@@ -276,8 +282,11 @@ class Crawl4AIProvider:
 
             # result.markdown is a MarkdownGenerationResult with .raw_markdown,
             # .fit_markdown, .markdown_with_citations, etc.
+            # Prefer fit_markdown (main content, no nav/footer chrome) over raw_markdown.
             md = result.markdown
-            if md and hasattr(md, "raw_markdown"):
+            if md and hasattr(md, "fit_markdown"):
+                content = md.fit_markdown or md.raw_markdown or ""
+            elif md and hasattr(md, "raw_markdown"):
                 content = md.raw_markdown or ""
             elif isinstance(md, str):
                 content = md
@@ -345,7 +354,9 @@ class Crawl4AIProvider:
                         continue
                     metadata = cr.metadata or {}
                     md = cr.markdown
-                    if md and hasattr(md, "raw_markdown"):
+                    if md and hasattr(md, "fit_markdown"):
+                        content = md.fit_markdown or md.raw_markdown or ""
+                    elif md and hasattr(md, "raw_markdown"):
                         content = md.raw_markdown or ""
                     elif isinstance(md, str):
                         content = md

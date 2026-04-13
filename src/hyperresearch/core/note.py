@@ -32,6 +32,7 @@ def read_note(file_path: Path, vault_root: Path) -> Note:
     outgoing = list(dict.fromkeys(
         ref for ref in raw_links
         if ref and not ref.startswith(("http://", "https://", "ftp://", "mailto:"))
+        and not ref.isdigit()  # Skip [[100]]-style citation numbers
     ))
 
     # Word count (simple split)

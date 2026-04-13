@@ -13,3 +13,4 @@ build/
 *.egg
 .env
 bench/
+codex_bench/
