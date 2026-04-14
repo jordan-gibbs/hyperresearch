@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from typer.testing import CliRunner
 
 from hyperresearch.cli.lint import app as lint_app
@@ -68,7 +67,7 @@ def test_scaffold_prompt_fails_when_header_missing(tmp_vault):
             "1. Cosmology\n"
         ),
     )
-    code, out = _run_lint(tmp_vault, rule="scaffold-prompt")
+    _, out = _run_lint(tmp_vault, rule="scaffold-prompt")
     import json
     data = json.loads(out)
     issues = data.get("data", {}).get("issues", [])
@@ -88,7 +87,7 @@ def test_scaffold_prompt_warns_when_quote_too_short(tmp_vault):
             "- thing\n"
         ),
     )
-    code, out = _run_lint(tmp_vault, rule="scaffold-prompt")
+    _, out = _run_lint(tmp_vault, rule="scaffold-prompt")
     import json
     data = json.loads(out)
     issues = data.get("data", {}).get("issues", [])
@@ -131,7 +130,7 @@ def test_provenance_rooted_tree_passes_with_valid_chain(tmp_vault):
     _write_source(tmp_vault, "Child C", "child-c", body="*Suggested by [[seed-two]] — reply*\n\nCritical response.")
     tmp_vault.auto_sync()
 
-    code, out = _run_lint(tmp_vault, rule="provenance")
+    _, out = _run_lint(tmp_vault, rule="provenance")
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "provenance"]
@@ -144,7 +143,7 @@ def test_provenance_fails_when_all_sources_are_seeds(tmp_vault):
         _write_source(tmp_vault, f"Source {i}", f"source-{i}")
     tmp_vault.auto_sync()
 
-    code, out = _run_lint(tmp_vault, rule="provenance")
+    _, out = _run_lint(tmp_vault, rule="provenance")
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "provenance"]
@@ -162,7 +161,7 @@ def test_provenance_fails_on_dangling_breadcrumb(tmp_vault):
     _write_source(tmp_vault, "Child D", "child-d", body="*Suggested by [[seed-one]] — real*\n")
     tmp_vault.auto_sync()
 
-    code, out = _run_lint(tmp_vault, rule="provenance")
+    _, out = _run_lint(tmp_vault, rule="provenance")
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "provenance"]
@@ -177,7 +176,7 @@ def test_provenance_small_corpus_is_skipped(tmp_vault):
         _write_source(tmp_vault, f"Source {i}", f"source-{i}")
     tmp_vault.auto_sync()
 
-    code, out = _run_lint(tmp_vault, rule="provenance")
+    _, out = _run_lint(tmp_vault, rule="provenance")
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "provenance"]
@@ -200,7 +199,7 @@ def test_provenance_errors_on_under_30pct_non_seed_ratio(tmp_vault):
         _write_source(tmp_vault, f"Source {i}", f"source-{i}", body=body)
     tmp_vault.auto_sync()
 
-    code, out = _run_lint(tmp_vault, rule="provenance")
+    _, out = _run_lint(tmp_vault, rule="provenance")
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "provenance"]
@@ -217,7 +216,7 @@ def test_orphaned_raw_files_flags_disk_leak(tmp_vault):
     (raw_dir / "orphan-note.pdf").write_bytes(b"%PDF-1.4 dummy")
     tmp_vault.auto_sync()
 
-    code, out = _run_lint(tmp_vault, rule="orphaned-raw-files")
+    _, out = _run_lint(tmp_vault, rule="orphaned-raw-files")
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "orphaned-raw-files"]
@@ -258,7 +257,7 @@ def test_audit_gate_blocks_unresolved_criticals(tmp_vault):
             }
         ]
     })
-    code, out = _run_lint(tmp_vault, rule="audit-gate")
+    _, out = _run_lint(tmp_vault, rule="audit-gate")
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "audit-gate"]
@@ -284,7 +283,7 @@ def test_audit_gate_passes_when_all_criticals_fixed(tmp_vault):
             }
         ]
     })
-    code, out = _run_lint(tmp_vault, rule="audit-gate")
+    _, out = _run_lint(tmp_vault, rule="audit-gate")
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "audit-gate"]
@@ -320,7 +319,7 @@ def test_audit_gate_uses_most_recent_conformance_run(tmp_vault):
             },
         ]
     })
-    code, out = _run_lint(tmp_vault, rule="audit-gate")
+    _, out = _run_lint(tmp_vault, rule="audit-gate")
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "audit-gate"]
@@ -344,7 +343,7 @@ def test_audit_gate_fails_when_only_comprehensiveness_run_exists(tmp_vault):
             }
         ]
     })
-    code, out = _run_lint(tmp_vault, rule="audit-gate")
+    _, out = _run_lint(tmp_vault, rule="audit-gate")
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "audit-gate"]
@@ -375,7 +374,7 @@ def test_audit_gate_surfaces_important_findings_as_info(tmp_vault):
             }
         ]
     })
-    code, out = _run_lint(tmp_vault, rule="audit-gate")
+    _, out = _run_lint(tmp_vault, rule="audit-gate")
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "audit-gate"]
@@ -423,7 +422,7 @@ def test_audit_gate_catches_self_certification_on_provenance(tmp_vault):
         ]
     })
 
-    code, out = _run_lint(tmp_vault, rule="audit-gate")
+    _, out = _run_lint(tmp_vault, rule="audit-gate")
     import json
     data = json.loads(out)
     issues = data.get("data", {}).get("issues", [])
@@ -471,7 +470,7 @@ def test_audit_gate_no_self_cert_when_fix_genuinely_landed(tmp_vault):
         ]
     })
 
-    code, out = _run_lint(tmp_vault, rule="audit-gate")
+    _, out = _run_lint(tmp_vault, rule="audit-gate")
     import json
     data = json.loads(out)
     issues = data.get("data", {}).get("issues", [])
@@ -486,7 +485,7 @@ def test_audit_gate_handles_malformed_file(tmp_vault):
     audit_path = tmp_vault.root / "research" / "audit_findings.json"
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     audit_path.write_text("{ not valid json }", encoding="utf-8")
-    code, out = _run_lint(tmp_vault, rule="audit-gate")
+    _, out = _run_lint(tmp_vault, rule="audit-gate")
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "audit-gate"]
@@ -510,7 +509,7 @@ def test_orphaned_raw_files_ignores_matched_raw(tmp_vault):
     (raw_dir / "real-pdf-note.pdf").write_bytes(b"%PDF-1.4 dummy")
     tmp_vault.auto_sync()
 
-    code, out = _run_lint(tmp_vault, rule="orphaned-raw-files")
+    _, out = _run_lint(tmp_vault, rule="orphaned-raw-files")
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "orphaned-raw-files"]

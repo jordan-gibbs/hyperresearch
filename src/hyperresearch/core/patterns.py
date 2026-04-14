@@ -88,6 +88,4 @@ def is_valid_wiki_link_target(ref: str) -> bool:
         return False
     if _SYMBOL_FOOTNOTE_RE.match(ref):
         return False
-    if _DOC_REF_PREFIX_RE.match(ref):
-        return False
-    return True
+    return not _DOC_REF_PREFIX_RE.match(ref)

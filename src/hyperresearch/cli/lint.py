@@ -185,8 +185,8 @@ def lint(
                             "severity": "error",
                             "note_id": "<vault>",
                             "message": (
-                                f"Most recent conformance audit returned status=failed. "
-                                f"Investigate the findings and re-run the auditor."
+                                "Most recent conformance audit returned status=failed. "
+                                "Investigate the findings and re-run the auditor."
                             ),
                         })
 
@@ -230,7 +230,7 @@ def lint(
                 # broad — false matches are fine (they cause a re-check
                 # which passes harmlessly); missing a match is the failure
                 # mode we're guarding against.
-                _KW_TO_RULE = [
+                kw_to_rule = [
                     # scaffold-prompt (verbatim prompt gospel rule)
                     ("scaffold-prompt", "scaffold-prompt"),
                     ("scaffold_prompt", "scaffold-prompt"),
@@ -305,7 +305,7 @@ def lint(
                         desc = (str(c.get("description", "")) + " " +
                                 str(c.get("id", ""))).lower()
                         matched = None
-                        for kw, rule_name in _KW_TO_RULE:
+                        for kw, rule_name in kw_to_rule:
                             if kw in desc:
                                 matched = rule_name
                                 break

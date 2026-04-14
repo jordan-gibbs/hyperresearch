@@ -145,7 +145,6 @@ def _detect_content_type(url: str, raw_content_type: str | None = None) -> str:
     """
     if raw_content_type and "pdf" in raw_content_type.lower():
         return "paper"
-    u = url.lower()
     domain = urlparse(url).netloc.lower()
     path = urlparse(url).path.lower()
 
@@ -160,7 +159,7 @@ def _detect_content_type(url: str, raw_content_type: str | None = None) -> str:
         return "code"
 
     # Dataset portals that happen to live on .gov domains must win first
-    if domain in ("data.gov", "data.gov.uk") or domain.startswith("data.") and (domain.endswith(".gov") or domain.endswith(".gov.uk") or domain.endswith(".europa.eu")):
+    if domain in ("data.gov", "data.gov.uk") or (domain.startswith("data.") and (domain.endswith(".gov") or domain.endswith(".gov.uk") or domain.endswith(".europa.eu"))):
         return "dataset"
 
     # Policy: gov domains, EU, regulator sites

@@ -113,8 +113,8 @@ def search_fts(
             "path": row["path"],
             "status": row["status"],
             "type": row["type"],
-            "tier": row["tier"] if "tier" in row.keys() else None,
-            "content_type": row["content_type"] if "content_type" in row.keys() else None,
+            "tier": row["tier"] if "tier" in row else None,  # noqa: SIM401 (sqlite3.Row has no .get())
+            "content_type": row["content_type"] if "content_type" in row else None,  # noqa: SIM401
             "tags": tag_list,
             "created": row["created"],
             "updated": row["updated"],

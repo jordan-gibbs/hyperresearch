@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from hyperresearch.core.hooks import _SKILL_FILES, _install_research_skill
 
 

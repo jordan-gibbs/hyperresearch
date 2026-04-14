@@ -178,8 +178,8 @@ def note_show(
         data = {
             "id": row["id"], "title": row["title"], "path": row["path"],
             "status": row["status"], "type": row["type"], "tags": tags,
-            "tier": row["tier"] if "tier" in row.keys() else None,
-            "content_type": row["content_type"] if "content_type" in row.keys() else None,
+            "tier": row["tier"] if "tier" in row else None,  # noqa: SIM401 (sqlite3.Row has no .get())
+            "content_type": row["content_type"] if "content_type" in row else None,  # noqa: SIM401
             "created": row["created"], "updated": row["updated"],
             "word_count": row["word_count"], "source": row["source"],
             "parent": row["parent"], "summary": row["summary"],
@@ -343,8 +343,8 @@ def note_list(
             "path": row["path"],
             "status": row["status"],
             "type": row["type"],
-            "tier": row["tier"] if "tier" in row.keys() else None,
-            "content_type": row["content_type"] if "content_type" in row.keys() else None,
+            "tier": row["tier"] if "tier" in row else None,  # noqa: SIM401 (sqlite3.Row has no .get())
+            "content_type": row["content_type"] if "content_type" in row else None,  # noqa: SIM401
             "tags": tag_list,
             "word_count": row["word_count"],
             "summary": row["summary"],
@@ -548,6 +548,7 @@ def note_rm(
       - any entries in the `assets` table and their files on disk
     """
     import shutil
+
     from hyperresearch.core.vault import Vault
 
     vault = Vault.discover()

@@ -33,7 +33,7 @@ if sys.platform == "win32":
 
 def _is_pdf_url(url: str) -> bool:
     """Check if URL likely points to a PDF."""
-    from urllib.parse import urlparse, parse_qs
+    from urllib.parse import urlparse
 
     parsed = urlparse(url.lower())
     path = parsed.path
@@ -44,9 +44,7 @@ def _is_pdf_url(url: str) -> bool:
     if "/pdf/" in path or "/pdfs/" in path:
         return True
     # arXiv PDF links
-    if "arxiv.org" in parsed.netloc and ("/pdf/" in path or "/abs/" in path):
-        return True
-    return False
+    return "arxiv.org" in parsed.netloc and ("/pdf/" in path or "/abs/" in path)
 
 
 def _looks_like_binary(text: str) -> bool:
@@ -58,10 +56,10 @@ def _looks_like_binary(text: str) -> bool:
     pdf_markers = ("endstream", "endobj", "/Filter", "/FlateDecode", "stream\nx", "%PDF-")
     if any(m in sample for m in pdf_markers):
         return True
-    # High ratio of actual binary/control chars — do NOT flag ord(c) > 127, as that would
+    # High ratio of actual binary/control chars - do NOT flag ord(c) > 127, as that would
     # falsely reject valid CJK, Arabic, Cyrillic, and other non-ASCII text.
     # Only flag: true control chars (< 0x20, excluding normal whitespace), the Unicode
-    # replacement character (U+FFFD from bad decoding), and C1 controls (0x80–0x9F).
+    # replacement character (U+FFFD from bad decoding), and C1 controls (0x80-0x9F).
     def _is_garbage(c: str) -> bool:
         o = ord(c)
         return (o < 0x20 and c not in '\t\n\r\f\v') or c == '\ufffd' or (0x80 <= o <= 0x9F)
