@@ -30,6 +30,178 @@ SKIP_URL_PATTERNS = (
 )
 
 
+def _append_suggested_by_to_existing(
+    vault_root: Path,
+    note_id: str,
+    suggested_by: list[str],
+    reason: str | None,
+) -> int:
+    """Append `*Suggested by [[src]] — reason*` breadcrumb lines to an existing note.
+
+    Idempotent: if a breadcrumb for a given source id already exists anywhere
+    in the body, it is not re-added. Returns the number of new breadcrumbs
+    actually added.
+    """
+    # Find the note file — scan research/notes/ for `<note-id>.md` or walk subdirs
+    from hyperresearch.core.frontmatter import parse_frontmatter, serialize_frontmatter
+
+    note_path = None
+    for candidate in vault_root.rglob(f"{note_id}.md"):
+        # Require it to be under a notes directory so we don't match index files
+        if "notes" in candidate.parts:
+            note_path = candidate
+            break
+    if note_path is None:
+        return 0
+
+    text = note_path.read_text(encoding="utf-8-sig")
+    meta, body = parse_frontmatter(text)
+
+    reason_suffix = f" — {reason}" if reason else ""
+    added = 0
+    new_lines = []
+    for src_id in suggested_by:
+        src_clean = src_id.strip()
+        if not src_clean:
+            continue
+        # Skip if a breadcrumb for this source id already exists in the body
+        existing_marker = f"[[{src_clean}]]"
+        if existing_marker in body:
+            continue
+        new_lines.append(f"*Suggested by [[{src_clean}]]{reason_suffix}*")
+        added += 1
+
+    if added == 0:
+        return 0
+
+    # Prepend the new breadcrumb lines to the body
+    breadcrumb_block = "\n".join(new_lines) + "\n\n"
+    new_body = breadcrumb_block + body
+    new_text = serialize_frontmatter(meta) + "\n" + new_body
+    note_path.write_text(new_text, encoding="utf-8")
+    return added
+
+
+def _detect_tier(url: str, content_type: str) -> str:
+    """Guess the epistemic tier from URL + content_type. Returns a Tier value.
+
+    This is a coarse first pass. The curation-time agent is expected to refine
+    (e.g. a medium.com post could be practitioner if it's by a named engineer,
+    or commentary if it's a generic explainer — only reading can tell).
+
+    Defaults prioritize reducing the agent's curation load: URLs with strong
+    signal get a non-unknown default so the agent only needs to verify, not
+    classify from scratch.
+    """
+    domain = urlparse(url).netloc.lower()
+
+    # Ground truth: official primary sources — filings, specs, policy text, datasets
+    if domain.endswith(".gov") or ".gov." in domain or domain.endswith(".gov.uk") or domain.endswith(".europa.eu"):
+        return "ground_truth"
+    if content_type == "policy":
+        return "ground_truth"
+    if content_type == "dataset":
+        return "ground_truth"
+    if content_type == "docs":
+        # Official documentation IS the ground truth for a product/standard
+        return "ground_truth"
+    if content_type == "code":
+        # Source code, README, and repo metadata are ground truth for a tool
+        return "ground_truth"
+
+    # Institutional: peer-reviewed scholarship, canonical reference works
+    if content_type == "paper":
+        # Default to institutional; agent may upgrade to ground_truth if the
+        # paper reports original data or downgrade to commentary for derivatives
+        return "institutional"
+    if "wikipedia.org" in domain or "britannica.com" in domain:
+        return "institutional"
+
+    # Practitioner: forums, community threads, hands-on content
+    if content_type == "forum":
+        return "practitioner"
+    if content_type == "review":
+        return "practitioner"
+
+    # Commentary: news articles, op-eds, blog posts without known authority
+    if content_type == "article":
+        return "commentary"
+    if content_type == "blog":
+        return "commentary"
+    if content_type == "transcript":
+        # Could be institutional (conference keynote) or commentary (podcast)
+        # — agent must decide. Start at commentary; promote during curation.
+        return "commentary"
+
+    return "unknown"
+
+
+def _detect_content_type(url: str, raw_content_type: str | None = None) -> str:
+    """Guess the artifact kind from URL + MIME. Returns a ContentType value or 'unknown'.
+
+    This is a coarse first pass. The creation-time agent is expected to refine
+    during curation if the URL/MIME heuristic is wrong (e.g. a medium.com URL
+    could be blog OR article).
+    """
+    if raw_content_type and "pdf" in raw_content_type.lower():
+        return "paper"
+    u = url.lower()
+    domain = urlparse(url).netloc.lower()
+    path = urlparse(url).path.lower()
+
+    # Papers: arxiv, doi, direct PDFs, openreview, ssrn, biorxiv, pubmed
+    if any(d in domain for d in ("arxiv.org", "doi.org", "openreview.net", "ssrn.com", "biorxiv.org", "medrxiv.org", "pubmed.ncbi.nlm.nih.gov", "ncbi.nlm.nih.gov/pmc", "semanticscholar.org", "openalex.org")):
+        return "paper"
+    if path.endswith(".pdf"):
+        return "paper"
+
+    # Code: github, gitlab, bitbucket, pypi
+    if any(d in domain for d in ("github.com", "gitlab.com", "bitbucket.org", "pypi.org", "crates.io", "npmjs.com")):
+        return "code"
+
+    # Dataset portals that happen to live on .gov domains must win first
+    if domain in ("data.gov", "data.gov.uk") or domain.startswith("data.") and (domain.endswith(".gov") or domain.endswith(".gov.uk") or domain.endswith(".europa.eu")):
+        return "dataset"
+
+    # Policy: gov domains, EU, regulator sites
+    if domain.endswith(".gov") or ".gov." in domain or domain.endswith(".gov.uk") or domain.endswith(".europa.eu") or "regulations.gov" in domain:
+        return "policy"
+
+    # Docs: common documentation platforms, docs.* subdomains, /docs paths
+    if any(d in domain for d in ("readthedocs.io", "readthedocs.org", "docs.rs", "developer.mozilla.org")):
+        return "docs"
+    if domain.startswith("docs.") or domain.startswith("documentation.") or ".readthedocs." in domain:
+        return "docs"
+    if "/docs/" in path or path.endswith("/docs") or "/documentation/" in path or "/api/reference" in path or "/reference/" in path:
+        return "docs"
+
+    # Forum / community
+    if any(d in domain for d in ("reddit.com", "news.ycombinator.com", "stackoverflow.com", "stackexchange.com", "lobste.rs", "lemmy.", "discourse.")):
+        return "forum"
+
+    # Blog platforms
+    if any(d in domain for d in ("medium.com", "substack.com", "dev.to", "hashnode.com", "hashnode.dev", "blogspot.com", "wordpress.com", "ghost.io")):
+        return "blog"
+
+    # Transcripts / video
+    if any(d in domain for d in ("youtube.com", "youtu.be", "vimeo.com")):
+        return "transcript"
+
+    # Reference articles
+    if "wikipedia.org" in domain or "wikimedia.org" in domain or "britannica.com" in domain:
+        return "article"
+
+    # Datasets
+    if any(d in domain for d in ("kaggle.com", "data.gov", "data.world", "zenodo.org", "figshare.com")):
+        return "dataset"
+
+    # News / magazine default
+    if any(d in domain for d in ("nytimes.com", "wsj.com", "ft.com", "bloomberg.com", "reuters.com", "bbc.com", "theatlantic.com", "newyorker.com", "economist.com")):
+        return "article"
+
+    return "unknown"
+
+
 @app.command("fetch")
 def fetch(
     url: str = typer.Argument(..., help="URL to fetch and save as a note"),
@@ -39,6 +211,16 @@ def fetch(
     provider_name: str | None = typer.Option(None, "--provider", help="Web provider override"),
     save_assets: bool = typer.Option(False, "--save-assets", "-a", help="Download images and screenshot"),
     visible: bool = typer.Option(False, "--visible", "-V", help="Run browser visibly (for stubborn auth sites)"),
+    suggested_by: list[str] = typer.Option(
+        [],
+        "--suggested-by",
+        help="Source note ID(s) that suggested this URL. Prepends a 'Suggested by [[note-id]]' breadcrumb to the new note's body, which the link extractor picks up as a wiki-link so the fetched note appears in the source's backlinks. Repeat for multiple sources.",
+    ),
+    suggested_by_reason: str | None = typer.Option(
+        None,
+        "--suggested-by-reason",
+        help="One-line justification for why the suggesting source named this URL. Appears next to the [[source-id]] breadcrumb.",
+    ),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
     """Fetch a URL and save its content as a research note."""
@@ -63,6 +245,38 @@ def fetch(
     existing = conn.execute("SELECT note_id FROM sources WHERE url = ?", (url,)).fetchone()
     if existing:
         note_id = existing["note_id"]
+        # Graceful duplicate handling for the guided reading loop:
+        # if the caller passed --suggested-by, append the breadcrumb to the
+        # existing note instead of erroring out. This lets the main agent
+        # build up provenance on already-fetched URLs without needing to
+        # check for dupes first.
+        if suggested_by:
+            added = _append_suggested_by_to_existing(
+                vault.root, note_id, suggested_by, suggested_by_reason
+            )
+            # Re-sync so the new wiki-link gets picked up by the link extractor
+            plan = compute_sync_plan(vault)
+            if plan.to_update:
+                execute_sync(vault, plan)
+
+            data = {
+                "note_id": note_id,
+                "url": url,
+                "duplicate": True,
+                "backlinks_added": added,
+                "message": (
+                    f"URL already fetched; added {added} backlink(s) to existing note"
+                    if added
+                    else "URL already fetched; breadcrumb(s) already present"
+                ),
+            }
+            if json_output:
+                output(success(data, vault=str(vault.root)), json_mode=True)
+            else:
+                console.print(f"[yellow]Already fetched:[/] {url} → note '{note_id}'")
+                console.print(f"  added {added} backlink(s) to existing note")
+            return
+
         if json_output:
             output(
                 error(f"URL already fetched as note '{note_id}'", "DUPLICATE_URL"),
@@ -130,6 +344,8 @@ def fetch(
     note_title = title or result.title or urlparse(url).path.split("/")[-1] or "Untitled"
     domain = result.domain
 
+    detected_content_type = _detect_content_type(url, result.raw_content_type)
+    detected_tier = _detect_tier(url, detected_content_type)
     extra_meta = {
         "source": url,
         "source_domain": domain,
@@ -139,14 +355,33 @@ def fetch(
     if result.metadata.get("author"):
         extra_meta["author"] = result.metadata["author"]
 
+    # Build body with backlink breadcrumb if this fetch was suggested by another note.
+    # Prepending `*Suggested by [[source-id]] — reason*` lines creates wiki-links the
+    # normal link extractor will pick up, so the new note automatically appears in
+    # graph backlinks of its suggester(s). Zero schema change needed.
+    body_content = result.content
+    if suggested_by:
+        breadcrumb_lines = []
+        reason_suffix = f" — {suggested_by_reason}" if suggested_by_reason else ""
+        for src_id in suggested_by:
+            src_id_clean = src_id.strip()
+            if not src_id_clean:
+                continue
+            breadcrumb_lines.append(f"*Suggested by [[{src_id_clean}]]{reason_suffix}*")
+        if breadcrumb_lines:
+            breadcrumb = "\n".join(breadcrumb_lines) + "\n\n"
+            body_content = breadcrumb + body_content
+
     note_path = write_note(
         vault.notes_dir,
         title=note_title,
-        body=result.content,
+        body=body_content,
         tags=tags,
         status="draft",
         source=url,
         parent=parent,
+        tier=detected_tier,
+        content_type=detected_content_type,
         extra_frontmatter=extra_meta,
     )
 
@@ -172,18 +407,17 @@ def fetch(
     # Note: tagging and summarization is the agent's job, not an automatic process.
     # The agent reads the fetched content and writes meaningful summaries and tags.
 
-    # Add raw_file reference to frontmatter AFTER enrich (enrich rewrites frontmatter)
+    # Persist raw_file reference on the note via NoteMeta — this guarantees the
+    # field survives any future re-serialization (repair, note update, etc.).
+    # The text-injection approach used previously was silently dropped by
+    # NoteMeta.model_config = {"extra": "ignore"} on the next parse.
     if raw_file_path:
+        from hyperresearch.core.frontmatter import parse_frontmatter, render_note
         note_text = note_path.read_text(encoding="utf-8")
-        if note_text.startswith("---") and "raw_file:" not in note_text:
-            end_idx = note_text.find("---", 3)
-            if end_idx != -1:
-                note_text = (
-                    note_text[:end_idx]
-                    + f"raw_file: {raw_file_path}\n"
-                    + note_text[end_idx:]
-                )
-                note_path.write_text(note_text, encoding="utf-8")
+        meta, body = parse_frontmatter(note_text)
+        if meta.raw_file != raw_file_path:
+            meta.raw_file = raw_file_path
+            note_path.write_text(render_note(meta, body), encoding="utf-8")
 
     # Sync first so the note exists in the notes table (needed for FK on sources/assets)
     note_id = note_path.stem
@@ -191,14 +425,43 @@ def fetch(
     if plan.to_add or plan.to_update:
         execute_sync(vault, plan)
 
-    # Record source in DB
+    # Record source in DB. Use INSERT OR IGNORE to survive a duplicate-URL
+    # race: two parallel fetches on the same URL both pass the earlier
+    # duplicate-check SELECT, both try to INSERT, and without IGNORE the
+    # second crashes with IntegrityError leaving a stray .md file and
+    # notes row but no sources row. With IGNORE the second INSERT is a
+    # no-op and we detect the race by re-selecting the row afterward.
     content_hash = hashlib.sha256(result.content.encode("utf-8")).hexdigest()[:16]
     conn.execute(
-        """INSERT INTO sources (url, note_id, domain, fetched_at, provider, content_hash)
+        """INSERT OR IGNORE INTO sources (url, note_id, domain, fetched_at, provider, content_hash)
            VALUES (?, ?, ?, ?, ?, ?)""",
         (url, note_id, domain, result.fetched_at.isoformat(), prov.name, content_hash),
     )
     conn.commit()
+
+    # Detect the race: if the committed row's note_id != ours, another
+    # fetch won the race. Clean up our orphan .md file and return the
+    # winner's note_id so the caller can treat this as an idempotent no-op.
+    winner_row = conn.execute(
+        "SELECT note_id FROM sources WHERE url = ?", (url,)
+    ).fetchone()
+    if winner_row and winner_row["note_id"] != note_id:
+        winning_note_id = winner_row["note_id"]
+        # Our write lost the race. Unlink the orphan file and re-sync.
+        if note_path.exists():
+            try:
+                note_path.unlink()
+            except OSError:
+                pass
+            plan2 = compute_sync_plan(vault)
+            if plan2.to_delete:
+                execute_sync(vault, plan2)
+        note_id = winning_note_id
+        winner_path_row = conn.execute(
+            "SELECT path FROM notes WHERE id = ?", (winning_note_id,)
+        ).fetchone()
+        if winner_path_row:
+            note_path = vault.root / winner_path_row["path"]
 
     # Save assets (screenshot + images) — only when requested
     saved_assets: list[dict] = []

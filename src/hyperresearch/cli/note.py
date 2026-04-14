@@ -24,6 +24,8 @@ def note_new(
     status: str = typer.Option("draft", "--status", "-s", help="Initial status"),
     summary: str | None = typer.Option(None, "--summary", help="One-line summary"),
     source: str | None = typer.Option(None, "--source", help="Source URL or path"),
+    tier: str | None = typer.Option(None, "--tier", help="Epistemic tier: ground_truth|institutional|practitioner|commentary|unknown"),
+    content_type: str | None = typer.Option(None, "--content-type", help="Artifact kind: paper|docs|article|blog|forum|dataset|policy|code|book|transcript|review|unknown"),
     template: str | None = typer.Option(None, "--template", "-T", help="Template: note|concept|reference|guide|comparison|moc"),
     edit: bool = typer.Option(False, "--edit", "-e", help="Open in $EDITOR"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
@@ -38,7 +40,29 @@ def note_new(
 
     from hyperresearch.core.note import write_note
     from hyperresearch.core.vault import Vault
-    from hyperresearch.models.note import slugify
+    from hyperresearch.models.note import ContentType, Tier, slugify
+
+    # Validate enums up-front so invalid values fail clearly
+    if tier is not None:
+        try:
+            Tier(tier)
+        except ValueError:
+            valid = ", ".join(t.value for t in Tier)
+            if json_output:
+                output(error(f"Invalid --tier '{tier}'. Must be one of: {valid}", "INVALID_TIER"), json_mode=True)
+            else:
+                console.print(f"[red]Invalid --tier '{tier}'.[/] Must be one of: {valid}")
+            raise typer.Exit(1)
+    if content_type is not None:
+        try:
+            ContentType(content_type)
+        except ValueError:
+            valid = ", ".join(c.value for c in ContentType)
+            if json_output:
+                output(error(f"Invalid --content-type '{content_type}'. Must be one of: {valid}", "INVALID_CONTENT_TYPE"), json_mode=True)
+            else:
+                console.print(f"[red]Invalid --content-type '{content_type}'.[/] Must be one of: {valid}")
+            raise typer.Exit(1)
 
     vault = Vault.discover()
     vault.auto_sync()
@@ -92,11 +116,11 @@ def note_new(
             console.print(f"[yellow]Template '{template}' not found, using default.[/]")
             path = write_note(vault.notes_dir, title, body=body, tags=tags, status=status,
                               note_type=note_type, parent=parent, summary=summary,
-                              source=source)
+                              source=source, tier=tier, content_type=content_type)
     else:
         path = write_note(vault.notes_dir, title, body=body, tags=tags, status=status,
                           note_type=note_type, parent=parent, summary=summary,
-                          source=source)
+                          source=source, tier=tier, content_type=content_type)
 
     # Read back the note ID (may have been collision-adjusted)
     from hyperresearch.core.note import read_note
@@ -154,6 +178,8 @@ def note_show(
         data = {
             "id": row["id"], "title": row["title"], "path": row["path"],
             "status": row["status"], "type": row["type"], "tags": tags,
+            "tier": row["tier"] if "tier" in row.keys() else None,
+            "content_type": row["content_type"] if "content_type" in row.keys() else None,
             "created": row["created"], "updated": row["updated"],
             "word_count": row["word_count"], "source": row["source"],
             "parent": row["parent"], "summary": row["summary"],
@@ -232,6 +258,8 @@ def note_list(
     note_type: str | None = typer.Option(None, "--type", help="Filter by type"),
     tag: str | None = typer.Option(None, "--tag", "-t", help="Filter by tag"),
     parent: str | None = typer.Option(None, "--parent", "-p", help="Filter by parent"),
+    tier: str | None = typer.Option(None, "--tier", help="Filter by epistemic tier: ground_truth|institutional|practitioner|commentary|unknown"),
+    content_type: str | None = typer.Option(None, "--content-type", help="Filter by artifact kind: paper|docs|article|blog|forum|dataset|policy|code|book|transcript|review|unknown"),
     sort: str = typer.Option("updated", "--sort", help="Sort: created|updated|title|words"),
     limit: int = typer.Option(20, "--limit", "-l", help="Max results"),
     all_notes: bool = typer.Option(False, "--all", "-a", help="Return all notes (no limit)"),
@@ -239,6 +267,29 @@ def note_list(
 ) -> None:
     """List notes with optional filters."""
     from hyperresearch.core.vault import Vault
+    from hyperresearch.models.note import ContentType, Tier
+
+    # Validate enums up-front
+    if tier is not None:
+        try:
+            Tier(tier)
+        except ValueError:
+            valid = ", ".join(t.value for t in Tier)
+            if json_output:
+                output(error(f"Invalid --tier '{tier}'. Must be one of: {valid}", "INVALID_TIER"), json_mode=True)
+            else:
+                console.print(f"[red]Invalid --tier '{tier}'.[/] Must be one of: {valid}")
+            raise typer.Exit(1)
+    if content_type is not None:
+        try:
+            ContentType(content_type)
+        except ValueError:
+            valid = ", ".join(c.value for c in ContentType)
+            if json_output:
+                output(error(f"Invalid --content-type '{content_type}'. Must be one of: {valid}", "INVALID_CONTENT_TYPE"), json_mode=True)
+            else:
+                console.print(f"[red]Invalid --content-type '{content_type}'.[/] Must be one of: {valid}")
+            raise typer.Exit(1)
 
     vault = Vault.discover()
     vault.auto_sync()
@@ -258,6 +309,12 @@ def note_list(
     if tag:
         clauses.append("n.id IN (SELECT note_id FROM tags WHERE tag = ?)")
         params.append(tag.lower())
+    if tier:
+        clauses.append("n.tier = ?")
+        params.append(tier)
+    if content_type:
+        clauses.append("n.content_type = ?")
+        params.append(content_type)
 
     where = " AND ".join(clauses) if clauses else "1=1"
 
@@ -286,6 +343,8 @@ def note_list(
             "path": row["path"],
             "status": row["status"],
             "type": row["type"],
+            "tier": row["tier"] if "tier" in row.keys() else None,
+            "content_type": row["content_type"] if "content_type" in row.keys() else None,
             "tags": tag_list,
             "word_count": row["word_count"],
             "summary": row["summary"],
@@ -334,6 +393,8 @@ def note_update(
     set_summary: str | None = typer.Option(None, "--summary", help="Set summary"),
     set_parent: str | None = typer.Option(None, "--parent", "-p", help="Set parent topic"),
     set_source: str | None = typer.Option(None, "--source", help="Set source URL/path"),
+    set_tier: str | None = typer.Option(None, "--tier", help="Set epistemic tier: ground_truth|institutional|practitioner|commentary|unknown"),
+    set_content_type: str | None = typer.Option(None, "--content-type", help="Set artifact kind: paper|docs|article|blog|forum|dataset|policy|code|book|transcript|review|unknown"),
     deprecate: bool = typer.Option(False, "--deprecate", help="Mark as deprecated"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
@@ -343,6 +404,29 @@ def note_update(
     from hyperresearch.core.frontmatter import parse_frontmatter, serialize_frontmatter
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.core.vault import Vault
+    from hyperresearch.models.note import ContentType, Tier
+
+    # Validate enums up-front
+    if set_tier is not None:
+        try:
+            Tier(set_tier)
+        except ValueError:
+            valid = ", ".join(t.value for t in Tier)
+            if json_output:
+                output(error(f"Invalid --tier '{set_tier}'. Must be one of: {valid}", "INVALID_TIER"), json_mode=True)
+            else:
+                console.print(f"[red]Invalid --tier '{set_tier}'.[/] Must be one of: {valid}")
+            raise typer.Exit(1)
+    if set_content_type is not None:
+        try:
+            ContentType(set_content_type)
+        except ValueError:
+            valid = ", ".join(c.value for c in ContentType)
+            if json_output:
+                output(error(f"Invalid --content-type '{set_content_type}'. Must be one of: {valid}", "INVALID_CONTENT_TYPE"), json_mode=True)
+            else:
+                console.print(f"[red]Invalid --content-type '{set_content_type}'.[/] Must be one of: {valid}")
+            raise typer.Exit(1)
 
     vault = Vault.discover()
     vault.auto_sync()
@@ -380,6 +464,12 @@ def note_update(
     if set_source is not None:
         meta.source = set_source
         changed.append("source")
+    if set_tier is not None:
+        meta.tier = set_tier
+        changed.append(f"tier={set_tier}")
+    if set_content_type is not None:
+        meta.content_type = set_content_type
+        changed.append(f"content_type={set_content_type}")
     if deprecate:
         meta.deprecated = True
         meta.status = "deprecated"
@@ -448,11 +538,22 @@ def note_rm(
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
-    """Delete a note."""
+    """Delete a note and its associated raw file and assets.
+
+    Previous versions only unlinked the `.md` file, leaving raw PDFs under
+    `research/raw/` and assets under `research/assets/<id>/` as orphans.
+    Every fetch-then-delete cycle leaked disk. The current implementation
+    also removes:
+      - the raw file referenced in the note's `raw_file` frontmatter field
+      - any entries in the `assets` table and their files on disk
+    """
+    import shutil
     from hyperresearch.core.vault import Vault
 
     vault = Vault.discover()
-    row = vault.db.execute("SELECT path FROM notes WHERE id = ?", (note_id,)).fetchone()
+    row = vault.db.execute(
+        "SELECT path FROM notes WHERE id = ?", (note_id,)
+    ).fetchone()
     if not row:
         if json_output:
             output(error(f"Note not found: {note_id}", "NOT_FOUND"), json_mode=True)
@@ -464,6 +565,34 @@ def note_rm(
     if not force and not json_output:
         typer.confirm(f"Delete {row['path']}?", abort=True)
 
+    removed_raw: str | None = None
+    removed_assets: list[str] = []
+
+    # Read raw_file straight from the markdown frontmatter — the DB row
+    # may not carry that field if the schema was synced before the column
+    # existed. File parsing is authoritative.
+    if file_path.exists():
+        try:
+            from hyperresearch.core.frontmatter import parse_frontmatter
+            text = file_path.read_text(encoding="utf-8-sig")
+            meta, _ = parse_frontmatter(text)
+            if meta.raw_file:
+                raw_path = vault.root / "research" / meta.raw_file
+                if raw_path.exists():
+                    raw_path.unlink()
+                    removed_raw = str(raw_path.relative_to(vault.root).as_posix())
+        except Exception:
+            pass
+
+    # Assets directory
+    assets_dir = vault.root / "research" / "assets" / note_id
+    if assets_dir.exists() and assets_dir.is_dir():
+        for asset_file in assets_dir.iterdir():
+            if asset_file.is_file():
+                removed_assets.append(asset_file.name)
+        shutil.rmtree(assets_dir, ignore_errors=True)
+
+    # Finally, unlink the .md file
     if file_path.exists():
         file_path.unlink()
 
@@ -473,9 +602,20 @@ def note_rm(
     plan = compute_sync_plan(vault)
     execute_sync(vault, plan)
 
+    payload: dict = {"deleted": note_id}
+    if removed_raw:
+        payload["removed_raw"] = removed_raw
+    if removed_assets:
+        payload["removed_assets"] = removed_assets
+
     if json_output:
-        output(success({"deleted": note_id}, vault=str(vault.root)), json_mode=True)
+        output(success(payload, vault=str(vault.root)), json_mode=True)
     else:
-        console.print(f"[red]Deleted:[/] {note_id}")
+        msg = f"[red]Deleted:[/] {note_id}"
+        if removed_raw:
+            msg += f"\n  raw: {removed_raw}"
+        if removed_assets:
+            msg += f"\n  assets: {len(removed_assets)} file(s)"
+        console.print(msg)
 
 

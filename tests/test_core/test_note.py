@@ -84,6 +84,38 @@ def test_strip_markdown():
     assert "[[" not in plain
 
 
+def test_raw_file_persists_on_roundtrip(tmp_vault):
+    """raw_file must survive parse + re-serialize (regression test for wipe bug).
+
+    Before Batch 1.2 fix: raw_file was injected into frontmatter as a string
+    AFTER write_note; NoteMeta.model_config = {"extra": "ignore"} silently
+    dropped the field on the next parse, and any re-serialization (repair,
+    note update) wiped it from disk.
+    """
+    from hyperresearch.core.frontmatter import parse_frontmatter, render_note
+
+    path = write_note(
+        tmp_vault.notes_dir,
+        "PDF Note",
+        body="# PDF content\n",
+        extra_frontmatter={"raw_file": "raw/pdf-note.pdf"},
+    )
+    # First read — does NoteMeta capture the field?
+    note = read_note(path, tmp_vault.root)
+    assert note.meta.raw_file == "raw/pdf-note.pdf"
+
+    # Re-serialize (simulates repair.py enrichment or note update).
+    text = path.read_text(encoding="utf-8")
+    meta, body = parse_frontmatter(text)
+    path.write_text(render_note(meta, body), encoding="utf-8")
+
+    # Second read — raw_file must still be present.
+    note2 = read_note(path, tmp_vault.root)
+    assert note2.meta.raw_file == "raw/pdf-note.pdf", (
+        "raw_file was wiped on re-serialize — Batch 1.2 regression"
+    )
+
+
 def test_read_utf8_content(tmp_vault):
     path = write_note(
         tmp_vault.notes_dir,

@@ -10,7 +10,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from hyperresearch.core.note import read_note, strip_markdown
-from hyperresearch.core.patterns import CODE_BLOCK_RE, INLINE_CODE_RE, WIKI_LINK_RE
+from hyperresearch.core.patterns import (
+    CODE_BLOCK_RE,
+    INLINE_CODE_RE,
+    WIKI_LINK_RE,
+    is_valid_wiki_link_target,
+)
 
 
 @dataclass
@@ -42,13 +47,24 @@ def compute_sync_plan(vault, force: bool = False) -> SyncPlan:
     plan = SyncPlan()
 
     # Only scan inside the research directory (notes/, index/)
-    # This avoids walking .git/, .venv/, src/, etc. entirely
+    # This avoids walking .git/, .venv/, src/, etc. entirely.
+    #
+    # Files at the research/ root (e.g. research/scaffold.md,
+    # research/comparisons.md, research/synthesis.md) are STAGING files the
+    # agent writes then registers as real notes via `note new --body-file`.
+    # They must NOT be synced as notes themselves — otherwise every run
+    # produces 4 orphan notes and the missing-title/missing-tags/missing-summary
+    # lint rules spam warnings for every research session.
     kb_dir = vault.research_dir
     if not kb_dir.exists():
         return plan
 
     disk_files: dict[str, float] = {}
     for md_file in kb_dir.rglob("*.md"):
+        # Skip staging files at the research/ root. Real notes live in
+        # research/notes/** or research/index/**.
+        if md_file.parent == kb_dir:
+            continue
         rel = md_file.relative_to(vault.root).as_posix()
         disk_files[rel] = md_file.stat().st_mtime
 
@@ -155,13 +171,14 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
     conn.execute(
         """
         INSERT INTO notes
-            (id, title, path, status, type, source, parent,
+            (id, title, path, status, type, tier, content_type, source, parent,
              deprecated, reviewed, expires, word_count, summary,
              created, updated, file_mtime, content_hash, synced_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title=excluded.title, path=excluded.path, status=excluded.status,
-            type=excluded.type, source=excluded.source, parent=excluded.parent,
+            type=excluded.type, tier=excluded.tier, content_type=excluded.content_type,
+            source=excluded.source, parent=excluded.parent,
             deprecated=excluded.deprecated,
             reviewed=excluded.reviewed, expires=excluded.expires,
             word_count=excluded.word_count, summary=excluded.summary,
@@ -171,6 +188,7 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
         """,
         (
             meta.id, meta.title, note.path, meta.status, meta.type,
+            meta.tier, meta.content_type,
             meta.source, meta.parent, 1 if meta.deprecated else 0,
             reviewed_iso, expires_iso,
             note.word_count, meta.summary, created_iso, updated_iso,
@@ -213,16 +231,14 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
     )
 
     # Update links — extract from original body (not stripped)
+    # Uses the shared filter so this path stays in sync with core.note.read_note
     conn.execute("DELETE FROM links WHERE source_id = ?", (meta.id,))
     cleaned = CODE_BLOCK_RE.sub("", note.body)
     cleaned = INLINE_CODE_RE.sub("", cleaned)
     for line_num, line in enumerate(cleaned.split("\n"), 1):
         for m in WIKI_LINK_RE.finditer(line):
             target_ref = m.group(1).strip().rstrip("\\")  # Strip trailing backslash (shell escaping artifact)
-            # Skip URLs — they're not note references
-            if target_ref.startswith(("http://", "https://", "ftp://", "mailto:")):
-                continue
-            if not target_ref:
+            if not is_valid_wiki_link_target(target_ref):
                 continue
             conn.execute(
                 "INSERT OR IGNORE INTO links (source_id, target_ref, line_number, context) "
