@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS notes (
                      CHECK (status IN ('draft','review','evergreen','stale','deprecated','archive')),
     type         TEXT NOT NULL DEFAULT 'note'
                      CHECK (type IN ('note','raw','index','moc')),
+    tier         TEXT
+                     CHECK (tier IS NULL OR tier IN ('ground_truth','institutional','practitioner','commentary','unknown')),
+    content_type TEXT
+                     CHECK (content_type IS NULL OR content_type IN ('paper','docs','article','blog','forum','dataset','policy','code','book','transcript','review','unknown')),
     source       TEXT,
     parent       TEXT,
     deprecated   INTEGER NOT NULL DEFAULT 0,
@@ -136,6 +140,13 @@ CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
 );
 """
 
+# Indexes on columns added by migrations — must run AFTER migrate() so that
+# existing DBs have had the columns added by ALTER TABLE before we index them.
+POST_MIGRATE_INDEXES_SQL = """
+CREATE INDEX IF NOT EXISTS idx_notes_tier ON notes(tier);
+CREATE INDEX IF NOT EXISTS idx_notes_content_type ON notes(content_type);
+"""
+
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
     """Open a SQLite connection with WAL mode and FK enforcement."""
@@ -157,6 +168,10 @@ def init_schema(conn: sqlite3.Connection) -> None:
     )
     conn.commit()
 
-    # Run any pending migrations
+    # Run any pending migrations (may ALTER TABLE to add new columns)
     from hyperresearch.core.migrations import migrate
     migrate(conn, SCHEMA_VERSION)
+
+    # Indexes that depend on migration-added columns run last
+    conn.executescript(POST_MIGRATE_INDEXES_SQL)
+    conn.commit()
