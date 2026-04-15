@@ -275,7 +275,7 @@ Hyperresearch is being evaluated on the [DeepResearch Bench](https://github.com/
 - **No LLM calls inside the tool.** Hyperresearch stores, indexes, lints, and orchestrates. Your agent is the LLM.
 - **Markdown is truth, SQLite is cache.** Notes are plain files. Delete the DB; `hyperresearch sync` rebuilds it.
 - **Audit findings are artifacts, not just outputs.** They persist to JSON, get verified by lint rules, and gate the save. Self-certification is structurally prevented.
-- **Deeper-not-broader.** v0.5.0 prefers 15 well-extracted sources over 50 skim-fetched ones. The protocol enforces analyst coverage, not source count.
+- **Exhaustive and deep.** v0.5.0 seeds 10-15 sources, iterates the bouncing loop 8 rounds, and typically produces drafts anchored in 40-80 fetched-and-analyst-read sources with 40+ inline citations. Depth AND breadth — not a tradeoff.
 
 ---
 

@@ -162,4 +162,8 @@ The draft must include — in the body or in the synthesis — a statement of wh
 
 (13) **No academic API sweep was run.** Confirm via vault tags — if the corpus is dominated by `paper` content_type sources, the agent ran the wrong source strategy. FAIL (non-critical — correct the source mix and re-run).
 
+(14) **Citation density.** Count inline citations in the body. FAIL if density < 8 per 1000 words, FAIL if any H2 section runs ≥300 words without a citation, FAIL if < 50% of fetched sources are cited at least once. Forecasts that cite a handful of sources read as opinion; forecasts that cite widely read as reasoned positions.
+
+(15) **Prompt-named dimension coverage.** For every explicitly named force, driver, scenario, or time-horizon in the user's verbatim prompt, verify a dedicated section exists. FAIL if any prompt-named item is collapsed.
+
 Auditor output: list every violation with a one-line quote from the report.

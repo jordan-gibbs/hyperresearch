@@ -196,9 +196,9 @@ A corpus without dissent is advocacy, not research. If the adversarial round ret
 
 ## Step 3: Fetch — guided reading loop (preferred) or batch
 
-**Default: the guided reading loop** (described below). Seed with 3–5 high-signal URLs, then let each iteration's analyst subagents propose next targets based on what the prior sources cite.
+**Default: the guided reading loop** (described below). **Seed broadly (10–15 high-signal URLs), then iterate aggressively.** Every iteration's analyst subagents propose next targets; every target gets fetched. The goal is exhaustive coverage of the question, not minimal corpora. A deep-research draft anchored in 25-40 fetched and analyst-read sources cites richer than one anchored in 10-15.
 
-**Batch fetch** only when the target set is already known and complete — e.g., the user handed you 10 URLs, or the modality file says to batch (compare activity with explicitly-named entities is the usual case).
+**Batch fetch** when the target set is already known and complete — e.g., the user handed you 20 URLs, or the modality file says to batch (compare activity with explicitly-named entities is the usual case).
 
 ### Guided reading loop protocol
 
@@ -213,12 +213,14 @@ fetch 3-5 seeds  →  hyperresearch-analyst reads each with goal in hand  →
 
 Each iteration is a research director: the analyst reads one source, proposes what to read next, and hands the decision back to the main agent. This discovers source trees you couldn't find by keyword search alone — the essay names three critics, those critics cite a 1998 monograph, the monograph references a specific passage in the primary work.
 
-**Phase 1 — Seed fetch.** Pick the 3–5 highest-signal URLs:
-- 1–2 canonical reference entries (Wikipedia, field survey, official docs)
-- 1–2 analytical/critical sources visible in search results
-- 0–1 adversarial/dissenting source
+**Phase 1 — Seed fetch.** Pick the **10–15 highest-signal URLs** (more for broad enumerative queries, fewer only for very narrow single-question prompts):
+- 2–3 canonical reference entries (Wikipedia, field survey, official docs)
+- 3–5 analytical/critical sources visible in search results
+- 2–3 primary sources (original papers, ground-truth datasets, official filings)
+- 2–3 adversarial/dissenting sources — named critic, contrarian view, opposing position
+- 1–2 practitioner voices (blogs, postmortems, industry perspectives) where applicable
 
-Spawn `hyperresearch-fetcher` on ONLY those 3–5. Do NOT batch-fetch 20 URLs upfront — half get wasted on sources the loop would tell you to skip.
+Spawn `hyperresearch-fetcher` on all of them **in parallel**. The fetcher is cheap (Haiku); parallel seed-fetching of 10-15 URLs finishes in under a minute. Exhaustive coverage beats cautious minimalism — an under-fetched corpus produces a draft that cannot cite widely.
 
 #### When a fetch fails — try harder before giving up
 
@@ -281,7 +283,7 @@ Spawn multiple analysts in parallel — one per source in the current batch. Eac
 2. Collect every extract into a running knowledge accumulator.
 3. Merge and dedupe next_targets across all analysts. If three subagents propose the same URL, fetch it once — pass all three suggesting source IDs via repeated `--suggested-by` flags.
 4. Prioritize next_targets by: (a) which would most likely *change* the argument if they disagreed with current sources, (b) which sub-topics the corpus doesn't yet cover, (c) which tiers are missing.
-5. **Fetch the top 3–5 next_targets WITH `--suggested-by` flag. This is mandatory:**
+5. **Fetch the top 8–12 next_targets per iteration WITH `--suggested-by` flag. This is mandatory.** Bias toward more rather than fewer — every analyst-recommended URL that gets skipped is a citation the draft won't make. Cheap fetches beat expensive re-runs.
 
    ```bash
    $HPR fetch "<url>" \
@@ -303,7 +305,7 @@ Spawn multiple analysts in parallel — one per source in the current batch. Eac
 - **Coverage complete** — all analyst returns report `coverage: complete` for the sub-topics you need.
 - **Cycle detected** — next_targets repeat or every proposed target's fetch returns `duplicate: true` with `backlinks_added: 0`.
 - **Diminishing returns** — a full iteration adds zero new sub-topics. The TodoWrite delta tracker catches this.
-- **Iteration cap: 5 full loops** — more than this and the loop is drifting, not converging. Stop and move on.
+- **Iteration cap: 8 full loops** — more than this and the loop is drifting. With 10-15 seeds and 8-12 fetches per iteration, 8 loops produces a target corpus of 40-80 sources before convergence, which is the right depth for deep research.
 
 Then proceed to curation (Steps 5–6).
 
@@ -436,15 +438,37 @@ Using the **Write tool**, create `research/scaffold.md` with this exact structur
 <what makes this question non-trivial — the paradox, disagreement, tradeoff,
 or open problem the draft has to earn its way through>
 
+## Prompt decomposition — one H2/H3 per named item (MANDATORY)
+<Extract EVERY explicitly named subtopic, entity, context, field, or dimension
+from the verbatim prompt. Examples: "liability in ADAS accidents" names
+{technical ADAS principles, legal frameworks, case law, regulatory guidelines};
+"Diamond Sutra in daily life, workplace, business, marriage, parenting,
+emotional well-being, interpersonal dynamics" names 7 contexts. Each MUST
+become its own H2 or H3 in the draft — NEVER collapse or merge. If the prompt
+names 7 contexts, deliver 7 sections. The audit at Step 11 FAILS if any
+prompt-named item is silently dropped or merged.>
+
+- item 1: <section title>
+- item 2: <section title>
+- ...
+
 ## The structural plan
-<Ordered list of sections the draft will produce. Honor every explicit
-structural mandate from "What the user explicitly asked for". Where the
-prompt is silent, apply the primary modality's default structural guidance.
+<Ordered list of sections the draft will produce. Must include one dedicated
+section per item in "Prompt decomposition" above, PLUS additional sections
+the modality requires (scaffold opening, synthesis close, etc.).
 For each section, name it AND describe what it will contain in one line.>
 
 ## Where each source will land
 <One line per curated source-id: which heading(s) it serves and in what role
-(ground-truth evidence, institutional synthesis, dissenting voice, etc.).>
+(ground-truth evidence, institutional synthesis, dissenting voice, etc.).
+Every source should appear in at least one section; high-signal sources
+should be cited across multiple sections.>
+
+## Citation budget
+<Plan for at least 40-80 inline citations in the final draft. Rough target:
+density of 8-16 citations per 1000 words. The same source can be cited
+multiple times across sections — list which sources will anchor which
+claims. Under-citation is the #1 failure mode.>
 
 ## Coverage checklist (the auditor will verify this)
 <One line per explicit contract from "What the user explicitly asked for".
@@ -505,9 +529,10 @@ Then read your modality file's substance rules. The modality file tells you HOW 
 - **The opening must establish the core tension.** What makes this question non-trivial? What paradox, disagreement, tradeoff, or open problem is the draft earning its way through? If the user requested a specific opening shape (definitions, executive summary, narrative hook), honor that shape — then make it do tension-framing work.
 - **Every body section must earn its analytical beat.** A section that just describes facts without making an interpretive / comparative / forward move is a catalog entry, not a research contribution. Each section ends with a so-what, a comparison, a tension, or a forward beat.
 - **Sources in tension at least twice in the body.** Find two places where your sources disagree and walk the reader through the disagreement, naming both positions and explaining which is more defensible. Synthesis alone does not make up for this — the body itself must engage dissent.
-- **Every claim has a citation.** Inline parenthetical URL, or `[[note-id]]` if you want the reader to trace it in the vault.
-- **Tier weighting.** Anchor substantive claims in `ground_truth` sources. Use `institutional` for positioning. Use `practitioner` for reality checks. Use `commentary` only to characterize reception, never to establish a load-bearing claim.
-- **No padding to hit a length.** There is no length target. If your substance fits in 3,000 words, write 3,000 words. If it needs 12,000, write 12,000. A draft should be as long as the content demands.
+- **Cite aggressively. Every factual claim, every number, every attributed position, every direct or paraphrased quote gets an inline citation.** Use parenthetical URLs like `([Author Year](url))` or `([short source name](url))`. **The same source can and should be cited multiple times** across different sections whenever it anchors a different claim — treat each citation as an independent audit point, not a one-per-source rationing. A 5,000-word deep-research draft should carry **40-80 inline citations** (density of 8-16 per 1000 words); anything under 5 per 1000 reads as under-sourced to both human reviewers and automated judges. Shallow citation is the single most common failure mode in structured research writing.
+- **Exhaustive sub-topic coverage.** For every explicitly named subtopic, entity, context, or field in the user's verbatim prompt, produce a dedicated H2 or H3 section — do not collapse or merge prompt-named items. If the prompt asks for 7 contexts, deliver 7 sections. Every prompt-named subtopic should itself carry ≥3 inline citations.
+- **Tier weighting.** Anchor substantive claims in `ground_truth` sources. Use `institutional` for positioning. Use `practitioner` for reality checks. Use `commentary` only to characterize reception, never to establish a load-bearing claim. Still cite commentary when quoting reception.
+- **Length serves substance, not the reverse.** There is no fixed length target. BUT deep-research drafts typically run 5,000-12,000 words because exhaustive sub-topic coverage plus dense citation plus source-vs-source tension cannot fit in 2,000 words. If you find yourself at 3,000 words on a complex prompt, you are probably collapsing sections or under-citing — reconsider both.
 
 ### Activity-specific substance rules
 

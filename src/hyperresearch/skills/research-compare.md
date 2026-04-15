@@ -170,4 +170,8 @@ If the entities have dramatically different maturity (A has 10 years of producti
 
 (12) **Maturity asymmetry flagged if present.** If the entities have dramatically different evidence bases, is this flagged in the opening and in affected sections? FAIL if the draft presents asymmetric alternatives as if they were evenly characterized.
 
+(13) **Citation density.** Count inline citations in the body. FAIL if density < 8 per 1000 words, FAIL if any entity section runs ≥300 words without a citation, FAIL if < 50% of fetched sources are cited at least once. Per-entity evaluation requires per-entity evidence — an entity description with 0-1 citations is a description, not an evaluation.
+
+(14) **Prompt-named entity coverage.** For every explicitly named entity in the user's verbatim prompt, verify a dedicated section exists with its own H2 or H3. FAIL if any named entity is collapsed or silently dropped.
+
 Auditor output: list every violation with a one-line quote from the report.
