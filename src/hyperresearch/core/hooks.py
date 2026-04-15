@@ -1645,6 +1645,9 @@ def install_hooks(vault_root: Path, platforms: list[str] | None = None, hpr_path
         result = _install_research_skill(vault_root)
         if result:
             actions.append(result)
+        result = _install_ensemble_skill(vault_root)
+        if result:
+            actions.append(result)
         result = _install_researcher_agent(vault_root, hpr_path)
         if result:
             actions.append(result)
@@ -1929,8 +1932,24 @@ _SKILL_FILES = [
     ("research-synthesize.md",  "SKILL-synthesize.md"),
     ("research-compare.md",     "SKILL-compare.md"),
     ("research-forecast.md",    "SKILL-forecast.md"),
-    ("research-ensemble.md",    "SKILL-ensemble.md"),
 ]
+
+
+def _read_skill_source(src_name: str) -> str | None:
+    """Read a skill file from package resources, falling back to source tree."""
+    import importlib.resources
+
+    try:
+        return (
+            importlib.resources.files("hyperresearch.skills")
+            .joinpath(src_name)
+            .read_text(encoding="utf-8")
+        )
+    except Exception:
+        skill_src = Path(__file__).parent.parent / "skills" / src_name
+        if skill_src.exists():
+            return skill_src.read_text(encoding="utf-8")
+        return None
 
 
 def _install_research_skill(vault_root: Path) -> str | None:
@@ -1939,8 +1958,6 @@ def _install_research_skill(vault_root: Path) -> str | None:
     Also prunes any stale SKILL*.md files that are no longer in _SKILL_FILES —
     this keeps pre-refactor vaults clean when the modality taxonomy changes.
     """
-    import importlib.resources
-
     skill_dir = vault_root / ".claude" / "skills" / "hyperresearch"
     skill_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1948,18 +1965,9 @@ def _install_research_skill(vault_root: Path) -> str | None:
     installed: list[str] = []
 
     for src_name, dest_name in _SKILL_FILES:
-        try:
-            content = (
-                importlib.resources.files("hyperresearch.skills")
-                .joinpath(src_name)
-                .read_text(encoding="utf-8")
-            )
-        except Exception:
-            # Fallback: read from source tree relative to this file
-            skill_src = Path(__file__).parent.parent / "skills" / src_name
-            if not skill_src.exists():
-                continue
-            content = skill_src.read_text(encoding="utf-8")
+        content = _read_skill_source(src_name)
+        if content is None:
+            continue
 
         dest_path = skill_dir / dest_name
         if dest_path.exists() and dest_path.read_text(encoding="utf-8") == content:
@@ -1983,3 +1991,29 @@ def _install_research_skill(vault_root: Path) -> str | None:
     if pruned:
         parts.append("pruned: " + ", ".join(pruned))
     return f"Claude Code: .claude/skills/hyperresearch/ ({'; '.join(parts)})"
+
+
+def _install_ensemble_skill(vault_root: Path) -> str | None:
+    """Install the /research-ensemble skill as its own Claude Code skill directory.
+
+    Must live at `.claude/skills/research-ensemble/SKILL.md` (NOT as a sibling
+    inside `.claude/skills/hyperresearch/`) so Claude Code registers
+    `/research-ensemble` as a real slash-command trigger via the skill's
+    `name: research-ensemble` frontmatter. A file at
+    `.claude/skills/hyperresearch/SKILL-ensemble.md` is just an extra file in
+    the hyperresearch skill's directory — the harness does not register it as
+    a separate skill, so users typing `/research-ensemble` get no routing.
+    """
+    skill_dir = vault_root / ".claude" / "skills" / "research-ensemble"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+
+    content = _read_skill_source("research-ensemble.md")
+    if content is None:
+        return None
+
+    dest_path = skill_dir / "SKILL.md"
+    if dest_path.exists() and dest_path.read_text(encoding="utf-8") == content:
+        return None
+
+    dest_path.write_text(content, encoding="utf-8")
+    return "Claude Code: .claude/skills/research-ensemble/SKILL.md (/research-ensemble trigger)"
