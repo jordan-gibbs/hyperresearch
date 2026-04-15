@@ -140,11 +140,12 @@ Before executing Step 2, create this exact TODO list with the TodoWrite tool. Do
 10. Write comparisons note (Step 8)
 11. **Checkpoint 3: pre-draft gate — CRITICAL**
 12. Write `research/notes/final_report.md` (Step 9)
-13. Gap analysis + adversarial search (Step 10)
-14. Adversarial audit via `hyperresearch-auditor` — both modes in parallel (Step 11)
-15. **Checkpoint 4: post-audit review**
-16. Write Opinionated Synthesis section (Step 12)
-17. Save synthesis note + health checks (Steps 13–14)
+13. Evidence recovery pass via `hyperresearch-rewriter` — one Sonnet call (Step 9.5)
+14. Gap analysis + adversarial search (Step 10)
+15. Adversarial audit via `hyperresearch-auditor` — both modes sequentially (Step 11)
+16. **Checkpoint 4: post-audit review**
+17. Write Opinionated Synthesis section (Step 12)
+18. Save synthesis note + health checks (Steps 13–14)
 
 Mark each item `completed` only after its artifact exists AND you have verified it exists with a command. You may NOT mark item 12 (the draft) `in_progress` until items 1–11 are all `completed`. The TODO list is the process ledger.
 
@@ -534,6 +535,14 @@ Then read your modality file's substance rules. The modality file tells you HOW 
 - **Tier weighting.** Anchor substantive claims in `ground_truth` sources. Use `institutional` for positioning. Use `practitioner` for reality checks. Use `commentary` only to characterize reception, never to establish a load-bearing claim. Still cite commentary when quoting reception.
 - **Length serves substance, not the reverse.** There is no fixed length target. BUT deep-research drafts typically run 5,000-12,000 words because exhaustive sub-topic coverage plus dense citation plus source-vs-source tension cannot fit in 2,000 words. If you find yourself at 3,000 words on a complex prompt, you are probably collapsing sections or under-citing — reconsider both.
 
+- **Pick numbers over hedges.** When the prompt asks a quantitative question ("how much", "how many", "to what extent", "by when"), pin down a specific figure or a tight range and cite the source. A concrete number with a citation beats an abstract characterization every time. If the evidence genuinely disagrees, state the range and name the sources on each side. Don't dodge into "this varies" or "it depends" when the user asked for a number.
+
+- **Inline citations as bracketed references AND a final Sources section.** In addition to inline parenthetical URLs, number every unique source `[1]`, `[2]`, `[3]` the first time it appears, reuse the same number on later citations, and include a `## Sources` section at the end of the draft listing `[N] Short title — URL` for every reference. This dual format (parenthetical inline + numbered footnote style + end Sources list) gives both human readers and automated reviewers a traceable audit path. Do NOT invent alternative citation formats (no unicode bracket pairs, no `†`, no author-year-only). Numbered plus final Sources list is the standard here.
+
+- **Never re-search a query you already ran in this session, and never paste a URL into a search engine.** Keep a running list of search queries you've already made, and avoid repeating them verbatim — if a query returned shallow results, rephrase meaningfully before retrying. URLs go to `$HPR fetch`, not `WebSearch`. Loop-burn from redundant search is a real failure mode.
+
+- **If you cannot cite it, cut it.** Every sentence that makes a factual claim must trace back to a source in the vault — either one you fetched this session or one the analyst surfaced from a source. Sentences that paraphrase the user's question, stall with throat-clearing ("it is important to note that..."), or summarize what you're about to say next are padding. They inflate word count without adding substance and they dilute citation density, which the auditor grades. Cut them. The only path to a longer draft is more evidence, not more words about the evidence. If a section feels thin, fetch another source — do not pad with generic prose.
+
 ### Activity-specific substance rules
 
 Open your modality file and read its Step 9 section. Its substance rules layer on top of the shared constraints above — they do not replace them.
@@ -552,6 +561,43 @@ Example (Q91-style: `primary=collect`, `secondary=synthesize`):
 - The draft has entity-named sections (primary structure) where every paragraph inside makes an interpretive claim about what that entity means (secondary substance).
 
 The auditor applies BOTH check lists at Step 11. Secondary-flavor violations are **not waivable** — they are CRITICAL findings that block synthesis save via the `audit-gate` lint rule. If a prompt is genuinely 50/50 across two activities, plan to satisfy both; do not silently drop the secondary.
+
+---
+
+## Step 9.5: Evidence recovery pass — spawn `hyperresearch-rewriter` ONCE
+
+**Required artifact:** the final draft, rewritten in place at `research/notes/final_report.md`, with evidence the extracts preserved but the first draft dropped now present inline with citations.
+**Verification:** the rewriter returns a recovery report naming the sections where recoveries landed and the new sources cited. A zero-recovery return is valid (means the first draft was already evidence-faithful); a fabricated recovery report is not.
+**On failure:** skip the audit and fix the rewriter invocation — the audit's citation-density checks will fail if the density gap wasn't closed.
+
+Synthesis naturally loses information. Writing a 5,000-word draft from 40+ extracts means the main agent quietly drops specifics — a number here, a named expert there, a direct quote collapsed into paraphrase. The rewriter is a cheap Sonnet pass that reads the draft plus every extract note and splices dropped evidence back in at the structurally correct location.
+
+**Spawn `hyperresearch-rewriter` exactly once.** Not per-section. Not per-extract. One call, one rewrite, one return. The rewriter is a registered Claude Code agent (`.claude/agents/hyperresearch-rewriter.md`) running on Sonnet.
+
+```
+Spawn hyperresearch-rewriter with:
+  research_query: <paste the user's verbatim prompt from scaffold §1>
+  modality: <collect | synthesize | compare | forecast>
+  final_report_path: research/notes/final_report.md
+```
+
+The rewriter:
+- Reads the draft and maps its current H2/H3 structure (does NOT add new sections)
+- Enumerates every `extract`-tagged note in the vault
+- Diffs each extract's evidence against the draft — finds numbers, quotes, named entities, source citations the draft dropped
+- Splices the highest-priority recoveries into the correct existing section with inline citations
+- Overwrites `final_report.md` with the refined draft
+- Returns a short report of what was recovered, what was skipped, and how many new citations / sources the draft now carries
+
+**Hard boundaries on the rewriter:**
+- It does NOT change the thesis, recommendation, or section order
+- It does NOT invent claims that aren't in an extract
+- It does NOT touch the `## User Prompt (VERBATIM — gospel)` section (if present)
+- It only recovers evidence with a traceable extract → source citation chain
+
+After the rewriter returns, you may spot-check the diff (read the recovery report, read the refined draft, verify the recoveries land in their stated sections) — but do not re-invoke the rewriter. If the recovery report is empty, that is a legitimate outcome meaning the first draft already covered the extracts faithfully.
+
+Then proceed to Step 10 (gap analysis) with the refined draft as your starting point.
 
 ---
 
