@@ -113,8 +113,9 @@ def search_fts(
             "path": row["path"],
             "status": row["status"],
             "type": row["type"],
-            "tier": row["tier"] if "tier" in row else None,  # noqa: SIM401 (sqlite3.Row has no .get())
-            "content_type": row["content_type"] if "content_type" in row else None,  # noqa: SIM401
+            # sqlite3.Row.__contains__ is broken; row.keys() is reliable.
+            "tier": row["tier"] if "tier" in row.keys() else None,  # noqa: SIM118
+            "content_type": row["content_type"] if "content_type" in row.keys() else None,  # noqa: SIM118
             "tags": tag_list,
             "created": row["created"],
             "updated": row["updated"],
