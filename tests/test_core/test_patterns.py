@@ -62,6 +62,17 @@ def test_cite_prefixes_are_case_insensitive():
     assert not is_valid_wiki_link_target("Fn-3")
 
 
+def test_space_separated_footnote_names_rejected():
+    """HTML footnote rendering: <sup>Note 1</sup> → [[Note 1]]. The Q91
+    ensemble run produced stubs for these because the filter missed them."""
+    assert not is_valid_wiki_link_target("Note 1")
+    assert not is_valid_wiki_link_target("Note 2")
+    assert not is_valid_wiki_link_target("Footnote 12")
+    assert not is_valid_wiki_link_target("note 10")
+    assert not is_valid_wiki_link_target("Endnote 3")
+    assert not is_valid_wiki_link_target("Ref 42")
+
+
 def test_valid_note_ids_accepted():
     # Real note IDs should pass through
     assert is_valid_wiki_link_target("pegasus-seiya")

@@ -41,12 +41,17 @@ def test_write_avoids_collision(tmp_vault):
 
 
 def test_write_with_parent(tmp_vault):
+    """`parent:` is frontmatter metadata (DB-indexed), NOT a filesystem dir."""
     path = write_note(
         tmp_vault.notes_dir,
         "Child Note",
         parent="parent-topic",
     )
-    assert "parent-topic" in str(path)
+    # Flat layout: note lives directly under notes_dir, not in a parent-slug subdir.
+    assert path.parent == tmp_vault.notes_dir
+    assert path.name == "child-note.md"
+    # parent still appears in the YAML frontmatter for DB filtering.
+    assert "parent: parent-topic" in path.read_text(encoding="utf-8")
 
 
 def test_read_extracts_links(tmp_vault):

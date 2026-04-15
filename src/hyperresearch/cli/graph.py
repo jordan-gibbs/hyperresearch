@@ -219,12 +219,14 @@ def graph_stub(
                 console.print(f"  [cyan]{t}[/]")
         return
 
+    # Stubs are sidelined to research/temp/ (not research/notes/) so they
+    # resolve broken wiki-links without cluttering the real notes listing.
+    # Sync still picks them up via rglob, so link-resolution works.
     created = []
     for target in targets:
-        # Create a minimal stub note
         title = target.replace("-", " ").replace("_", " ").title()
         path = write_note(
-            vault.notes_dir,
+            vault.temp_dir,
             title,
             body=f"# {title}\n\n*Stub — created to resolve a broken link. Expand this note.*\n",
             note_id=target,

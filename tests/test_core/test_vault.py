@@ -19,6 +19,10 @@ def test_init_creates_structure(tmp_path: Path):
     assert vault.research_dir.is_dir()
     assert vault.notes_dir.is_dir()
     assert vault.index_dir.is_dir()
+    # Sidelined artifacts (stubs, drift) go here so notes/ stays clean
+    assert vault.temp_dir.is_dir()
+    assert vault.temp_dir.parent == vault.research_dir
+    assert vault.temp_dir.name == "temp"
 
 
 def test_init_custom_dir(tmp_path: Path):

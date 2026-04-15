@@ -61,8 +61,9 @@ def repair(
             target = row["target_ref"]
             title = target.replace("-", " ").replace("_", " ").title()
             try:
+                # Sideline stubs to research/temp/ — see note in cli/graph.py
                 write_note(
-                    vault.notes_dir, title,
+                    vault.temp_dir, title,
                     body=f"# {title}\n\n*Stub — created to resolve a broken link. Expand this note.*\n",
                     note_id=target, status="draft",
                     summary=f"Stub for [[{target}]]",
