@@ -237,7 +237,7 @@ For high-priority failures, work through this fallback chain in order — stop a
    - SSRN, RePEc, NBER, OpenAlex, Semantic Scholar mirror
    - Google Scholar's "All N versions" link
 2. **Try the visible-browser flag** on the original URL: `$HPR fetch "<url>" --visible ...`. The `--visible` flag runs the browser non-headless; many sites that block headless requests succeed when the browser is visible. Cost: ~5-10s slower per fetch.
-3. **Try the user's authenticated profile** if one is configured: `$HPR fetch "<url>" --profile research ...`. Login profiles bypass paywalls on sites the user has logged into. If no profile is configured, the user can create one via `hyperresearch setup`.
+3. **If a login profile is configured for this vault** (`.hyperresearch/config.toml` has a `[web] profile = "<name>"` entry), crawl4ai uses it automatically — paywalled sites the user has logged into in that profile will succeed transparently. If profile-protected sites still fail, the profile may be expired; tell the user to re-run `hyperresearch setup` to refresh it. There is no `--profile` CLI flag — it's a per-vault config setting.
 4. **As a last resort**, search for a **summary or review** of the paper that captures its key claims (e.g., a textbook chapter that summarizes the result). Note this in the source's frontmatter `summary:` field as `(via summary, original PDF unavailable)`.
 5. **If all four fail and the source is genuinely irreplaceable**, surface the failure to the user — don't ship a draft that depends on a source you couldn't read.
 

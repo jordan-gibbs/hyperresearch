@@ -581,8 +581,17 @@ def note_rm(
             text = file_path.read_text(encoding="utf-8-sig")
             meta, _ = parse_frontmatter(text)
             if meta.raw_file:
-                raw_path = vault.root / "research" / meta.raw_file
-                if raw_path.exists():
+                # Resolve and guard against path traversal — a malicious or
+                # corrupted frontmatter could set raw_file to "../../etc/passwd".
+                # Refuse to unlink anything outside <vault>/research/.
+                research_root = (vault.root / "research").resolve()
+                raw_path = (vault.root / "research" / meta.raw_file).resolve()
+                try:
+                    raw_path.relative_to(research_root)
+                    inside_vault = True
+                except ValueError:
+                    inside_vault = False
+                if inside_vault and raw_path.exists() and raw_path.is_file():
                     raw_path.unlink()
                     removed_raw = str(raw_path.relative_to(vault.root).as_posix())
         except Exception:

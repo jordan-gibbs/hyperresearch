@@ -439,23 +439,37 @@ def fetch(
     conn.commit()
 
     # Detect the race: if the committed row's note_id != ours, another
-    # fetch won the race. Clean up our orphan .md file and return the
-    # winner's note_id so the caller can treat this as an idempotent no-op.
+    # fetch won the race. Clean up our orphan .md file (and raw artifact,
+    # if any) and return the winner's note_id so the caller can treat
+    # this as an idempotent no-op.
     winner_row = conn.execute(
         "SELECT note_id FROM sources WHERE url = ?", (url,)
     ).fetchone()
     if winner_row and winner_row["note_id"] != note_id:
         winning_note_id = winner_row["note_id"]
-        # Our write lost the race. Unlink the orphan file and re-sync.
+        # Our write lost the race. Unlink the orphan .md file.
         if note_path.exists():
             try:
                 note_path.unlink()
             except OSError:
                 pass
-            plan2 = compute_sync_plan(vault)
-            if plan2.to_delete:
-                execute_sync(vault, plan2)
+        # Also unlink the raw file we wrote earlier — the winner already
+        # has its own raw file under raw/<winner-id>.<ext>. Without this,
+        # the orphaned-raw-files lint flags raw/<our-id>.<ext> on the
+        # next run and disk leaks accumulate.
+        if raw_file_path:
+            orphan_raw = vault.root / "research" / raw_file_path
+            if orphan_raw.exists():
+                try:
+                    orphan_raw.unlink()
+                except OSError:
+                    pass
+        # Re-sync to drop the orphan note row from the DB.
+        plan2 = compute_sync_plan(vault)
+        if plan2.to_delete:
+            execute_sync(vault, plan2)
         note_id = winning_note_id
+        raw_file_path = None  # we no longer own a raw artifact for this fetch
         winner_path_row = conn.execute(
             "SELECT path FROM notes WHERE id = ?", (winning_note_id,)
         ).fetchone()
