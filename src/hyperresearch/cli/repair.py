@@ -15,7 +15,7 @@ def repair(
     enrich: bool = typer.Option(True, "--enrich/--no-enrich", help="Auto-tag and auto-summarize notes"),
     promote_notes: bool = typer.Option(True, "--promote/--no-promote", help="Auto-promote qualifying notes"),
     rebuild_index: bool = typer.Option(True, "--index/--no-index", help="Rebuild index pages"),
-    update_docs: bool = typer.Option(True, "--docs/--no-docs", help="Update CLAUDE.md/AGENTS.md"),
+    update_docs: bool = typer.Option(True, "--docs/--no-docs", help="Update CLAUDE.md"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
     """Repair and rebuild the vault — full sync, fix broken links, promote notes, rebuild indexes."""

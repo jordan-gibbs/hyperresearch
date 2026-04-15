@@ -196,20 +196,17 @@ For queries where depth-of-corpus and argument stability matter more than wall-c
 
 ---
 
-## Hooks for every major agent
+## What `hyperresearch install` wires into Claude Code
 
-`hyperresearch install` wires in one step:
+One command sets up the full integration:
 
-| Platform | Hook | Trigger |
-|----------|------|---------|
-| **Claude Code** | `.claude/settings.json` + `/research` skill + 3 subagents | Before WebSearch, WebFetch |
-| **Codex** | `.codex/hooks.json` | Before Bash |
-| **Cursor** | `.cursor/rules/hyperresearch.mdc` | Always-apply rule |
-| **Gemini CLI** | `.gemini/settings.json` | Before tool calls |
+- **`.claude/settings.json`** — PreToolUse hook that nudges Claude Code to check the vault before any raw web search
+- **`.claude/skills/hyperresearch/`** — `/research` skill (dispatcher + 4 modality files: collect / synthesize / compare / forecast)
+- **`.claude/skills/research-ensemble/`** — `/research-ensemble` skill (3× parallel sub-runs + Opus merger; see [Benchmarks](#benchmarks))
+- **`.claude/agents/`** — six registered subagents: `hyperresearch-fetcher` (Haiku), `hyperresearch-analyst` (Sonnet), `hyperresearch-auditor` (Opus), `hyperresearch-rewriter` (Sonnet), `hyperresearch-subrun` (Sonnet, ensemble), `hyperresearch-merger` (Opus, ensemble)
+- **`CLAUDE.md`** at the vault root — the full research workflow, automatically loaded by Claude Code on every session
 
-```bash
-hyperresearch install --platform all    # Hook every platform at once
-```
+hyperresearch is Claude Code-only for now. Codex, Cursor, and Gemini support was trimmed from v0.6 to focus the surface area — may return as real integrations later.
 
 ---
 
@@ -300,8 +297,8 @@ One query is not a benchmark. Full 100-query sweep coming next. The cost ceiling
 ## Requirements
 
 - Python 3.11+
-- Claude Code (or Codex / Cursor / Gemini CLI) with API access
-- Anthropic API key with access to Opus, Sonnet, and Haiku — one key powers the full subagent triad
+- [Claude Code](https://claude.com/claude-code) with Anthropic API access
+- API key with access to Opus, Sonnet, and Haiku — one key powers the full subagent triad
 - Windows, macOS, Linux
 
 ---

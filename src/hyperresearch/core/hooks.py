@@ -1,7 +1,9 @@
-"""Agent hook installer — injects PreToolUse hooks for Claude Code, Codex, Cursor, Gemini CLI.
+"""Agent hook installer — installs the Claude Code PreToolUse hook, skills, and subagents.
 
-These hooks remind agents to check the research base before doing raw web searches.
-Also installs a research subagent that uses a cheap model for URL fetching.
+The hook reminds Claude Code to check the research base before doing raw web
+searches. The skills (`/research`, `/research-ensemble`) drive the research
+protocol. The subagents (fetcher, analyst, auditor, rewriter, subrun, merger)
+are Claude Code registered agents spawned via the Task tool.
 """
 
 from __future__ import annotations
@@ -1608,77 +1610,22 @@ if (vault) {{
 }}
 """
 
-# Cursor rule file content
-CURSOR_RULE = """\
----
-description: Hyperresearch research base integration
-alwaysApply: true
----
-
-# Research Base (hyperresearch)
-
-This project has a hyperresearch research base.
-
-**When researching, ALWAYS follow this workflow:**
-
-1. **Check existing research**: `hyperresearch search "<query>" -j`
-2. **Fetch source pages** using a cheap subagent or lower-tier model — do NOT use your main context for fetching. Use `hyperresearch fetch "<url>" --tag <topic> -j`
-3. **Read fetched content and follow links** to primary sources — fetch the paper, not the blog post about it
-4. **Keep going** until you have the real sources, not summaries
-5. **Delegate fetching to cheaper/faster models** when your platform supports subagents
-
-The research base persists across sessions. Raw source material with formatting > rewritten summaries.
-"""
-
-
-def install_hooks(vault_root: Path, platforms: list[str] | None = None, hpr_path: str = "hyperresearch") -> list[str]:
-    """Install agent hooks for specified platforms. Returns list of actions taken."""
-    if platforms is None:
-        platforms = ["claude"]
-
+def install_hooks(vault_root: Path, hpr_path: str = "hyperresearch") -> list[str]:
+    """Install the Claude Code hook + skills + subagents. Returns list of actions taken."""
     actions = []
 
-    if "claude" in platforms or "all" in platforms:
-        result = _install_claude_hook(vault_root, hpr_path)
-        if result:
-            actions.append(result)
-        result = _install_research_skill(vault_root)
-        if result:
-            actions.append(result)
-        result = _install_ensemble_skill(vault_root)
-        if result:
-            actions.append(result)
-        result = _install_researcher_agent(vault_root, hpr_path)
-        if result:
-            actions.append(result)
-        result = _install_analyst_agent(vault_root, hpr_path)
-        if result:
-            actions.append(result)
-        result = _install_auditor_agent(vault_root, hpr_path)
-        if result:
-            actions.append(result)
-        result = _install_rewriter_agent(vault_root, hpr_path)
-        if result:
-            actions.append(result)
-        result = _install_subrun_agent(vault_root, hpr_path)
-        if result:
-            actions.append(result)
-        result = _install_merger_agent(vault_root, hpr_path)
-        if result:
-            actions.append(result)
-
-    if "codex" in platforms or "all" in platforms:
-        result = _install_codex_hook(vault_root, hpr_path)
-        if result:
-            actions.append(result)
-
-    if "cursor" in platforms or "all" in platforms:
-        result = _install_cursor_rule(vault_root)
-        if result:
-            actions.append(result)
-
-    if "gemini" in platforms or "all" in platforms:
-        result = _install_gemini_hook(vault_root, hpr_path)
+    for installer in (
+        lambda: _install_claude_hook(vault_root, hpr_path),
+        lambda: _install_research_skill(vault_root),
+        lambda: _install_ensemble_skill(vault_root),
+        lambda: _install_researcher_agent(vault_root, hpr_path),
+        lambda: _install_analyst_agent(vault_root, hpr_path),
+        lambda: _install_auditor_agent(vault_root, hpr_path),
+        lambda: _install_rewriter_agent(vault_root, hpr_path),
+        lambda: _install_subrun_agent(vault_root, hpr_path),
+        lambda: _install_merger_agent(vault_root, hpr_path),
+    ):
+        result = installer()
         if result:
             actions.append(result)
 
@@ -1732,88 +1679,6 @@ def _install_claude_hook(vault_root: Path, hpr_path: str) -> str | None:
 
     settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     return "Claude Code: .claude/settings.json (PreToolUse hook)"
-
-
-def _install_codex_hook(vault_root: Path, hpr_path: str) -> str | None:
-    """Install hook into .codex/hooks.json."""
-    hook_path = _write_hook_script(vault_root, hpr_path)
-
-    codex_dir = vault_root / ".codex"
-    codex_dir.mkdir(exist_ok=True)
-    hooks_path = codex_dir / "hooks.json"
-
-    hooks = {}
-    if hooks_path.exists():
-        try:
-            hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    pre_tool = hooks.setdefault("PreToolUse", [])
-    for entry in pre_tool:
-        if isinstance(entry, dict):
-            for h in entry.get("hooks", []):
-                if "hyperresearch" in h.get("command", ""):
-                    return None
-
-    pre_tool.append({
-        "matcher": "Bash",
-        "hooks": [{
-            "type": "command",
-            "command": f"node {hook_path.as_posix()}",
-        }],
-    })
-
-    hooks_path.write_text(json.dumps(hooks, indent=2) + "\n", encoding="utf-8")
-    return "Codex: .codex/hooks.json (PreToolUse hook)"
-
-
-def _install_cursor_rule(vault_root: Path) -> str | None:
-    """Install always-apply rule into .cursor/rules/hyperresearch.mdc."""
-    rules_dir = vault_root / ".cursor" / "rules"
-    rules_dir.mkdir(parents=True, exist_ok=True)
-    rule_path = rules_dir / "hyperresearch.mdc"
-
-    if rule_path.exists():
-        return None  # Already exists
-
-    rule_path.write_text(CURSOR_RULE, encoding="utf-8")
-    return "Cursor: .cursor/rules/hyperresearch.mdc (alwaysApply rule)"
-
-
-def _install_gemini_hook(vault_root: Path, hpr_path: str) -> str | None:
-    """Install BeforeTool hook into .gemini/settings.json."""
-    hook_path = _write_hook_script(vault_root, hpr_path)
-
-    gemini_dir = vault_root / ".gemini"
-    gemini_dir.mkdir(exist_ok=True)
-    settings_path = gemini_dir / "settings.json"
-
-    settings = {}
-    if settings_path.exists():
-        try:
-            settings = json.loads(settings_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    hooks = settings.setdefault("hooks", {})
-    before_tool = hooks.setdefault("BeforeTool", [])
-
-    for entry in before_tool:
-        if isinstance(entry, dict):
-            for h in entry.get("hooks", []):
-                if "hyperresearch" in h.get("command", ""):
-                    return None
-
-    before_tool.append({
-        "hooks": [{
-            "type": "command",
-            "command": f"node {hook_path.as_posix()}",
-        }],
-    })
-
-    settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
-    return "Gemini CLI: .gemini/settings.json (BeforeTool hook)"
 
 
 def _install_researcher_agent(vault_root: Path, hpr_path: str) -> str | None:

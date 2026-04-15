@@ -17,14 +17,13 @@ def init(
     path: str = typer.Argument(".", help="Path to initialize vault in"),
     name: str = typer.Option("Research Base", "--name", "-n", help="Vault name"),
     research_dir: str = typer.Option("research", "--dir", "-d", help="Research directory name"),
-    agents: list[str] = typer.Option(["claude"], "--agents", "-a", help="Agent config files: claude|agents|gemini|copilot"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
-    """Initialize a new hyperresearch vault."""
+    """Initialize a new hyperresearch vault (Claude Code integration)."""
     from hyperresearch.core.vault import Vault, VaultError
 
     try:
-        vault = Vault.init(Path(path).resolve(), name=name, research_dir=research_dir, agents=agents)
+        vault = Vault.init(Path(path).resolve(), name=name, research_dir=research_dir)
         data = {"vault_path": str(vault.root), "name": name}
         if json_output:
             output(success(data), json_mode=True)

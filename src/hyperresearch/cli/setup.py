@@ -112,43 +112,6 @@ def setup(
             profile = _create_profile_interactive()
         # else: skip, profile stays ""
 
-    # ── Step 3: Agent Hooks ───────────────────────────────────────
-    console.print()
-    console.print(Rule("[bold]Step 3[/]  Agent Hooks", style="cyan"))
-    console.print()
-    console.print("  Hooks remind your AI agent to check the research base")
-    console.print("  before searching the web. Select your platforms:")
-    console.print()
-
-    platforms_available = [
-        ("claude", "Claude Code"),
-        ("codex", "Codex"),
-        ("cursor", "Cursor"),
-        ("gemini", "Gemini CLI"),
-    ]
-
-    table = Table(show_header=False, box=None, padding=(0, 2, 0, 4))
-    table.add_column(style="bold cyan", width=3)
-    table.add_column()
-    for i, (_key, name) in enumerate(platforms_available, 1):
-        table.add_row(str(i), name)
-    all_opt = str(len(platforms_available) + 1)
-    table.add_row(all_opt, "All of the above")
-    console.print(table)
-    console.print()
-
-    platform_input = Prompt.ask("  Select (comma-separated)", default="1")
-
-    if platform_input.strip() == all_opt:
-        platforms = ["all"]
-    else:
-        selected = []
-        for part in platform_input.split(","):
-            part = part.strip()
-            if part.isdigit() and 1 <= int(part) <= len(platforms_available):
-                selected.append(platforms_available[int(part) - 1][0])
-        platforms = selected or ["claude"]
-
     # ── Execute ───────────────────────────────────────────────────
     console.print()
     console.print(Rule("[bold]Setting up", style="green"))
@@ -158,17 +121,12 @@ def setup(
     from hyperresearch.core.hooks import install_hooks
     from hyperresearch.core.vault import Vault, VaultError
 
-    agents = ["claude"]
-    for key, filename in [("agents", "AGENTS.md"), ("gemini", "GEMINI.md")]:
-        if (root / filename).exists() or (root / filename.lower()).exists():
-            agents.append(key)
-
     # Init vault
     try:
         vault = Vault.discover(root)
         console.print(f"  [dim]Vault:[/] {vault.root}")
     except VaultError:
-        vault = Vault.init(root, name=vault_name, agents=agents)
+        vault = Vault.init(root, name=vault_name)
         console.print(f"  [green]Vault created:[/] {vault.root}")
 
     # Write config — magic always on when crawl4ai is used
@@ -179,14 +137,14 @@ def setup(
     vault.config.name = vault_name
     vault.config.save(vault.config_path)
 
-    # Inject agent docs
+    # Inject CLAUDE.md
     hpr_path = _resolve_executable()
-    doc_actions = inject_agent_docs(root, agents=agents)
+    doc_actions = inject_agent_docs(root)
     for action in doc_actions:
         console.print(f"  [green]Docs:[/] {action}")
 
-    # Install hooks
-    hook_actions = install_hooks(root, platforms=platforms, hpr_path=hpr_path)
+    # Install Claude Code hook + skills + subagents
+    hook_actions = install_hooks(root, hpr_path=hpr_path)
     for action in hook_actions:
         console.print(f"  [green]Hook:[/] {action}")
     if not hook_actions:
@@ -199,10 +157,6 @@ def setup(
     # ── Summary ───────────────────────────────────────────────────
     console.print()
     profile_desc = profile or "none (public pages only)"
-    platform_names = (
-        "all" if "all" in platforms
-        else ", ".join(name for key, name in platforms_available if key in platforms)
-    )
 
     summary = Table(show_header=False, box=None, padding=(0, 2))
     summary.add_column(style="dim", width=12)
@@ -210,7 +164,7 @@ def setup(
     summary.add_row("Provider", f"[bold]{provider}[/]")
     summary.add_row("Profile", f"[bold]{profile_desc}[/]")
     summary.add_row("Stealth", "[bold]on[/]" if magic else "[dim]off[/]")
-    summary.add_row("Hooks", f"[bold]{platform_names}[/]")
+    summary.add_row("Platform", "[bold]Claude Code[/]")
     summary.add_row("CLI", f"[dim]{hpr_path}[/]")
 
     console.print(

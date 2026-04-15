@@ -123,15 +123,14 @@ def config_get(
 
 @app.command("agent-docs")
 def config_agent_docs(
-    agents: list[str] = typer.Option(["claude"], "--agents", "-a", help="Which files: claude|agents|gemini|copilot"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
-    """Update agent config files (CLAUDE.md, AGENTS.md, GEMINI.md, copilot-instructions.md)."""
+    """Update CLAUDE.md with the latest hyperresearch blurb."""
     from hyperresearch.core.agent_docs import inject_agent_docs
     from hyperresearch.core.vault import Vault
 
     vault = Vault.discover()
-    modified = inject_agent_docs(vault.root, agents=agents)
+    modified = inject_agent_docs(vault.root)
 
     if json_output:
         output(success({"modified": modified}, vault=str(vault.root)), json_mode=True)
@@ -140,4 +139,4 @@ def config_agent_docs(
             for m in modified:
                 console.print(f"  [green]{m}[/]")
         else:
-            console.print("[dim]Agent docs already up to date.[/]")
+            console.print("[dim]CLAUDE.md already up to date.[/]")

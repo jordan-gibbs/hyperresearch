@@ -63,9 +63,12 @@ def test_agent_docs_created(tmp_path: Path):
     assert "hyperresearch" in content
 
 
-def test_agent_docs_all(tmp_path: Path):
-    vault = Vault.init(tmp_path / "kb-all", agents=["claude", "agents", "gemini", "copilot"])
+def test_init_only_creates_claude_md(tmp_path: Path):
+    """Vault.init writes CLAUDE.md ONLY — no AGENTS.md, GEMINI.md, or
+    .github/copilot-instructions.md. hyperresearch is Claude Code-only;
+    multi-platform doc generation was removed in v0.6."""
+    vault = Vault.init(tmp_path / "kb-claude-only")
     assert (vault.root / "CLAUDE.md").exists()
-    assert (vault.root / "AGENTS.md").exists()
-    assert (vault.root / "GEMINI.md").exists()
-    assert (vault.root / ".github" / "copilot-instructions.md").exists()
+    assert not (vault.root / "AGENTS.md").exists()
+    assert not (vault.root / "GEMINI.md").exists()
+    assert not (vault.root / ".github" / "copilot-instructions.md").exists()
