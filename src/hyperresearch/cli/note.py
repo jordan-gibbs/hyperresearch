@@ -258,7 +258,7 @@ def note_show(
 def note_list(
     status: str | None = typer.Option(None, "--status", "-s", help="Filter by status"),
     note_type: str | None = typer.Option(None, "--type", help="Filter by type"),
-    tag: str | None = typer.Option(None, "--tag", "-t", help="Filter by tag"),
+    tag: list[str] = typer.Option([], "--tag", "-t", help="Filter by tag (repeatable, AND logic)"),
     parent: str | None = typer.Option(None, "--parent", "-p", help="Filter by parent"),
     tier: str | None = typer.Option(None, "--tier", help="Filter by epistemic tier: ground_truth|institutional|practitioner|commentary|unknown"),
     content_type: str | None = typer.Option(None, "--content-type", help="Filter by artifact kind: paper|docs|article|blog|forum|dataset|policy|code|book|transcript|review|unknown"),
@@ -308,9 +308,9 @@ def note_list(
     if parent:
         clauses.append("n.parent = ?")
         params.append(parent)
-    if tag:
+    for t in tag:
         clauses.append("n.id IN (SELECT note_id FROM tags WHERE tag = ?)")
-        params.append(tag.lower())
+        params.append(t.lower())
     if tier:
         clauses.append("n.tier = ?")
         params.append(tier)

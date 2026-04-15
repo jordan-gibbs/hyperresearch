@@ -38,6 +38,15 @@ def lint(
     ctx: typer.Context,
     fix: bool = typer.Option(False, "--fix", help="Auto-fix what's possible"),
     rule: str | None = typer.Option(None, "--rule", "-r", help="Run specific rule only"),
+    audit_file: str | None = typer.Option(
+        None,
+        "--audit-file",
+        help=(
+            "Path (relative to vault root) to the audit_findings.json file the "
+            "audit-gate rule reads. Defaults to research/audit_findings.json. "
+            "Ensemble sub-runs pass research/audit_findings-run-{a,b,c}.json."
+        ),
+    ),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
     """Health-check the vault."""
@@ -114,7 +123,10 @@ def lint(
         # a missing conformance run is itself an error — the protocol demands
         # both modes, not just comprehensiveness.
         import json as _json
-        audit_path = vault.root / "research" / "audit_findings.json"
+        if audit_file:
+            audit_path = vault.root / audit_file
+        else:
+            audit_path = vault.root / "research" / "audit_findings.json"
         if audit_path.exists():
             try:
                 audit_data = _json.loads(audit_path.read_text(encoding="utf-8"))

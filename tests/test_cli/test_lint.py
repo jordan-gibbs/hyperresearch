@@ -8,7 +8,7 @@ from hyperresearch.cli.lint import app as lint_app
 from hyperresearch.core.note import write_note
 
 
-def _run_lint(vault, rule: str | None = None) -> tuple[int, str]:
+def _run_lint(vault, rule: str | None = None, audit_file: str | None = None) -> tuple[int, str]:
     """Invoke `hyperresearch lint` CLI against a vault. Returns (exit_code, stdout)."""
     import os
 
@@ -16,9 +16,11 @@ def _run_lint(vault, rule: str | None = None) -> tuple[int, str]:
     prev_cwd = os.getcwd()
     try:
         os.chdir(vault.root)
-        args = ["--json"]
+        args: list[str] = ["--json"]
         if rule:
-            args = ["--rule", rule, "--json"]
+            args = ["--rule", rule, *args]
+        if audit_file:
+            args = [*args, "--audit-file", audit_file]
         result = runner.invoke(lint_app, args, catch_exceptions=False)
         return result.exit_code, result.output
     finally:
@@ -224,11 +226,65 @@ def test_orphaned_raw_files_flags_disk_leak(tmp_vault):
     assert "orphan-note" in issues[0]["message"]
 
 
-def _write_audit_findings(vault, data: dict) -> None:
+def _write_audit_findings(vault, data: dict, path: str = "research/audit_findings.json") -> None:
     import json as _json
-    audit_path = vault.root / "research" / "audit_findings.json"
+    audit_path = vault.root / path
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     audit_path.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+
+
+def test_audit_gate_accepts_custom_audit_file_flag(tmp_vault):
+    """Ensemble sub-runs need to point audit-gate at per-run audit files."""
+    # Parent audit_findings.json has unresolved CRITICALs — would normally block.
+    _write_audit_findings(tmp_vault, {
+        "runs": [
+            {
+                "mode": "conformance",
+                "timestamp": "2026-04-14T10:00:00Z",
+                "status": "needs_fixes",
+                "criticals": [{"id": "C0", "description": "parent gap", "fixed_at": None}],
+                "important": [],
+                "minor": [],
+            }
+        ],
+    })
+    # But the per-run file for run-a is clean. Gate should pass when pointed there.
+    _write_audit_findings(tmp_vault, {
+        "runs": [
+            {
+                "mode": "comprehensiveness",
+                "timestamp": "2026-04-14T10:00:00Z",
+                "status": "pass",
+                "criticals": [],
+                "important": [],
+                "minor": [],
+            },
+            {
+                "mode": "conformance",
+                "timestamp": "2026-04-14T10:01:00Z",
+                "status": "pass",
+                "criticals": [],
+                "important": [],
+                "minor": [],
+            },
+        ],
+    }, path="research/audit_findings-run-a.json")
+
+    _, out = _run_lint(
+        tmp_vault,
+        rule="audit-gate",
+        audit_file="research/audit_findings-run-a.json",
+    )
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "audit-gate"]
+    assert issues == [], f"sub-run gate should pass, got: {issues}"
+
+    # Sanity: the DEFAULT path (parent's) still blocks — the flag is scoped, not global.
+    _, out = _run_lint(tmp_vault, rule="audit-gate")
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "audit-gate"]
+    assert len(issues) >= 1, "parent gate should still block"
 
 
 def test_audit_gate_missing_file_is_open(tmp_vault):

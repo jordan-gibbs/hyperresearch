@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from hyperresearch.core.hooks import _SKILL_FILES, _install_research_skill
+from hyperresearch.core.hooks import (
+    _SKILL_FILES,
+    _install_merger_agent,
+    _install_research_skill,
+    _install_subrun_agent,
+)
 
 
 def test_install_skill_writes_expected_files(tmp_vault):
@@ -46,3 +51,53 @@ def test_install_skill_idempotent_second_run(tmp_vault):
     assert first is not None
     second = _install_research_skill(tmp_vault.root)
     assert second is None, "second run should report no changes"
+
+
+def test_install_skill_includes_ensemble_file(tmp_vault):
+    _install_research_skill(tmp_vault.root)
+    skill_path = tmp_vault.root / ".claude" / "skills" / "hyperresearch" / "SKILL-ensemble.md"
+    assert skill_path.exists()
+    body = skill_path.read_text(encoding="utf-8")
+    assert "name: research-ensemble" in body
+    assert "hyperresearch-subrun" in body
+    assert "hyperresearch-merger" in body
+
+
+def test_install_subrun_agent_writes_file(tmp_vault):
+    result = _install_subrun_agent(tmp_vault.root, "hyperresearch")
+    agent_path = tmp_vault.root / ".claude" / "agents" / "hyperresearch-subrun.md"
+    assert agent_path.exists()
+    body = agent_path.read_text(encoding="utf-8")
+    assert "model: sonnet" in body
+    assert "Task" in body  # tools list must include Task for nested spawning
+    assert "framing_nudge" in body
+    assert "minimum_fetch_target" in body
+    assert "run_id" in body
+    assert result is not None
+
+
+def test_install_subrun_agent_idempotent(tmp_vault):
+    first = _install_subrun_agent(tmp_vault.root, "hyperresearch")
+    assert first is not None
+    second = _install_subrun_agent(tmp_vault.root, "hyperresearch")
+    assert second is None
+
+
+def test_install_merger_agent_writes_file(tmp_vault):
+    result = _install_merger_agent(tmp_vault.root, "hyperresearch")
+    agent_path = tmp_vault.root / ".claude" / "agents" / "hyperresearch-merger.md"
+    assert agent_path.exists()
+    body = agent_path.read_text(encoding="utf-8")
+    assert "model: opus" in body
+    assert "scores" in body
+    assert "splice" in body.lower()
+    assert "merger-failed" in body
+    assert "parent_final_report_path" in body
+    assert result is not None
+
+
+def test_install_merger_agent_idempotent(tmp_vault):
+    first = _install_merger_agent(tmp_vault.root, "hyperresearch")
+    assert first is not None
+    second = _install_merger_agent(tmp_vault.root, "hyperresearch")
+    assert second is None
