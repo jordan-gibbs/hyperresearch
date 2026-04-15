@@ -220,6 +220,48 @@ Each iteration is a research director: the analyst reads one source, proposes wh
 
 Spawn `hyperresearch-fetcher` on ONLY those 3–5. Do NOT batch-fetch 20 URLs upfront — half get wasted on sources the loop would tell you to skip.
 
+#### When a fetch fails — try harder before giving up
+
+PDF hosts on academic faculty pages, ResearchGate, SSRN, and publisher sites are notoriously flaky (403, paywall walls, junk content, login walls). When a fetch returns `error`, `JUNK_CONTENT`, `AUTH_REQUIRED`, or any non-success status, **do NOT silently move on if the source is high-priority.** A high-priority source is one that:
+
+- Is the seminal paper an analyst specifically named as a `next_target`
+- Is the canonical source for the question (e.g., the original Maskin-Riley paper for an asymmetric-auctions query)
+- Is the only voice from a missing tier (e.g., the only practitioner perspective in a corpus of academic papers)
+
+For high-priority failures, work through this fallback chain in order — stop as soon as one succeeds:
+
+1. **Try alternative URLs for the same paper:**
+   - arXiv preprint version (`arxiv.org/abs/<id>` or `arxiv.org/pdf/<id>`)
+   - Author's personal page (search `"<author surname> <paper title> filetype:pdf"`)
+   - Department / institutional repository (search `"<paper title> site:<institution>.edu"`)
+   - SSRN, RePEc, NBER, OpenAlex, Semantic Scholar mirror
+   - Google Scholar's "All N versions" link
+2. **Try the visible-browser flag** on the original URL: `$HPR fetch "<url>" --visible ...`. The `--visible` flag runs the browser non-headless; many sites that block headless requests succeed when the browser is visible. Cost: ~5-10s slower per fetch.
+3. **Try the user's authenticated profile** if one is configured: `$HPR fetch "<url>" --profile research ...`. Login profiles bypass paywalls on sites the user has logged into. If no profile is configured, the user can create one via `hyperresearch setup`.
+4. **As a last resort**, search for a **summary or review** of the paper that captures its key claims (e.g., a textbook chapter that summarizes the result). Note this in the source's frontmatter `summary:` field as `(via summary, original PDF unavailable)`.
+5. **If all four fail and the source is genuinely irreplaceable**, surface the failure to the user — don't ship a draft that depends on a source you couldn't read.
+
+Document failures in the scaffold's "Where each source will land" section. The auditor will see the explicit gap and can flag whether the draft works around it correctly.
+
+**Low-priority fetch failures** (a peripheral source the analyst flagged with low confidence) — skip and move on. Don't waste five fallback attempts on a tangential source.
+
+#### Mandatory `--suggested-by` discipline at fetch time
+
+Every `$HPR fetch` call from Phase 2 onward MUST pass `--suggested-by <source-note-id>` AT FETCH TIME. Do NOT batch-fetch a list of next_targets first and then backfill breadcrumbs later — that produces disconnected provenance graphs that the rooted-tree lint catches as errors at Checkpoint 2.
+
+The pattern is: analyst returns `next_targets[]` with each target's `proposed_by` source id → main agent fetches each target with the corresponding `--suggested-by` flag in the same call. One subprocess per target, with the breadcrumb baked in.
+
+```bash
+# CORRECT — breadcrumb at fetch time
+$HPR fetch "<url>" --suggested-by <source-id> --suggested-by-reason "<why>" -j
+
+# WRONG — fetch first, append breadcrumb later
+$HPR fetch "<url>" -j                  # creates seed-style note
+$HPR note edit <new-id> ...            # tries to graft a breadcrumb after the fact
+```
+
+Backfilling is supported (the fetch CLI is idempotent on re-call with `--suggested-by`), but the resulting provenance graph has disconnected components — the new note's breadcrumb points at the suggester, but if the suggester was itself a seed, the chain looks artificial. The rooted-tree provenance lint flags this and the audit-gate blocks save until you connect the islands.
+
 **Phase 2 — Guided reading iterations.** For each fresh note, spawn the **`hyperresearch-analyst`** agent (Sonnet, registered at `.claude/agents/hyperresearch-analyst.md`) with `mode=guided`:
 
 ```
@@ -640,11 +682,12 @@ for dom, count in domains.most_common(10):
 ```
 
 **Pass conditions:**
-- [ ] At least one note fetched from each mandatory adversarial search
+- [ ] At least one note fetched from each mandatory adversarial search in your modality file
+- [ ] **At least one source explicitly dissents from / criticizes the dominant view.** "Dominant view" is what the bulk of your corpus implicitly endorses; the dissenting source must contradict it directly (not just complicate it). State the dominant view in writing and identify which source is the dissent. If you cannot identify one, you have NOT satisfied the adversarial round — go fetch one before proceeding.
 - [ ] No single domain represents >30% of fetched sources (voice diversity)
 - [ ] At least 5 unique non-reference voices (critical essays, named-author blog posts, peer-reviewed papers — NOT listicles or reference wikis)
 
-**On failure:** run additional searches with diversified queries, vary the source types, seek named voices. Return to Step 2.
+**On failure:** run additional searches with diversified queries, vary the source types, seek named voices. For the dissent gap specifically: search for the named opponent of the dominant figure ("Roubini on inflation" rather than "inflation criticism"), look for retractions/withdrawals, look for "we tried X and switched to Y" postmortems. Return to Step 2.
 
 ### Checkpoint 2 — after Steps 5–6 (post-curate)
 

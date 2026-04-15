@@ -75,9 +75,9 @@ Compare is a **3-tier source hierarchy** that privileges the artifact itself, th
 
 Never use commentary as the sole source for a factual claim about an entity. Use it only to characterize positioning or reception.
 
-### Adversarial round
+### Adversarial round — MANDATORY, run all four before proceeding
 
-Required — specifically for the market leader. A compare report without at least one source critical of the dominant entity is advocacy, not evaluation.
+Required — specifically for the market leader. A compare report without at least one source critical of the dominant entity is advocacy, not evaluation. **Fetch at least one source that explicitly criticizes the leading entity** (a postmortem, a "why we migrated away" blog, a dissenting analyst report, a public outage retrospective, a regulatory complaint).
 
 ```
 WebSearch("<market-leader entity> problems limitations")
@@ -85,6 +85,10 @@ WebSearch("<market-leader entity> alternatives why leave")
 WebSearch("moving away from <market-leader entity>")
 WebSearch("<method A> vs <method B> when <method A> wins")
 ```
+
+The audit at Step 11 verifies at least one body section engages the critique with substance. A compare draft that recommends X without engaging "people who tried X and switched to Y" lacks the experiential evidence that distinguishes a real evaluation from a marketing summary.
+
+For symmetric comparisons (no clear leader, e.g., "Postgres vs MySQL"), run the adversarial searches against EACH entity — every option must have at least one critical voice in the corpus.
 
 ### Academic sweep — only when comparing methods, not products
 

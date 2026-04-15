@@ -110,15 +110,20 @@ WebSearch("<topic> 批評 論文")              # Japanese
 
 Non-English sources count toward voice diversity at Checkpoint 1.
 
-### Adversarial round
+### Adversarial round — MANDATORY, run all four before proceeding
 
-Required. Find the strongest dissenting reading / dissenting mechanism explanation / dissenting theoretical position. Your thesis must engage it with substance, not a one-sentence dismissal.
+Find the strongest dissenting reading / dissenting mechanism explanation / dissenting theoretical position. Your thesis must engage it with substance, not a one-sentence dismissal. **Fetch at least one source that explicitly argues against the dominant interpretation.**
 
 ```
 WebSearch("<topic> criticism limitations")
 WebSearch("against <dominant reading> <topic>")
-WebSearch("<topic> reappraisal new reading")
+WebSearch("<topic> reappraisal revisionist new reading")
+WebSearch("<topic> overrated wrong contested")
 ```
+
+The audit at Step 11 verifies at least one body section engages the dissenting reading with substance (a paragraph or more, not a sentence). A synthesize draft built entirely from sources that agree with each other is advocacy — the corpus must contain the strongest counter-voice you could find, even if your draft ultimately rejects it.
+
+If the dominant reading has a named opponent (e.g., "the Lacanians say X but Žižek argues Y"), search for the opponent by name, not just by topic. Named-critic search produces sharper dissent than generic "criticism of X".
 
 ### Source diversity — at least one non-academic voice
 

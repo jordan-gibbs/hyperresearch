@@ -55,14 +55,19 @@ Collect is **primary-source-heavy for the artifact itself, then secondary for th
 
 Run Semantic Scholar / OpenAlex only if the enumerable set has a scholarly classification literature. For fictional / pop-culture / product / historical enumerations, skip it — the reference wikis and primary sources are the authoritative tier.
 
-### Adversarial round
+### Adversarial round — MANDATORY, run all three before proceeding
 
-Still required. Run the dispatcher's adversarial searches to catch:
-- Missing members the consensus list omits
-- Disputed members (is this really in the set?)
-- Members that get grouped differently in non-mainstream sources
+A collect report with no engagement with classification disputes is a transcription, not research. Run all three searches and **fetch at least one source that explicitly disputes the consensus list / classification**:
 
-A collect report with no engagement with classification disputes is a transcription, not research.
+```
+WebSearch("<topic> disputed contested membership classification")
+WebSearch("missing from <consensus list> <topic> overlooked")
+WebSearch("<topic> alternative classification non-mainstream taxonomy")
+```
+
+If the set has a "minor" / "non-canonical" / "rejected" / "lost" / "obscure" tier (e.g., apocryphal works, deprecated species, withdrawn standards), search for it explicitly and fetch one such source. The audit at Step 11 verifies at least one source flagged a missing or disputed member — a corpus that only contains consensus-list confirmations fails the comprehensiveness check.
+
+Specific dispute patterns to watch for: members the consensus list omits, members whose membership is contested, members that get grouped differently in non-mainstream sources, ordering / hierarchy disputes within the set.
 
 ---
 

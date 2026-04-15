@@ -63,9 +63,9 @@ Forecast is **secondary-heavy** — triangulation across many institutional pers
 
 Academic papers are the wrong sources for forecasting. Citation-ranked scholarship describes what's known about the past, not what will happen. Skip Semantic Scholar / arXiv / OpenAlex / PubMed for forecast queries.
 
-### Adversarial round — mandatory
+### Adversarial round — MANDATORY, run all five before proceeding
 
-Run these before proceeding past the seed fetch:
+A forecast without explicit engagement with the failure case is not analysis — it is advocacy. Run all five searches and **fetch at least one source that explicitly argues the bear case** (a contrarian analyst report, a named-skeptic op-ed, a historical-failure post-mortem):
 
 ```
 WebSearch("<topic> bear case downside risk")
@@ -75,7 +75,9 @@ WebSearch("<topic> worst case scenario")
 WebSearch("<topic> historical failure analogous case")
 ```
 
-A forecast without explicit engagement with the failure case is not analysis — it is advocacy.
+The audit at Step 11 verifies the bear case gets substantive coverage — at minimum a full paragraph engaging the contrarian position at its strongest, ideally a full section. A one-paragraph dismissal is strawmanning, not stress-testing.
+
+If the dominant forecast has a named skeptic (e.g., "consensus says soft landing but Roubini predicts X"), search for the skeptic by name. Named-contrarian search produces sharper dissent than generic "criticism of X".
 
 ---
 
