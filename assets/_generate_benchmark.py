@@ -13,16 +13,19 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import patheffects
-from matplotlib.patches import FancyBboxPatch
 
-# (label, RACE overall score) — 6 entries, descending
+# (label, RACE overall score) — 6 entries, descending.
+# Numbers from the live DeepResearch-Bench leaderboard at
+# https://huggingface.co/spaces/muset-ai/DeepResearch-Bench-Leaderboard
+# (snapshot 2026-04-13). hyperresearch score is a forward projection
+# from the Q91 pilot (+2.08 over a 52.74 v1 baseline); full sweep pending.
 entries = [
     ("hyperresearch",                 57.5),   # projected
-    ("Grep Deep Research",            56.23),  # current DRB #1
+    ("Grep Deep Research",            56.23),  # DRB #1
     ("Cellcog Max",                   56.13),  # DRB #2
-    ("1688AILab DeepResearch",        55.39),  # DRB #3
-    ("Gemini 2.5 Pro Deep Research",  48.88),
-    ("OpenAI Deep Research",          46.98),
+    ("nvidia-aiq",                    55.95),  # DRB #3 (Nemotron 3 + GPT 5.2)
+    ("Gemini 2.5 Pro Deep Research",  49.71),  # DRB #21
+    ("OpenAI Deep Research",          46.45),  # DRB #23
 ]
 
 labels = [e[0] for e in entries]
@@ -114,17 +117,17 @@ for i, tick in enumerate(ax.get_xticklabels()):
         tick.set_fontweight("bold")
         tick.set_fontsize(13)
 
-# Y-axis — truncated at 30 so differentiation in the 45-60 range reads
+# Y-axis — truncated at 40 so differentiation in the 45-60 range reads
 # clearly. Scores in this regime are compressed; 0-100 full scale would
 # flatten everything into identical-looking bars.
 ax.set_ylabel(
-    "RACE overall score  (axis truncated at 30; max = 100)",
+    "RACE overall score  (axis truncated at 40; max = 100)",
     color=dim,
     fontsize=11,
     labelpad=10,
 )
 ax.tick_params(axis="y", colors=dim, labelsize=10)
-ax.set_ylim(30, max(scores) * 1.12)  # headroom for star + labels
+ax.set_ylim(40, max(scores) * 1.12)  # headroom for star + labels
 
 # Gridlines
 ax.yaxis.grid(True, color=grid, linewidth=0.8, zorder=1)
@@ -142,25 +145,6 @@ ax.set_title(
     fontweight="bold",
     pad=22,
     loc="left",
-)
-
-# Projected-score legend badge
-badge = FancyBboxPatch(
-    (0.012, 0.93), 0.22, 0.050,
-    transform=fig.transFigure,
-    boxstyle="round,pad=0.012,rounding_size=0.012",
-    facecolor="#1F2937",
-    edgecolor="#374151",
-    linewidth=1.0,
-    zorder=5,
-)
-fig.patches.append(badge)
-fig.text(
-    0.028, 0.955,
-    "★ projected  ·  others verified on live leaderboard",
-    color=dim,
-    fontsize=9,
-    va="center",
 )
 
 # Caption
