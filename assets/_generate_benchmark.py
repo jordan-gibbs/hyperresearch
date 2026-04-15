@@ -114,15 +114,17 @@ for i, tick in enumerate(ax.get_xticklabels()):
         tick.set_fontweight("bold")
         tick.set_fontsize(13)
 
-# Y-axis
+# Y-axis — truncated at 30 so differentiation in the 45-60 range reads
+# clearly. Scores in this regime are compressed; 0-100 full scale would
+# flatten everything into identical-looking bars.
 ax.set_ylabel(
-    "RACE overall score  (0–100, higher = better)",
+    "RACE overall score  (axis truncated at 30; max = 100)",
     color=dim,
     fontsize=11,
     labelpad=10,
 )
 ax.tick_params(axis="y", colors=dim, labelsize=10)
-ax.set_ylim(0, max(scores) * 1.18)  # headroom for star + labels
+ax.set_ylim(30, max(scores) * 1.12)  # headroom for star + labels
 
 # Gridlines
 ax.yaxis.grid(True, color=grid, linewidth=0.8, zorder=1)
