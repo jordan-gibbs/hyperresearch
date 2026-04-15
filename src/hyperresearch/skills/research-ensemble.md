@@ -75,7 +75,7 @@ punctuation. Copy exactly.
 
 ---
 
-## Step 3: Check the vault for prior ensemble artifacts
+## Step 3: Auto-archive prior ensemble artifacts
 
 Before spawning any sub-run, check whether the vault has leftover
 per-run files from a previous ensemble attempt:
@@ -83,23 +83,38 @@ per-run files from a previous ensemble attempt:
 ```bash
 ls research/notes/final_report-run-*.md 2>/dev/null
 ls research/notes/scaffold-run-*.md 2>/dev/null
+ls research/notes/comparisons-run-*.md 2>/dev/null
 ls research/audit_findings-run-*.json 2>/dev/null
 ls research/notes/final_report.md 2>/dev/null
 ```
 
-If any exist, tell the user:
+If ANY of these exist, auto-archive them to
+`research/archive/ensemble-<ISO-timestamp>/` and log the path. Do NOT
+halt and ask the user — ensemble retries after an interrupted run are
+common enough that friction on this path is a real nuisance. The
+archive preserves the prior artifacts if the user wants them; the
+ensemble proceeds cleanly.
 
-> "Prior ensemble artifacts exist in this vault
-> (`final_report-run-*.md`, `scaffold-run-*.md`,
-> `audit_findings-run-*.json`, or `final_report.md`). Running a new
-> ensemble will overwrite them. Archive or delete first, OR confirm
-> overwrite."
+Implementation:
 
-Wait for explicit user confirmation. A second ensemble run silently
-overwriting the first is a data-loss pattern we refuse to enable.
+```bash
+TIMESTAMP=$(date -u +%Y-%m-%dT%H%M%SZ)
+ARCHIVE=research/archive/ensemble-$TIMESTAMP
+mkdir -p $ARCHIVE
+# Move every prior per-run artifact, plus the prior merged report.
+mv research/notes/final_report-run-*.md $ARCHIVE/ 2>/dev/null
+mv research/notes/scaffold-run-*.md $ARCHIVE/ 2>/dev/null
+mv research/notes/comparisons-run-*.md $ARCHIVE/ 2>/dev/null
+mv research/audit_findings-run-*.json $ARCHIVE/ 2>/dev/null
+mv research/notes/final_report.md $ARCHIVE/ 2>/dev/null
+# Sync to de-index the moved notes.
+$HPR sync -j
+```
 
-If the user says archive, move the leftovers to
-`research/archive/ensemble-<ISO-timestamp>/` and proceed.
+Tell the user once: "Auto-archived prior ensemble artifacts to
+`research/archive/ensemble-<timestamp>/`." Then proceed. Source notes
+and extracts stay in `research/notes/` — they're part of the shared
+vault's compounding corpus and continue to be useful for this run.
 
 ---
 

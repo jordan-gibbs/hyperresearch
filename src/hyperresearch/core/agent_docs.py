@@ -32,6 +32,10 @@ SKILL.md classifies your request by cognitive activity (what the output needs to
 
 **The user's verbatim prompt is gospel.** SKILL.md requires the prompt to be copied verbatim into the first section of `research/scaffold.md` — every subsequent step re-reads it from there. The adversarial audit at Step 11 grades the draft against the verbatim prompt, not against an abstract notion of quality.
 
+### Ensemble mode — `/research-ensemble` for depth-over-speed
+
+For complex queries where variance and depth-of-corpus matter more than wall-clock time, use `/research-ensemble <query>` instead of `/research`. The ensemble orchestrator (Opus) spawns three parallel `hyperresearch-subrun` Sonnet agents with subtly different framings (evidentiary breadth, citation-chain depth, dialectical tension), all sharing the same unified vault. A fourth agent — `hyperresearch-merger` (Opus) — reads all three drafts, scores each on comprehensiveness / readability / argument strength / citation quality, and compiles a unified final report. Cost is ~5x a normal `/research` run. Protocol lives in `.claude/skills/hyperresearch/SKILL-ensemble.md`.
+
 ### Why {hpr} fetch, not WebFetch
 
 `{hpr} fetch` runs a real headless Chromium browser — it bypasses bot detection, saves full content with formatting, persists across sessions, and tracks URLs to prevent re-fetching. **Use WebFetch only for quick one-off lookups you don't need to save.**

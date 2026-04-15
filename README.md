@@ -190,6 +190,10 @@ Eight invariants the protocol structurally prevents from breaking:
 - **Enumerative coverage** — "For each Napoleonic marshal, cover key campaigns and fate" → every named entity gets every requested field, no silent downgrades
 - **Persistent knowledge base** — every source ever fetched stays searchable. Future sessions check the vault before searching the web. Knowledge compounds.
 
+### `/research-ensemble` — 3 parallel sub-runs + Opus merger
+
+For queries where depth-of-corpus and argument stability matter more than wall-clock time, use `/research-ensemble <query>`. Opus orchestrates; three `hyperresearch-subrun` Sonnet agents run the full protocol in parallel against one shared vault, each with a subtly different framing (evidentiary breadth / citation-chain depth / dialectical tension). A fourth agent (`hyperresearch-merger`, Opus) scores each draft on comprehensiveness / readability / argument strength / citation quality, picks the strongest as the base, and splices in unique evidence from the other two. Cost is ~5× a normal run; the payoff is detailed in [Benchmarks](#benchmarks) below.
+
 ---
 
 ## Hooks for every major agent
@@ -264,7 +268,21 @@ LinkedIn, Twitter, Facebook, Instagram, and TikTok automatically use a visible b
 
 ## Benchmarks
 
-Hyperresearch is being evaluated on the [DeepResearch Bench](https://github.com/Ayanami0730/deep_research_bench) RACE eval. Per-modality scores and a head-to-head comparison vs other research harnesses will land here as runs complete. **Status:** in progress.
+Hyperresearch is being evaluated on the [DeepResearch Bench](https://github.com/Ayanami0730/deep_research_bench) RACE eval (Gemini-2.5-Pro judges reports on comprehensiveness, insight, instruction-following, readability). Full per-modality scores and head-to-head comparisons vs other research harnesses will land here as the 100-query sweep completes. **Status:** in progress.
+
+### Ensemble lift — preliminary data point
+
+Query 91 from DeepResearch-Bench ("detailed analysis of the Saint Seiya franchise, structured around armor classes, per-character power/techniques/arcs/fate") is a deep-collect query with ~100 named entities. One data point so far:
+
+| Variant | Overall | Comp. | Insight | Inst. | Read. | Cost | Time |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `/research` single-run (sonnet, v1 baseline) | **52.74** | 52.95 | 58.74 | 51.28 | 51.90 | ~$1.50 | ~8 min |
+| `/research-ensemble` (3× sonnet + opus merger) | **54.82** | 54.52 | 58.57 | 53.30 | 56.10 | $21.98 | 57 min |
+| **Delta** | **+2.08** | +1.57 | −0.17 | +2.02 | +4.20 | ~14× | ~7× |
+
+Readability is the biggest single lift (+4.20) — the merger smooths splice boundaries and harmonizes voice across the three sub-runs. Instruction-following (+2.02) gains from three independent passes cross-checking the prompt's entity list; prompt-named entities the base run collapsed get restored from sibling runs. Comprehensiveness (+1.57) comes from the 3-way evidence union (167 sources fetched into the shared corpus vs ~30 for a single run). Insight is flat as expected — the merger is a compiler, not a re-thinker; it can't deepen an argument beyond what the strongest sub-run already had.
+
+One query is not a benchmark. Full 100-query sweep coming next. The cost ceiling is honest: ~5× per query at the tool-call level, ~14× here because `/research` ran on Sonnet and `/research-ensemble` requires Opus orchestration + Opus merger. Use ensemble where the query earns it; use `/research` for everything else.
 
 ---
 
