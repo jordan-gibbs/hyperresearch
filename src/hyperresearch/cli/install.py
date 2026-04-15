@@ -13,21 +13,9 @@ from hyperresearch.models.output import error, success
 def install(
     path: str = typer.Argument(".", help="Path to install in"),
     name: str = typer.Option("Research Base", "--name", "-n", help="Vault name"),
-    platforms: list[str] = typer.Option(
-        ["claude"],
-        "--platform",
-        "-p",
-        help="Agent platforms to hook: claude|codex|cursor|gemini|all",
-    ),
-    agents: list[str] = typer.Option(
-        ["claude"],
-        "--agents",
-        "-a",
-        help="Agent doc files: claude|agents|gemini|copilot",
-    ),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
-    """Install hyperresearch: init vault + inject agent docs + install hooks."""
+    """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
     import sys
 
     from hyperresearch.core.hooks import install_hooks
@@ -50,7 +38,7 @@ def install(
         vault_action = "existing"
     except VaultError:
         try:
-            vault = Vault.init(root, name=name, agents=agents)
+            vault = Vault.init(root, name=name)
             vault_action = "created"
         except VaultError as e:
             if json_output:
@@ -64,11 +52,11 @@ def install(
 
     hpr_path = _resolve_executable()
 
-    # Step 3: Always re-inject agent docs (updates CLAUDE.md etc. with latest blurb + path)
-    doc_actions = inject_agent_docs(root, agents=agents)
+    # Step 3: Always re-inject CLAUDE.md (updates blurb + path)
+    doc_actions = inject_agent_docs(root)
 
-    # Step 4: Install hooks (with resolved path baked in)
-    hook_actions = install_hooks(root, platforms=platforms, hpr_path=hpr_path)
+    # Step 4: Install Claude Code hook + skills + subagents
+    hook_actions = install_hooks(root, hpr_path=hpr_path)
 
     # Step 3: Auto-configure crawl4ai if installed
     crawl4ai_status = _setup_crawl4ai(vault)
@@ -79,7 +67,6 @@ def install(
         "vault": vault_action,
         "agent_docs": doc_actions,
         "hooks_installed": hook_actions,
-        "platforms": platforms,
         "crawl4ai": crawl4ai_status,
     }
 

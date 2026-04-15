@@ -129,4 +129,8 @@ When the auditor runs in conformance mode on a collect draft, it applies these c
 
 (9) **Cross-source tension at least twice.** At least two body sections must put specific sources in tension with explicit "Source A says X; Source B says Y; I hold Z because..." structure. FAIL if the draft only cites, never contrasts.
 
+(10) **Citation density.** Count inline citations (parenthetical URLs or `[[note-id]]` links) in the body. FAIL if density < 8 per 1000 words, FAIL if any H2 section runs ≥300 words without a citation, FAIL if < 50% of fetched sources are cited at least once in the draft. A collect draft's authority comes from anchoring every entity claim in a source — under-citation reads as assertion without evidence.
+
+(11) **Prompt-named subtopic coverage.** For every explicitly named subtopic, entity, context, or field in the user's verbatim prompt, verify a dedicated H2 or H3 section exists. FAIL if any prompt-named item is collapsed into another section or silently dropped.
+
 Auditor output: list every violation with a one-line quote from the report. The parent agent applies fixes.

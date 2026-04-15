@@ -64,6 +64,16 @@ class Vault:
         return self.research_dir / "index"
 
     @property
+    def temp_dir(self) -> Path:
+        """Sidelined notes (link-auto-resolution stubs, agent-drift artifacts).
+
+        Sibling of `notes_dir` and `index_dir`. Files here ARE still synced into
+        the DB (so wiki-link targets resolve), but they're kept out of `notes/`
+        so that directory listings of research content stay clean.
+        """
+        return self.research_dir / "temp"
+
+    @property
     def templates_dir(self) -> Path:
         """Templates live inside .hyperresearch/ (hidden)."""
         return self.hyperresearch_dir / "templates"
@@ -85,7 +95,7 @@ class Vault:
         self.close()
 
     @staticmethod
-    def init(root: Path, name: str = "Research Base", research_dir: str = "research", agents: list[str] | None = None) -> Vault:
+    def init(root: Path, name: str = "Research Base", research_dir: str = "research") -> Vault:
         """Initialize a new vault at the given path."""
         root = root.resolve()
         hyperresearch_dir = root / HYPERRESEARCH_DIR
@@ -102,6 +112,7 @@ class Vault:
         kb_dir = root / research_dir
         (kb_dir / "notes").mkdir(parents=True, exist_ok=True)
         (kb_dir / "index").mkdir(exist_ok=True)
+        (kb_dir / "temp").mkdir(exist_ok=True)
 
         # Write config
         config = VaultConfig(name=name, research_dir=research_dir)
@@ -125,9 +136,9 @@ class Vault:
             "# {{ title }}\n\n"
         )
 
-        # Inject hyperresearch docs into agent config files (CLAUDE.md, AGENTS.md)
+        # Inject CLAUDE.md at vault root
         from hyperresearch.core.agent_docs import inject_agent_docs
-        inject_agent_docs(root, agents=agents)
+        inject_agent_docs(root)
 
         return vault
 

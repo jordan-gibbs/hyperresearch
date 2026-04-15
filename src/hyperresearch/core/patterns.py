@@ -21,9 +21,12 @@ _CITATION_FOOTNOTE_RE = re.compile(
     r"^\^?\d+(?:[\s,;\-]+\d+)*$"
 )
 
-# Explicit citation prefixes: [[cite-1]], [[ref_2]], [[fn:3]], [[note-4]]
+# Explicit citation prefixes: [[cite-1]], [[ref_2]], [[fn:3]], [[note-4]],
+# [[Note 1]], [[Footnote 12]]. The space-separated variant ("Note 1") leaks
+# from HTML footnote rendering where <sup>Note 1</sup> gets turned into
+# wiki-link syntax by crawl4ai. Separator class now includes whitespace.
 _CITE_PREFIX_RE = re.compile(
-    r"^(?:cite|ref|note|fn|footnote|endnote)[-_:]?\d+$",
+    r"^(?:cite|ref|note|fn|footnote|endnote)[\s_:-]*\d+$",
     re.IGNORECASE,
 )
 
@@ -64,7 +67,7 @@ def is_valid_wiki_link_target(ref: str) -> bool:
     - Pure-numeric citation footnotes: ``[[100]]``, ``[[^100]]``,
       ``[[100,101]]``, ``[[1-5]]``, ``[[100; 101]]``
     - Explicit citation prefixes: ``[[cite-1]]``, ``[[ref_2]]``, ``[[fn:3]]``,
-      ``[[note-4]]``, ``[[footnote-5]]``
+      ``[[note-4]]``, ``[[footnote-5]]``, ``[[Note 1]]``, ``[[Footnote 12]]``
     - Roman-numeral footnotes: ``[[iv]]``, ``[[xii]]``
     - Symbol footnotes: ``[[*]]``, ``[[**]]``, ``[[†]]``, ``[[‡]]``, ``[[§]]``
     - Document cross-references: ``[[fig-3]]``, ``[[tab-1]]``, ``[[eq-2]]``,

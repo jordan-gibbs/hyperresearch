@@ -93,10 +93,12 @@ def write_note(
         kwargs.update(extra_frontmatter)
     meta = NoteMeta(**kwargs)
 
-    # Determine output path, avoid collisions
+    # Determine output path, avoid collisions. Vault layout is FLAT —
+    # `parent:` lives in frontmatter (DB-indexed) but does NOT drive the
+    # filesystem path. Nested dirs hurt Windows MAX_PATH, hide notes from
+    # simple `research/notes/*.md` globs, and conflict with the shared-
+    # vault ensemble design where sub-runs need flat listings.
     target_dir = notes_dir
-    if parent:
-        target_dir = target_dir / slugify(parent)
     target_dir.mkdir(parents=True, exist_ok=True)
 
     file_path = target_dir / f"{nid}.md"

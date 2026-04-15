@@ -218,4 +218,8 @@ Sections build on each other. Section 2's claim depends on section 1's setup; se
 
 (11) **Core tension present in opening.** Does the opening state what makes the thesis non-trivial (the paradox, received view being pushed against, open problem)? FAIL if the opening is a neutral setup.
 
+(12) **Citation density.** Count inline citations in the body. FAIL if density < 8 per 1000 words, FAIL if any H2 section runs ≥300 words without a citation, FAIL if < 50% of fetched sources are cited at least once. The thesis-driven synthesize register can LOOK deep while actually citing only a handful of sources; cite aggressively across the argument.
+
+(13) **Prompt-named subtopic coverage.** For every explicitly named subtopic, entity, context, or field in the user's verbatim prompt, verify a dedicated H2 or H3 section exists. FAIL if any prompt-named item is collapsed into another section.
+
 Auditor output: list every violation with a one-line quote from the report.

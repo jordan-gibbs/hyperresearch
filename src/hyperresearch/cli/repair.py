@@ -15,7 +15,7 @@ def repair(
     enrich: bool = typer.Option(True, "--enrich/--no-enrich", help="Auto-tag and auto-summarize notes"),
     promote_notes: bool = typer.Option(True, "--promote/--no-promote", help="Auto-promote qualifying notes"),
     rebuild_index: bool = typer.Option(True, "--index/--no-index", help="Rebuild index pages"),
-    update_docs: bool = typer.Option(True, "--docs/--no-docs", help="Update CLAUDE.md/AGENTS.md"),
+    update_docs: bool = typer.Option(True, "--docs/--no-docs", help="Update CLAUDE.md"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
     """Repair and rebuild the vault — full sync, fix broken links, promote notes, rebuild indexes."""
@@ -61,8 +61,9 @@ def repair(
             target = row["target_ref"]
             title = target.replace("-", " ").replace("_", " ").title()
             try:
+                # Sideline stubs to research/temp/ — see note in cli/graph.py
                 write_note(
-                    vault.notes_dir, title,
+                    vault.temp_dir, title,
                     body=f"# {title}\n\n*Stub — created to resolve a broken link. Expand this note.*\n",
                     note_id=target, status="draft",
                     summary=f"Stub for [[{target}]]",

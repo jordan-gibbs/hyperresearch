@@ -8,7 +8,7 @@ from hyperresearch.cli.lint import app as lint_app
 from hyperresearch.core.note import write_note
 
 
-def _run_lint(vault, rule: str | None = None) -> tuple[int, str]:
+def _run_lint(vault, rule: str | None = None, audit_file: str | None = None) -> tuple[int, str]:
     """Invoke `hyperresearch lint` CLI against a vault. Returns (exit_code, stdout)."""
     import os
 
@@ -16,9 +16,11 @@ def _run_lint(vault, rule: str | None = None) -> tuple[int, str]:
     prev_cwd = os.getcwd()
     try:
         os.chdir(vault.root)
-        args = ["--json"]
+        args: list[str] = ["--json"]
         if rule:
-            args = ["--rule", rule, "--json"]
+            args = ["--rule", rule, *args]
+        if audit_file:
+            args = [*args, "--audit-file", audit_file]
         result = runner.invoke(lint_app, args, catch_exceptions=False)
         return result.exit_code, result.output
     finally:
@@ -116,6 +118,21 @@ def _write_source(vault, title: str, note_id: str, body: str = "Source content."
         source=f"https://example.com/{note_id}",
         tier="institutional",
         content_type="article",
+    )
+
+
+def _write_extract(vault, note_id: str, word_count_target: int, run_tag: str | None = None):
+    """Write an extract note with a body of roughly `word_count_target` words."""
+    body = "word " * word_count_target
+    tags = ["extract"]
+    if run_tag:
+        tags.append(run_tag)
+    write_note(
+        vault.notes_dir,
+        f"Extract {note_id}",
+        body=body,
+        note_id=note_id,
+        tags=tags,
     )
 
 
@@ -224,11 +241,65 @@ def test_orphaned_raw_files_flags_disk_leak(tmp_vault):
     assert "orphan-note" in issues[0]["message"]
 
 
-def _write_audit_findings(vault, data: dict) -> None:
+def _write_audit_findings(vault, data: dict, path: str = "research/audit_findings.json") -> None:
     import json as _json
-    audit_path = vault.root / "research" / "audit_findings.json"
+    audit_path = vault.root / path
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     audit_path.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+
+
+def test_audit_gate_accepts_custom_audit_file_flag(tmp_vault):
+    """Ensemble sub-runs need to point audit-gate at per-run audit files."""
+    # Parent audit_findings.json has unresolved CRITICALs — would normally block.
+    _write_audit_findings(tmp_vault, {
+        "runs": [
+            {
+                "mode": "conformance",
+                "timestamp": "2026-04-14T10:00:00Z",
+                "status": "needs_fixes",
+                "criticals": [{"id": "C0", "description": "parent gap", "fixed_at": None}],
+                "important": [],
+                "minor": [],
+            }
+        ],
+    })
+    # But the per-run file for run-a is clean. Gate should pass when pointed there.
+    _write_audit_findings(tmp_vault, {
+        "runs": [
+            {
+                "mode": "comprehensiveness",
+                "timestamp": "2026-04-14T10:00:00Z",
+                "status": "pass",
+                "criticals": [],
+                "important": [],
+                "minor": [],
+            },
+            {
+                "mode": "conformance",
+                "timestamp": "2026-04-14T10:01:00Z",
+                "status": "pass",
+                "criticals": [],
+                "important": [],
+                "minor": [],
+            },
+        ],
+    }, path="research/audit_findings-run-a.json")
+
+    _, out = _run_lint(
+        tmp_vault,
+        rule="audit-gate",
+        audit_file="research/audit_findings-run-a.json",
+    )
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "audit-gate"]
+    assert issues == [], f"sub-run gate should pass, got: {issues}"
+
+    # Sanity: the DEFAULT path (parent's) still blocks — the flag is scoped, not global.
+    _, out = _run_lint(tmp_vault, rule="audit-gate")
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "audit-gate"]
+    assert len(issues) >= 1, "parent gate should still block"
 
 
 def test_audit_gate_missing_file_is_open(tmp_vault):
@@ -513,4 +584,64 @@ def test_orphaned_raw_files_ignores_matched_raw(tmp_vault):
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "orphaned-raw-files"]
+    assert issues == []
+
+
+def test_analyst_coverage_counts_real_extracts(tmp_vault):
+    """A vault with enough real extracts (>= 150 words) passes the gate."""
+    for i in range(9):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    # 3 real extracts (>=150 words each) — 3/9 sources = 33% meets 1/3 floor
+    for i in range(3):
+        _write_extract(tmp_vault, f"extract-{i}", word_count_target=200, run_tag="run-a")
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="analyst-coverage")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "analyst-coverage"]
+    assert issues == [], f"expected no issues, got: {issues}"
+
+
+def test_analyst_coverage_rejects_stub_extracts(tmp_vault):
+    """Lint-gaming defense: 45 stub extracts (<150 words) do NOT satisfy the gate.
+    This is the Q91 ensemble failure mode — orchestrator minted hollow extract
+    notes to pass analyst-coverage numerically."""
+    for i in range(9):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    # 45 STUB extracts at ~70 words each — would pass old count-based rule.
+    for i in range(45):
+        _write_extract(tmp_vault, f"stub-extract-{i}", word_count_target=70)
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="analyst-coverage")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "analyst-coverage"]
+    assert len(issues) == 1
+    msg = issues[0]["message"]
+    # Error message must expose the stub count honestly so the agent sees the
+    # lint-gaming attempt for what it is.
+    assert "45 stub notes" in msg
+    assert "lint-gaming" in msg
+    # Zero REAL extracts → 0% coverage → error severity
+    assert issues[0]["severity"] == "error"
+
+
+def test_analyst_coverage_mixed_real_and_stub(tmp_vault):
+    """Real extracts count toward the gate; stubs are reported but ignored."""
+    for i in range(12):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    # 4 real extracts (>=150 words) — 4/12 = 33%, passes ceil(12/3)=4 threshold
+    for i in range(4):
+        _write_extract(tmp_vault, f"real-extract-{i}", word_count_target=300, run_tag="run-a")
+    # Plus 10 stubs that should not pad the count
+    for i in range(10):
+        _write_extract(tmp_vault, f"stub-extract-{i}", word_count_target=70)
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="analyst-coverage")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "analyst-coverage"]
     assert issues == []

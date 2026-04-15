@@ -1,8 +1,10 @@
-"""Agent documentation integration — inject hyperresearch docs into agent config files.
+"""Agent documentation integration — inject the hyperresearch blurb into CLAUDE.md.
 
-Supports: CLAUDE.md, AGENTS.md, GEMINI.md, .github/copilot-instructions.md
-By default on init, only creates CLAUDE.md. Others created via --agents flags
-or if the file already exists in the repo.
+hyperresearch is a Claude Code harness. This module writes/updates CLAUDE.md
+at the vault root so Claude Code auto-loads the research workflow on every
+session. Pre-existing AGENTS.md / GEMINI.md / .github/copilot-instructions.md
+files (from older hyperresearch vaults or other tools) are left alone — we
+don't delete user content, but we no longer generate them either.
 """
 
 from __future__ import annotations
@@ -31,6 +33,10 @@ When the user asks you to research a topic, follow the full step-by-step workflo
 SKILL.md classifies your request by cognitive activity (what the output needs to DO, not what the subject IS) and routes to one of 4 modality files: SKILL-collect.md (enumerative coverage with per-entity fields), SKILL-synthesize.md (defended thesis or mechanism explanation), SKILL-compare.md (per-entity evaluation with committed recommendation), or SKILL-forecast.md (forward-looking prediction with explicit time horizon). The dispatcher owns the shared protocol (discovery, fetch, guided reading loop, curation, scaffold, comparisons, draft, audit, synthesis). Each modality file encodes only the substance rules and conformance checks specific to that activity. Read SKILL.md first — it owns the process and will tell you which modality file to open next for substance guidance.
 
 **The user's verbatim prompt is gospel.** SKILL.md requires the prompt to be copied verbatim into the first section of `research/scaffold.md` — every subsequent step re-reads it from there. The adversarial audit at Step 11 grades the draft against the verbatim prompt, not against an abstract notion of quality.
+
+### Ensemble mode — `/research-ensemble` for depth-over-speed
+
+For complex queries where variance and depth-of-corpus matter more than wall-clock time, use `/research-ensemble <query>` instead of `/research`. The ensemble orchestrator (Opus) spawns three parallel `hyperresearch-subrun` Sonnet agents with subtly different framings (evidentiary breadth, citation-chain depth, dialectical tension), all sharing the same unified vault. A fourth agent — `hyperresearch-merger` (Opus) — reads all three drafts, scores each on comprehensiveness / readability / argument strength / citation quality, and compiles a unified final report. Cost is ~5x a normal `/research` run. Protocol lives in `.claude/skills/hyperresearch/SKILL-ensemble.md`.
 
 ### Why {hpr} fetch, not WebFetch
 
@@ -222,13 +228,6 @@ The research base compounds across sessions. A well-curated note that three futu
 {end_marker}
 """
 
-# Which files each agent flag creates
-AGENT_FILES = {
-    "claude": "CLAUDE.md",
-    "agents": "AGENTS.md",
-    "gemini": "GEMINI.md",
-    "copilot": ".github/copilot-instructions.md",
-}
 
 
 def _resolve_executable() -> str:
@@ -261,21 +260,15 @@ def _resolve_executable() -> str:
     return "hyperresearch"
 
 
-def inject_agent_docs(
-    vault_root: Path,
-    agents: list[str] | None = None,
-) -> list[str]:
-    """Inject hyperresearch docs into agent config files.
+def inject_agent_docs(vault_root: Path) -> list[str]:
+    """Inject hyperresearch docs into CLAUDE.md at the vault root.
 
-    Args:
-        vault_root: The repo root.
-        agents: Which agent files to create. Default: ["claude"].
-                Options: "claude", "agents", "gemini", "copilot".
-                If a file already exists, it's always updated regardless of this list.
+    Always writes/updates CLAUDE.md. Does NOT touch AGENTS.md, GEMINI.md,
+    or .github/copilot-instructions.md — hyperresearch is a Claude Code
+    harness now, not a multi-platform tool. Pre-existing non-Claude doc
+    files are left untouched (we don't delete user content), but no new
+    ones are created.
     """
-    if agents is None:
-        agents = ["claude"]
-
     hpr_path = _resolve_executable()
     # Use forward slashes — bash on Windows eats backslashes
     hpr_path = hpr_path.replace("\\", "/")
@@ -286,36 +279,11 @@ def inject_agent_docs(
         hpr=hpr_path,
         today=date.today().isoformat(),
     )
-    modified = []
 
-    # Determine which files to handle
-    files_to_inject: list[tuple[Path, str]] = []
-
-    # CLAUDE.md
-    if "claude" in agents or (vault_root / "CLAUDE.md").exists():
-        files_to_inject.append((vault_root / "CLAUDE.md", "CLAUDE.md"))
-
-    # AGENTS.md — prefer uppercase, respect existing lowercase
-    if "agents" in agents or (vault_root / "AGENTS.md").exists() or (vault_root / "agents.md").exists():
-        if (vault_root / "agents.md").exists() and not (vault_root / "AGENTS.md").exists():
-            files_to_inject.append((vault_root / "agents.md", "agents.md"))
-        else:
-            files_to_inject.append((vault_root / "AGENTS.md", "AGENTS.md"))
-
-    # GEMINI.md
-    if "gemini" in agents or (vault_root / "GEMINI.md").exists():
-        files_to_inject.append((vault_root / "GEMINI.md", "GEMINI.md"))
-
-    # .github/copilot-instructions.md
-    copilot_path = vault_root / ".github" / "copilot-instructions.md"
-    if "copilot" in agents or copilot_path.exists():
-        files_to_inject.append((copilot_path, ".github/copilot-instructions.md"))
-
-    for filepath, filename in files_to_inject:
-        result = _inject_into_file(filepath, blurb, filename)
-        if result:
-            modified.append(result)
-
+    modified: list[str] = []
+    result = _inject_into_file(vault_root / "CLAUDE.md", blurb, "CLAUDE.md")
+    if result:
+        modified.append(result)
     return modified
 
 

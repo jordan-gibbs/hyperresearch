@@ -140,11 +140,12 @@ Before executing Step 2, create this exact TODO list with the TodoWrite tool. Do
 10. Write comparisons note (Step 8)
 11. **Checkpoint 3: pre-draft gate — CRITICAL**
 12. Write `research/notes/final_report.md` (Step 9)
-13. Gap analysis + adversarial search (Step 10)
-14. Adversarial audit via `hyperresearch-auditor` — both modes in parallel (Step 11)
-15. **Checkpoint 4: post-audit review**
-16. Write Opinionated Synthesis section (Step 12)
-17. Save synthesis note + health checks (Steps 13–14)
+13. Evidence recovery pass via `hyperresearch-rewriter` — one Sonnet call (Step 9.5)
+14. Gap analysis + adversarial search (Step 10)
+15. Adversarial audit via `hyperresearch-auditor` — both modes sequentially (Step 11)
+16. **Checkpoint 4: post-audit review**
+17. Write Opinionated Synthesis section (Step 12)
+18. Save synthesis note + health checks (Steps 13–14)
 
 Mark each item `completed` only after its artifact exists AND you have verified it exists with a command. You may NOT mark item 12 (the draft) `in_progress` until items 1–11 are all `completed`. The TODO list is the process ledger.
 
@@ -196,9 +197,9 @@ A corpus without dissent is advocacy, not research. If the adversarial round ret
 
 ## Step 3: Fetch — guided reading loop (preferred) or batch
 
-**Default: the guided reading loop** (described below). Seed with 3–5 high-signal URLs, then let each iteration's analyst subagents propose next targets based on what the prior sources cite.
+**Default: the guided reading loop** (described below). **Seed broadly (10–15 high-signal URLs), then iterate aggressively.** Every iteration's analyst subagents propose next targets; every target gets fetched. The goal is exhaustive coverage of the question, not minimal corpora. A deep-research draft anchored in 25-40 fetched and analyst-read sources cites richer than one anchored in 10-15.
 
-**Batch fetch** only when the target set is already known and complete — e.g., the user handed you 10 URLs, or the modality file says to batch (compare activity with explicitly-named entities is the usual case).
+**Batch fetch** when the target set is already known and complete — e.g., the user handed you 20 URLs, or the modality file says to batch (compare activity with explicitly-named entities is the usual case).
 
 ### Guided reading loop protocol
 
@@ -213,12 +214,14 @@ fetch 3-5 seeds  →  hyperresearch-analyst reads each with goal in hand  →
 
 Each iteration is a research director: the analyst reads one source, proposes what to read next, and hands the decision back to the main agent. This discovers source trees you couldn't find by keyword search alone — the essay names three critics, those critics cite a 1998 monograph, the monograph references a specific passage in the primary work.
 
-**Phase 1 — Seed fetch.** Pick the 3–5 highest-signal URLs:
-- 1–2 canonical reference entries (Wikipedia, field survey, official docs)
-- 1–2 analytical/critical sources visible in search results
-- 0–1 adversarial/dissenting source
+**Phase 1 — Seed fetch.** Pick the **10–15 highest-signal URLs** (more for broad enumerative queries, fewer only for very narrow single-question prompts):
+- 2–3 canonical reference entries (Wikipedia, field survey, official docs)
+- 3–5 analytical/critical sources visible in search results
+- 2–3 primary sources (original papers, ground-truth datasets, official filings)
+- 2–3 adversarial/dissenting sources — named critic, contrarian view, opposing position
+- 1–2 practitioner voices (blogs, postmortems, industry perspectives) where applicable
 
-Spawn `hyperresearch-fetcher` on ONLY those 3–5. Do NOT batch-fetch 20 URLs upfront — half get wasted on sources the loop would tell you to skip.
+Spawn `hyperresearch-fetcher` on all of them **in parallel**. The fetcher is cheap (Haiku); parallel seed-fetching of 10-15 URLs finishes in under a minute. Exhaustive coverage beats cautious minimalism — an under-fetched corpus produces a draft that cannot cite widely.
 
 #### When a fetch fails — try harder before giving up
 
@@ -262,18 +265,18 @@ $HPR note edit <new-id> ...            # tries to graft a breadcrumb after the f
 
 Backfilling is supported (the fetch CLI is idempotent on re-call with `--suggested-by`), but the resulting provenance graph has disconnected components — the new note's breadcrumb points at the suggester, but if the suggester was itself a seed, the chain looks artificial. The rooted-tree provenance lint flags this and the audit-gate blocks save until you connect the islands.
 
-**Phase 2 — Guided reading iterations.** For each fresh note, spawn the **`hyperresearch-analyst`** agent (Sonnet, registered at `.claude/agents/hyperresearch-analyst.md`) with `mode=guided`:
+**Phase 2 — Guided reading iterations.** For each batch of fresh notes, spawn the **`hyperresearch-analyst`** agent (Sonnet, registered at `.claude/agents/hyperresearch-analyst.md`) with `mode=guided`. The analyst accepts a LIST of 1-5 source note IDs per spawn and produces one extract note per source:
 
 ```
 research_goal: <the user's original verbatim prompt>
-sub_goal: <what this specific source should contribute>
-source_note_id: <the id of the note to read>
+sub_goal: <what this batch of sources should contribute>
+source_note_ids: [<id-1>, <id-2>, <id-3>, <id-4>, <id-5>]   # 1-5 ids
 mode: guided
 already_covered: <sub-topics prior iterations answered, or "none">
 already_fetched_urls: <output of `$HPR sources list -j`>
 ```
 
-Spawn multiple analysts in parallel — one per source in the current batch. Each returns: extract content + covered sub-topics + 2–5 next_targets + coverage status.
+Group sources per spawn by semantic similarity (same sub-topic or entity — the analyst's unioned next_targets list benefits from cross-source convergence within a batch). Spawn batches in parallel — a 20-source iteration becomes 4 analyst spawns (not 20). Each returns: N extract note IDs + a consolidated Findings summary + covered sub-topics + 2–5 unioned next_targets + coverage status per source.
 
 **Phase 3 — Main agent orchestration.** After each iteration returns:
 
@@ -281,7 +284,7 @@ Spawn multiple analysts in parallel — one per source in the current batch. Eac
 2. Collect every extract into a running knowledge accumulator.
 3. Merge and dedupe next_targets across all analysts. If three subagents propose the same URL, fetch it once — pass all three suggesting source IDs via repeated `--suggested-by` flags.
 4. Prioritize next_targets by: (a) which would most likely *change* the argument if they disagreed with current sources, (b) which sub-topics the corpus doesn't yet cover, (c) which tiers are missing.
-5. **Fetch the top 3–5 next_targets WITH `--suggested-by` flag. This is mandatory:**
+5. **Fetch the top 8–12 next_targets per iteration WITH `--suggested-by` flag. This is mandatory.** Bias toward more rather than fewer — every analyst-recommended URL that gets skipped is a citation the draft won't make. Cheap fetches beat expensive re-runs.
 
    ```bash
    $HPR fetch "<url>" \
@@ -303,7 +306,7 @@ Spawn multiple analysts in parallel — one per source in the current batch. Eac
 - **Coverage complete** — all analyst returns report `coverage: complete` for the sub-topics you need.
 - **Cycle detected** — next_targets repeat or every proposed target's fetch returns `duplicate: true` with `backlinks_added: 0`.
 - **Diminishing returns** — a full iteration adds zero new sub-topics. The TodoWrite delta tracker catches this.
-- **Iteration cap: 5 full loops** — more than this and the loop is drifting, not converging. Stop and move on.
+- **Iteration cap: 8 full loops** — more than this and the loop is drifting. With 10-15 seeds and 8-12 fetches per iteration, 8 loops produces a target corpus of 40-80 sources before convergence, which is the right depth for deep research.
 
 Then proceed to curation (Steps 5–6).
 
@@ -359,20 +362,22 @@ Raw fetched notes arrive with `status=draft`, `tier=unknown`, auto-detected `con
 
 For research, the analyst is the default reading mechanism — not a fallback for big sources. Even small sources (1500 words) deserve analyst treatment because the analyst's URL-scan surfaces follow-up targets for the loop.
 
+The analyst is **batched**: one spawn reads 1-5 sources and produces one extract note per source. This amortizes per-spawn overhead so processing 20 draft notes means 4 analyst spawns (not 20). Group sources per spawn by semantic similarity — a batch of 5 Bronze Saints character pages converges on shared URLs; a batch mixing Bronze Saints + a physics paper + a forum thread doesn't.
+
 ```
-For each draft source note:
+For each batch of 1-5 draft source notes (semantically grouped):
   Spawn hyperresearch-analyst with:
     research_goal: <the user's original verbatim prompt>
-    sub_goal: "establish what this source contributes and what URLs / authors / claims warrant follow-up"
-    source_note_id: <draft note id>
+    sub_goal: "establish what these sources contribute and what URLs / authors / claims warrant follow-up"
+    source_note_ids: [<draft-id-1>, <draft-id-2>, ..., up to 5]
     mode: guided
     already_covered: <running list from prior analysts>
     already_fetched_urls: <output of `$HPR sources list -j`>
 ```
 
-Spawn 3–5 in parallel (Sonnet, cheap). Each analyst reads the source, persists an extract note (`--add-tag extract --parent <source-id>`), and returns an extract + next_targets + coverage status.
+Spawn 3–4 batches in parallel (Sonnet, cheap). Each analyst reads its 1-5 sources sequentially, persists one extract note per source (`--add-tag extract --parent <source-id>` per extract), and returns a list of extract note IDs + a consolidated Findings summary + unioned next_targets + coverage status per source.
 
-Collect every analyst's next_targets into TodoWrite. After each batch, fetch the top next_targets WITH `--suggested-by` so the loop iterates. **The fetch:extract ratio after curation should be at least 1:1** — every fetched source has a paired extract note. The `analyst-coverage` lint rule catches misses at Checkpoint 2.
+Collect every analyst's next_targets into TodoWrite. After each batch, fetch the top next_targets WITH `--suggested-by` so the loop iterates. **The fetch:extract ratio after curation should be at least 1:1** — every fetched source has a paired extract note with at least 150 words of real content. The `analyst-coverage` lint rule catches both misses AND stubs at Checkpoint 2 (extracts under 150 words do NOT count — minting stubs will not satisfy the gate).
 
 ### Step B: Set metadata from the analyst's findings
 
@@ -436,15 +441,37 @@ Using the **Write tool**, create `research/scaffold.md` with this exact structur
 <what makes this question non-trivial — the paradox, disagreement, tradeoff,
 or open problem the draft has to earn its way through>
 
+## Prompt decomposition — one H2/H3 per named item (MANDATORY)
+<Extract EVERY explicitly named subtopic, entity, context, field, or dimension
+from the verbatim prompt. Examples: "liability in ADAS accidents" names
+{technical ADAS principles, legal frameworks, case law, regulatory guidelines};
+"Diamond Sutra in daily life, workplace, business, marriage, parenting,
+emotional well-being, interpersonal dynamics" names 7 contexts. Each MUST
+become its own H2 or H3 in the draft — NEVER collapse or merge. If the prompt
+names 7 contexts, deliver 7 sections. The audit at Step 11 FAILS if any
+prompt-named item is silently dropped or merged.>
+
+- item 1: <section title>
+- item 2: <section title>
+- ...
+
 ## The structural plan
-<Ordered list of sections the draft will produce. Honor every explicit
-structural mandate from "What the user explicitly asked for". Where the
-prompt is silent, apply the primary modality's default structural guidance.
+<Ordered list of sections the draft will produce. Must include one dedicated
+section per item in "Prompt decomposition" above, PLUS additional sections
+the modality requires (scaffold opening, synthesis close, etc.).
 For each section, name it AND describe what it will contain in one line.>
 
 ## Where each source will land
 <One line per curated source-id: which heading(s) it serves and in what role
-(ground-truth evidence, institutional synthesis, dissenting voice, etc.).>
+(ground-truth evidence, institutional synthesis, dissenting voice, etc.).
+Every source should appear in at least one section; high-signal sources
+should be cited across multiple sections.>
+
+## Citation budget
+<Plan for at least 40-80 inline citations in the final draft. Rough target:
+density of 8-16 citations per 1000 words. The same source can be cited
+multiple times across sections — list which sources will anchor which
+claims. Under-citation is the #1 failure mode.>
 
 ## Coverage checklist (the auditor will verify this)
 <One line per explicit contract from "What the user explicitly asked for".
@@ -505,9 +532,18 @@ Then read your modality file's substance rules. The modality file tells you HOW 
 - **The opening must establish the core tension.** What makes this question non-trivial? What paradox, disagreement, tradeoff, or open problem is the draft earning its way through? If the user requested a specific opening shape (definitions, executive summary, narrative hook), honor that shape — then make it do tension-framing work.
 - **Every body section must earn its analytical beat.** A section that just describes facts without making an interpretive / comparative / forward move is a catalog entry, not a research contribution. Each section ends with a so-what, a comparison, a tension, or a forward beat.
 - **Sources in tension at least twice in the body.** Find two places where your sources disagree and walk the reader through the disagreement, naming both positions and explaining which is more defensible. Synthesis alone does not make up for this — the body itself must engage dissent.
-- **Every claim has a citation.** Inline parenthetical URL, or `[[note-id]]` if you want the reader to trace it in the vault.
-- **Tier weighting.** Anchor substantive claims in `ground_truth` sources. Use `institutional` for positioning. Use `practitioner` for reality checks. Use `commentary` only to characterize reception, never to establish a load-bearing claim.
-- **No padding to hit a length.** There is no length target. If your substance fits in 3,000 words, write 3,000 words. If it needs 12,000, write 12,000. A draft should be as long as the content demands.
+- **Cite aggressively. Every factual claim, every number, every attributed position, every direct or paraphrased quote gets an inline citation.** Use parenthetical URLs like `([Author Year](url))` or `([short source name](url))`. **The same source can and should be cited multiple times** across different sections whenever it anchors a different claim — treat each citation as an independent audit point, not a one-per-source rationing. A 5,000-word deep-research draft should carry **40-80 inline citations** (density of 8-16 per 1000 words); anything under 5 per 1000 reads as under-sourced to both human reviewers and automated judges. Shallow citation is the single most common failure mode in structured research writing.
+- **Exhaustive sub-topic coverage.** For every explicitly named subtopic, entity, context, or field in the user's verbatim prompt, produce a dedicated H2 or H3 section — do not collapse or merge prompt-named items. If the prompt asks for 7 contexts, deliver 7 sections. Every prompt-named subtopic should itself carry ≥3 inline citations.
+- **Tier weighting.** Anchor substantive claims in `ground_truth` sources. Use `institutional` for positioning. Use `practitioner` for reality checks. Use `commentary` only to characterize reception, never to establish a load-bearing claim. Still cite commentary when quoting reception.
+- **Length serves substance, not the reverse.** There is no fixed length target. BUT deep-research drafts typically run 5,000-12,000 words because exhaustive sub-topic coverage plus dense citation plus source-vs-source tension cannot fit in 2,000 words. If you find yourself at 3,000 words on a complex prompt, you are probably collapsing sections or under-citing — reconsider both.
+
+- **Pick numbers over hedges.** When the prompt asks a quantitative question ("how much", "how many", "to what extent", "by when"), pin down a specific figure or a tight range and cite the source. A concrete number with a citation beats an abstract characterization every time. If the evidence genuinely disagrees, state the range and name the sources on each side. Don't dodge into "this varies" or "it depends" when the user asked for a number.
+
+- **Inline citations as bracketed references AND a final Sources section.** In addition to inline parenthetical URLs, number every unique source `[1]`, `[2]`, `[3]` the first time it appears, reuse the same number on later citations, and include a `## Sources` section at the end of the draft listing `[N] Short title — URL` for every reference. This dual format (parenthetical inline + numbered footnote style + end Sources list) gives both human readers and automated reviewers a traceable audit path. Do NOT invent alternative citation formats (no unicode bracket pairs, no `†`, no author-year-only). Numbered plus final Sources list is the standard here.
+
+- **Never re-search a query you already ran in this session, and never paste a URL into a search engine.** Keep a running list of search queries you've already made, and avoid repeating them verbatim — if a query returned shallow results, rephrase meaningfully before retrying. URLs go to `$HPR fetch`, not `WebSearch`. Loop-burn from redundant search is a real failure mode.
+
+- **If you cannot cite it, cut it.** Every sentence that makes a factual claim must trace back to a source in the vault — either one you fetched this session or one the analyst surfaced from a source. Sentences that paraphrase the user's question, stall with throat-clearing ("it is important to note that..."), or summarize what you're about to say next are padding. They inflate word count without adding substance and they dilute citation density, which the auditor grades. Cut them. The only path to a longer draft is more evidence, not more words about the evidence. If a section feels thin, fetch another source — do not pad with generic prose.
 
 ### Activity-specific substance rules
 
@@ -527,6 +563,43 @@ Example (Q91-style: `primary=collect`, `secondary=synthesize`):
 - The draft has entity-named sections (primary structure) where every paragraph inside makes an interpretive claim about what that entity means (secondary substance).
 
 The auditor applies BOTH check lists at Step 11. Secondary-flavor violations are **not waivable** — they are CRITICAL findings that block synthesis save via the `audit-gate` lint rule. If a prompt is genuinely 50/50 across two activities, plan to satisfy both; do not silently drop the secondary.
+
+---
+
+## Step 9.5: Evidence recovery pass — spawn `hyperresearch-rewriter` ONCE
+
+**Required artifact:** the final draft, rewritten in place at `research/notes/final_report.md`, with evidence the extracts preserved but the first draft dropped now present inline with citations.
+**Verification:** the rewriter returns a recovery report naming the sections where recoveries landed and the new sources cited. A zero-recovery return is valid (means the first draft was already evidence-faithful); a fabricated recovery report is not.
+**On failure:** skip the audit and fix the rewriter invocation — the audit's citation-density checks will fail if the density gap wasn't closed.
+
+Synthesis naturally loses information. Writing a 5,000-word draft from 40+ extracts means the main agent quietly drops specifics — a number here, a named expert there, a direct quote collapsed into paraphrase. The rewriter is a cheap Sonnet pass that reads the draft plus every extract note and splices dropped evidence back in at the structurally correct location.
+
+**Spawn `hyperresearch-rewriter` exactly once.** Not per-section. Not per-extract. One call, one rewrite, one return. The rewriter is a registered Claude Code agent (`.claude/agents/hyperresearch-rewriter.md`) running on Sonnet.
+
+```
+Spawn hyperresearch-rewriter with:
+  research_query: <paste the user's verbatim prompt from scaffold §1>
+  modality: <collect | synthesize | compare | forecast>
+  final_report_path: research/notes/final_report.md
+```
+
+The rewriter:
+- Reads the draft and maps its current H2/H3 structure (does NOT add new sections)
+- Enumerates every `extract`-tagged note in the vault
+- Diffs each extract's evidence against the draft — finds numbers, quotes, named entities, source citations the draft dropped
+- Splices the highest-priority recoveries into the correct existing section with inline citations
+- Overwrites `final_report.md` with the refined draft
+- Returns a short report of what was recovered, what was skipped, and how many new citations / sources the draft now carries
+
+**Hard boundaries on the rewriter:**
+- It does NOT change the thesis, recommendation, or section order
+- It does NOT invent claims that aren't in an extract
+- It does NOT touch the `## User Prompt (VERBATIM — gospel)` section (if present)
+- It only recovers evidence with a traceable extract → source citation chain
+
+After the rewriter returns, you may spot-check the diff (read the recovery report, read the refined draft, verify the recoveries land in their stated sections) — but do not re-invoke the rewriter. If the recovery report is empty, that is a legitimate outcome meaning the first draft already covered the extracts faithfully.
+
+Then proceed to Step 10 (gap analysis) with the refined draft as your starting point.
 
 ---
 
