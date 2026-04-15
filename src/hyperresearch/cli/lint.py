@@ -594,6 +594,16 @@ def lint(
         # `source_count >= 10` which silently disabled the rule for small
         # corpora (a compare session with 8 named entities could ship zero
         # extracts and pass). The gate is removed.
+        #
+        # extract_min_words floor: only notes with body word_count >= this
+        # threshold count as "real" extracts. Anti-lint-gaming — a batch of
+        # 40 stub notes at ~75 words each must not satisfy analyst-coverage
+        # by count alone. Real analyst extracts run 400-1000+ words with
+        # direct quotes; anything below 150 words is a label, not an
+        # extraction. See the Q91 ensemble run where the orchestrator
+        # minted 45 stub extracts to pass this gate.
+        extract_min_words = 150
+
         source_count_row = conn.execute(
             "SELECT COUNT(*) as c FROM notes n "
             "WHERE n.source IS NOT NULL "
@@ -605,10 +615,25 @@ def lint(
         ).fetchone()
         source_count = source_count_row["c"] if source_count_row else 0
 
+        # Count REAL extracts (body word_count >= 150) — stubs don't satisfy.
         extract_count_row = conn.execute(
-            "SELECT COUNT(DISTINCT note_id) as c FROM tags WHERE tag = 'extract'"
+            "SELECT COUNT(DISTINCT n.id) as c FROM notes n "
+            "JOIN tags t ON t.note_id = n.id "
+            "WHERE t.tag = 'extract' AND n.word_count >= ?",
+            (extract_min_words,),
         ).fetchone()
         extract_count = extract_count_row["c"] if extract_count_row else 0
+
+        # Also count stubs separately so the lint message can be honest about
+        # what's there — a vault with 13 real + 45 stub extracts shows that
+        # fact explicitly rather than silently collapsing to "13 extracts".
+        stub_count_row = conn.execute(
+            "SELECT COUNT(DISTINCT n.id) as c FROM notes n "
+            "JOIN tags t ON t.note_id = n.id "
+            "WHERE t.tag = 'extract' AND n.word_count < ?",
+            (extract_min_words,),
+        ).fetchone()
+        stub_count = stub_count_row["c"] if stub_count_row else 0
 
         # Require 1/3 coverage (error floor at 1/4). Even a 2-source session
         # needs at least 1 extract — the analyst is mandatory, not optional.
@@ -617,17 +642,23 @@ def lint(
             error_floor = max(1, source_count // 4)
             if extract_count < required_extracts:
                 ratio = extract_count / source_count if source_count else 0
+                stub_note = (
+                    f" (plus {stub_count} stub notes under {extract_min_words} words, not counted)"
+                    if stub_count else ""
+                )
                 issues.append({
                     "rule": "analyst-coverage",
                     "severity": "error" if extract_count < error_floor else "warning",
                     "note_id": "<vault>",
                     "message": (
                         f"Vault has {source_count} fetched source notes but only {extract_count} "
-                        f"extract notes ({ratio:.0%} coverage, need ≥{required_extracts}). "
+                        f"real extract notes{stub_note} ({ratio:.0%} coverage, need ≥{required_extracts}). "
                         f"The analyst was skipped on most sources. Spawn "
                         f"hyperresearch-analyst (mode=extract or mode=guided) on the "
-                        f"unanalyzed sources during curation. Target: at least 1 extract per "
-                        f"3 sources (floor of 1 for any corpus size)."
+                        f"unanalyzed sources during curation. Target: at least 1 extract "
+                        f"(≥{extract_min_words} words) per 3 sources (floor of 1 for any "
+                        f"corpus size). Minting stub notes to pass this gate is lint-gaming "
+                        f"and will not satisfy — spawn real analysts."
                     ),
                 })
 

@@ -121,6 +121,21 @@ def _write_source(vault, title: str, note_id: str, body: str = "Source content."
     )
 
 
+def _write_extract(vault, note_id: str, word_count_target: int, run_tag: str | None = None):
+    """Write an extract note with a body of roughly `word_count_target` words."""
+    body = "word " * word_count_target
+    tags = ["extract"]
+    if run_tag:
+        tags.append(run_tag)
+    write_note(
+        vault.notes_dir,
+        f"Extract {note_id}",
+        body=body,
+        note_id=note_id,
+        tags=tags,
+    )
+
+
 def test_provenance_rooted_tree_passes_with_valid_chain(tmp_vault):
     # Build a valid chain: seed → child1 → child2, plus a few more non-seeds
     # pointing at the seed or each other. 6+ sources so the rule activates.
@@ -569,4 +584,64 @@ def test_orphaned_raw_files_ignores_matched_raw(tmp_vault):
     import json
     data = json.loads(out)
     issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "orphaned-raw-files"]
+    assert issues == []
+
+
+def test_analyst_coverage_counts_real_extracts(tmp_vault):
+    """A vault with enough real extracts (>= 150 words) passes the gate."""
+    for i in range(9):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    # 3 real extracts (>=150 words each) — 3/9 sources = 33% meets 1/3 floor
+    for i in range(3):
+        _write_extract(tmp_vault, f"extract-{i}", word_count_target=200, run_tag="run-a")
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="analyst-coverage")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "analyst-coverage"]
+    assert issues == [], f"expected no issues, got: {issues}"
+
+
+def test_analyst_coverage_rejects_stub_extracts(tmp_vault):
+    """Lint-gaming defense: 45 stub extracts (<150 words) do NOT satisfy the gate.
+    This is the Q91 ensemble failure mode — orchestrator minted hollow extract
+    notes to pass analyst-coverage numerically."""
+    for i in range(9):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    # 45 STUB extracts at ~70 words each — would pass old count-based rule.
+    for i in range(45):
+        _write_extract(tmp_vault, f"stub-extract-{i}", word_count_target=70)
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="analyst-coverage")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "analyst-coverage"]
+    assert len(issues) == 1
+    msg = issues[0]["message"]
+    # Error message must expose the stub count honestly so the agent sees the
+    # lint-gaming attempt for what it is.
+    assert "45 stub notes" in msg
+    assert "lint-gaming" in msg
+    # Zero REAL extracts → 0% coverage → error severity
+    assert issues[0]["severity"] == "error"
+
+
+def test_analyst_coverage_mixed_real_and_stub(tmp_vault):
+    """Real extracts count toward the gate; stubs are reported but ignored."""
+    for i in range(12):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    # 4 real extracts (>=150 words) — 4/12 = 33%, passes ceil(12/3)=4 threshold
+    for i in range(4):
+        _write_extract(tmp_vault, f"real-extract-{i}", word_count_target=300, run_tag="run-a")
+    # Plus 10 stubs that should not pad the count
+    for i in range(10):
+        _write_extract(tmp_vault, f"stub-extract-{i}", word_count_target=70)
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="analyst-coverage")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "analyst-coverage"]
     assert issues == []

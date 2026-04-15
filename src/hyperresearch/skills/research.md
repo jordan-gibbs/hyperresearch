@@ -265,18 +265,18 @@ $HPR note edit <new-id> ...            # tries to graft a breadcrumb after the f
 
 Backfilling is supported (the fetch CLI is idempotent on re-call with `--suggested-by`), but the resulting provenance graph has disconnected components — the new note's breadcrumb points at the suggester, but if the suggester was itself a seed, the chain looks artificial. The rooted-tree provenance lint flags this and the audit-gate blocks save until you connect the islands.
 
-**Phase 2 — Guided reading iterations.** For each fresh note, spawn the **`hyperresearch-analyst`** agent (Sonnet, registered at `.claude/agents/hyperresearch-analyst.md`) with `mode=guided`:
+**Phase 2 — Guided reading iterations.** For each batch of fresh notes, spawn the **`hyperresearch-analyst`** agent (Sonnet, registered at `.claude/agents/hyperresearch-analyst.md`) with `mode=guided`. The analyst accepts a LIST of 1-5 source note IDs per spawn and produces one extract note per source:
 
 ```
 research_goal: <the user's original verbatim prompt>
-sub_goal: <what this specific source should contribute>
-source_note_id: <the id of the note to read>
+sub_goal: <what this batch of sources should contribute>
+source_note_ids: [<id-1>, <id-2>, <id-3>, <id-4>, <id-5>]   # 1-5 ids
 mode: guided
 already_covered: <sub-topics prior iterations answered, or "none">
 already_fetched_urls: <output of `$HPR sources list -j`>
 ```
 
-Spawn multiple analysts in parallel — one per source in the current batch. Each returns: extract content + covered sub-topics + 2–5 next_targets + coverage status.
+Group sources per spawn by semantic similarity (same sub-topic or entity — the analyst's unioned next_targets list benefits from cross-source convergence within a batch). Spawn batches in parallel — a 20-source iteration becomes 4 analyst spawns (not 20). Each returns: N extract note IDs + a consolidated Findings summary + covered sub-topics + 2–5 unioned next_targets + coverage status per source.
 
 **Phase 3 — Main agent orchestration.** After each iteration returns:
 
@@ -362,20 +362,22 @@ Raw fetched notes arrive with `status=draft`, `tier=unknown`, auto-detected `con
 
 For research, the analyst is the default reading mechanism — not a fallback for big sources. Even small sources (1500 words) deserve analyst treatment because the analyst's URL-scan surfaces follow-up targets for the loop.
 
+The analyst is **batched**: one spawn reads 1-5 sources and produces one extract note per source. This amortizes per-spawn overhead so processing 20 draft notes means 4 analyst spawns (not 20). Group sources per spawn by semantic similarity — a batch of 5 Bronze Saints character pages converges on shared URLs; a batch mixing Bronze Saints + a physics paper + a forum thread doesn't.
+
 ```
-For each draft source note:
+For each batch of 1-5 draft source notes (semantically grouped):
   Spawn hyperresearch-analyst with:
     research_goal: <the user's original verbatim prompt>
-    sub_goal: "establish what this source contributes and what URLs / authors / claims warrant follow-up"
-    source_note_id: <draft note id>
+    sub_goal: "establish what these sources contribute and what URLs / authors / claims warrant follow-up"
+    source_note_ids: [<draft-id-1>, <draft-id-2>, ..., up to 5]
     mode: guided
     already_covered: <running list from prior analysts>
     already_fetched_urls: <output of `$HPR sources list -j`>
 ```
 
-Spawn 3–5 in parallel (Sonnet, cheap). Each analyst reads the source, persists an extract note (`--add-tag extract --parent <source-id>`), and returns an extract + next_targets + coverage status.
+Spawn 3–4 batches in parallel (Sonnet, cheap). Each analyst reads its 1-5 sources sequentially, persists one extract note per source (`--add-tag extract --parent <source-id>` per extract), and returns a list of extract note IDs + a consolidated Findings summary + unioned next_targets + coverage status per source.
 
-Collect every analyst's next_targets into TodoWrite. After each batch, fetch the top next_targets WITH `--suggested-by` so the loop iterates. **The fetch:extract ratio after curation should be at least 1:1** — every fetched source has a paired extract note. The `analyst-coverage` lint rule catches misses at Checkpoint 2.
+Collect every analyst's next_targets into TodoWrite. After each batch, fetch the top next_targets WITH `--suggested-by` so the loop iterates. **The fetch:extract ratio after curation should be at least 1:1** — every fetched source has a paired extract note with at least 150 words of real content. The `analyst-coverage` lint rule catches both misses AND stubs at Checkpoint 2 (extracts under 150 words do NOT count — minting stubs will not satisfy the gate).
 
 ### Step B: Set metadata from the analyst's findings
 
