@@ -38,6 +38,10 @@ class Vault:
     def db(self) -> sqlite3.Connection:
         if self._conn is None:
             self._conn = get_connection(self.db_path)
+            # Ensure schema is up to date — init_schema is idempotent and runs
+            # any pending migrations. This fires on every vault open, which is
+            # cheap when there's nothing to migrate.
+            init_schema(self._conn)
         return self._conn
 
     @property

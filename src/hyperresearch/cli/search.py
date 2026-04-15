@@ -13,6 +13,8 @@ def search(
     tag: list[str] = typer.Option([], "--tag", "-t", help="Filter by tag (AND logic)"),
     status: str | None = typer.Option(None, "--status", "-s", help="Filter by status"),
     note_type: str | None = typer.Option(None, "--type", help="Filter by type"),
+    tier: str | None = typer.Option(None, "--tier", help="Filter by epistemic tier: ground_truth|institutional|practitioner|commentary|unknown"),
+    content_type: str | None = typer.Option(None, "--content-type", help="Filter by artifact kind: paper|docs|article|blog|forum|dataset|policy|code|book|transcript|review|unknown"),
     parent: str | None = typer.Option(None, "--parent", "-p", help="Filter by parent topic"),
     after: str | None = typer.Option(None, "--after", help="Created after date (YYYY-MM-DD)"),
     before: str | None = typer.Option(None, "--before", help="Created before date (YYYY-MM-DD)"),
@@ -32,8 +34,31 @@ def search(
 ) -> None:
     """Full-text search across all notes."""
     from hyperresearch.core.vault import Vault, VaultError
+    from hyperresearch.models.note import ContentType, Tier
     from hyperresearch.search.filters import SearchFilters
     from hyperresearch.search.fts import search_fts
+
+    # Validate enums up-front
+    if tier is not None:
+        try:
+            Tier(tier)
+        except ValueError:
+            valid = ", ".join(t.value for t in Tier)
+            if json_output:
+                output(error(f"Invalid --tier '{tier}'. Must be one of: {valid}", "INVALID_TIER"), json_mode=True)
+            else:
+                console.print(f"[red]Invalid --tier '{tier}'.[/] Must be one of: {valid}")
+            raise typer.Exit(1)
+    if content_type is not None:
+        try:
+            ContentType(content_type)
+        except ValueError:
+            valid = ", ".join(c.value for c in ContentType)
+            if json_output:
+                output(error(f"Invalid --content-type '{content_type}'. Must be one of: {valid}", "INVALID_CONTENT_TYPE"), json_mode=True)
+            else:
+                console.print(f"[red]Invalid --content-type '{content_type}'.[/] Must be one of: {valid}")
+            raise typer.Exit(1)
 
     try:
         vault = Vault.discover()
@@ -49,6 +74,8 @@ def search(
         tags=tag or None,
         status=status,
         note_type=note_type,
+        tier=tier,
+        content_type=content_type,
         parent=parent,
         after=after,
         before=before,

@@ -10,6 +10,8 @@ class SearchFilters:
     tags: list[str] | None = None
     status: str | None = None
     note_type: str | None = None
+    tier: str | None = None           # Epistemic tier filter
+    content_type: str | None = None   # Artifact kind filter
     after: str | None = None
     before: str | None = None
     path_glob: str | None = None
@@ -41,6 +43,14 @@ class SearchFilters:
         if self.note_type:
             clauses.append(f"{table_alias}.type = ?")
             params.append(self.note_type)
+
+        if self.tier:
+            clauses.append(f"{table_alias}.tier = ?")
+            params.append(self.tier)
+
+        if self.content_type:
+            clauses.append(f"{table_alias}.content_type = ?")
+            params.append(self.content_type)
 
         if self.after:
             clauses.append(f"{table_alias}.created >= ?")

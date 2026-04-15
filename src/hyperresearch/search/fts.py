@@ -83,7 +83,7 @@ def search_fts(
 
     sql = f"""
         SELECT
-            n.id, n.title, n.path, n.status, n.type,
+            n.id, n.title, n.path, n.status, n.type, n.tier, n.content_type,
             n.created, n.updated, n.word_count, n.summary,
             snippet(notes_fts, 2, '>>>', '<<<', '...', 64) as snippet,
             bm25(notes_fts, 0.0, {tw}, {bw}, {tgw}, {aw}) as score,
@@ -113,6 +113,9 @@ def search_fts(
             "path": row["path"],
             "status": row["status"],
             "type": row["type"],
+            # sqlite3.Row.__contains__ is broken; row.keys() is reliable.
+            "tier": row["tier"] if "tier" in row.keys() else None,  # noqa: SIM118
+            "content_type": row["content_type"] if "content_type" in row.keys() else None,  # noqa: SIM118
             "tags": tag_list,
             "created": row["created"],
             "updated": row["updated"],

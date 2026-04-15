@@ -3,10 +3,28 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 
-# Each migration is a SQL script that upgrades from version N-1 to N.
+# Each migration upgrades from version N-1 to N. May be either:
+#   - a SQL string (executed via executescript)
+#   - a callable(conn) for migrations that need conditional logic (e.g. ADD COLUMN)
 # Migrations MUST be idempotent (safe to re-run).
-MIGRATIONS: dict[int, str] = {
+
+
+def _migrate_v6_tier_content_type(conn: sqlite3.Connection) -> None:
+    """Add tier and content_type columns to notes (idempotent)."""
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(notes)")}
+    if "tier" not in existing:
+        conn.execute("ALTER TABLE notes ADD COLUMN tier TEXT")
+    if "content_type" not in existing:
+        conn.execute("ALTER TABLE notes ADD COLUMN content_type TEXT")
+    conn.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_notes_tier ON notes(tier);
+        CREATE INDEX IF NOT EXISTS idx_notes_content_type ON notes(content_type);
+    """)
+
+
+MIGRATIONS: dict[int, str | Callable[[sqlite3.Connection], None]] = {
     2: """
 CREATE TABLE IF NOT EXISTS tag_aliases (
     alias     TEXT PRIMARY KEY,
@@ -47,6 +65,7 @@ CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
 -- removed from code. Left as vestigial columns in existing DBs for compatibility.
 -- New vaults won't have them. No structural changes needed.
 """,
+    6: _migrate_v6_tier_content_type,
 }
 
 
@@ -66,9 +85,12 @@ def migrate(conn: sqlite3.Connection, target_version: int) -> list[int]:
 
     applied = []
     for version in range(current + 1, target_version + 1):
-        sql = MIGRATIONS.get(version)
-        if sql:
-            conn.executescript(sql)
+        migration = MIGRATIONS.get(version)
+        if migration:
+            if callable(migration):
+                migration(conn)
+            else:
+                conn.executescript(migration)
         conn.execute(
             "INSERT OR REPLACE INTO _meta (key, value) VALUES ('schema_version', ?)",
             (str(version),),

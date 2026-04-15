@@ -1,526 +1,758 @@
 ---
 name: research
 description: >
-  Deep research on any topic. Searches the web, fetches sources with a headless browser,
-  follows links to primary sources, builds a searchable knowledge base, and synthesizes
-  findings. Use when the user asks to research, investigate, or learn about a topic.
+  Deep research on any topic. Classifies requests by cognitive activity
+  (collect / synthesize / compare / forecast), not subject matter. Produces
+  a sourced, adversarially-audited report with full data-flow provenance.
   Trigger: /research
 ---
 
-# Deep Research Skill
+# Research Dispatcher
 
-## Step 0: Clarify the request
+The research protocol has ONE process spine (this file) and FOUR modality files that encode substance differences. Read this file end-to-end. Then read the modality file the classifier routes you to. Both are required.
 
-Before doing ANY research, evaluate the user's request. If it is vague, ambiguous, or could go in multiple directions, **ask clarifying questions first**. Do not guess — ask. Examples:
+**There are no numeric targets in this protocol.** No word counts, no H2 counts, no words-per-section floors. A draft is as long as the substance demands and as short as the structure allows. The user's own scope cues (if any) are the only length guidance that applies.
 
-- "Research AI models" → Ask: "Which aspect? Training techniques, specific architectures, benchmarks, a particular company's models, deployment strategies?"
-- "Find out about this company" → Ask: "What specifically? Financials, leadership, products, tech stack, culture, recent news?"
-- "Look into transformers" → Ask: "The neural network architecture, or a specific variant? Are you interested in the theory, practical implementation, or recent alternatives like Mamba?"
-
-Ask 1-3 focused questions. Once you understand the scope, proceed. If the request is already specific and clear, skip this step and start researching immediately.
-
-## Step 0.5: Classify the request and pick a protocol (MANDATORY)
-
-Different research requests need fundamentally different strategies. Source counts, primary/secondary mix, section structure, target length, analytical mode — all change based on the request shape. A single universal protocol is wrong. **Before Step 1, classify the request into one of the 7 types below and state your classification in writing** (in working memory or `/tmp/scaffold.md` — NOT a hyperresearch note).
-
-### The 7 request types
-
-| Type | Name | Use when |
-|---|---|---|
-| 1 | **Canonical Knowledge Retrieval** | Mature field with textbook chapters or canonical survey papers; a domain expert would start by citing a classic source. |
-| 2 | **Market / Landscape Mapping** | Enumerable competitive analysis — list of companies, products, vendors with attributes. |
-| 3 | **Engineering / Technical How-To** | User is trying to DO something. Ideal answer is a procedure or method selection. |
-| 4 | **Interpretive / Humanities Analysis** | Subject is a text, work, tradition, or cultural phenomenon. Good answer takes a position and defends it. |
-| 5 | **Comparative Evaluation** | Prompt names multiple alternatives by name and expects a matrix + pick. |
-| 6 | **Emerging / Cutting-Edge Research** | Most useful material is <2 years old; best sources are arXiv/bioRxiv/conference papers. |
-| 7 | **Forecast / Strategy / Recommendation** | Asks what will happen or what should be done; ideal answer commits to a prediction or prescription. |
-| 0 | **General Research (fallback)** | Doesn't cleanly fit one type, or genuinely spans multiple. |
-
-Overlap is expected. Classify a **primary** type and, if applicable, a **secondary** type. Apply the parameter block for the primary; borrow special rules from the secondary.
-
-### State your classification
-
-Before Step 1, write this down:
-
-1. **Primary type**: #N — one-sentence justification tied to the prompt.
-2. **Secondary type**: #N or "none".
-3. **Applied parameters** (5 lines): source strategy, target length, opening-section shape, target H2 count, analytical mode.
-
-Refer back to this throughout the workflow. It's how you avoid drifting into one-size-fits-all defaults.
+**The user's verbatim prompt is the only gospel in this session.** It gets copied into the scaffold at Step 7 and every subsequent step re-reads it. Whenever you are unsure what to do, re-read the prompt. Whenever the draft feels like it's drifting, re-read the prompt. The auditor at Step 11 grades the draft against the verbatim prompt — not against any abstract notion of quality.
 
 ---
 
-## Request-type parameter blocks
+## The 4 activities
 
-Pick the block for your primary type and apply it. These **override** the generic defaults in Step 3 (source count) and Step 9 (writing constraints).
+Research requests are classified by what the output needs to DO, not what the subject IS.
 
-### Type 1 — Canonical Knowledge Retrieval
+| Activity | Question it answers | Primary virtue | Modality file |
+|---|---|---|---|
+| **collect** | "What exists / what happened / who did what" | Exhaustive enumerative coverage with per-entity fields | `.claude/skills/hyperresearch/SKILL-collect.md` |
+| **synthesize** | "What does it mean / how does it work / why" | Interpretive density — a defended thesis grounded in evidence | `.claude/skills/hyperresearch/SKILL-synthesize.md` |
+| **compare** | "Which is better for what / how do they differ" | Proportionate per-entity depth + a committed recommendation | `.claude/skills/hyperresearch/SKILL-compare.md` |
+| **forecast** | "What will happen / what should we do" | Committed prediction from past + current state with explicit time horizon | `.claude/skills/hyperresearch/SKILL-forecast.md` |
 
-- **Source strategy:** 5–15 primary (seminal papers, textbooks, canonical surveys) + 5–15 secondary (recent reviews, textbook chapters). Primary-heavy. Read primary DEEP.
-- **Target length:** 6,000–10,000 words
-- **Opening:** historical / conceptual progression — how the field arrived at current consensus
-- **H2 count:** 10–15, sequenced by dependency (concept → result → consequence)
-- **Analytical mode:** explain WHY canonical results hold; compare competing formulations; signal which textbook to start with
-- **Special rule:** sequence content by dependency, not by source. A reader should need sections 1 and 2 to understand section 3.
+**Subject matter does not decide the classification.** A query about a fictional franchise can be collect (per-character enumeration), synthesize (a thesis about what the franchise means), compare (this franchise vs another), or forecast (will this franchise's new arc succeed). A query about distributed databases can be any of the four. The classifier reads what the output should *do*, not what the subject *is*.
 
-### Type 2 — Market / Landscape Mapping
-
-- **Source strategy:** 20–50 secondary (analyst reports, press, official docs) + 5–10 primary (filings, product specs, API docs). Secondary-heavy — triangulation across many descriptions is correct here.
-- **Target length:** 5,000–9,000 words
-- **Opening:** market definition + segmentation + the framework used to score vendors
-- **H2 count:** 8–14, one per vendor *cluster* or category — NEVER one per individual vendor
-- **Analytical mode:** take a position on who is winning and why
-- **Special rule:** at least one comparison matrix in the body, with common axes, is MANDATORY. Never list vendors in isolation.
-- **Special rule:** if the user asked for rankings, deliver them with confidence. Rankings without commitment are worthless.
-
-### Type 3 — Engineering / Technical How-To
-
-- **Source strategy:** 5–15 primary (papers, docs, GitHub repos, RFCs, standards) + 5–15 secondary (blog posts, tutorials, StackOverflow). Roughly balanced.
-- **Target length:** 4,000–8,000 words
-- **Opening:** the problem statement + the constraint landscape — what makes this hard, why naive approaches fail
-- **H2 count:** 8–14
-- **Analytical mode:** pick a recommended approach; explain when to use alternatives
-- **Special rule:** if a method has a reference implementation, link it and characterize it
-- **Special rule:** include a decision tree or selection matrix ("use X when..., use Y when...")
-
-### Type 4 — Interpretive / Humanities Analysis
-
-- **Source strategy:** 3–10 primary (the work itself, key scholarly monographs, canonical commentary) + 10–25 secondary (critical essays, interviews, reviews). Primary-heavy for depth.
-- **Target length:** 7,000–11,000 words
-- **Opening:** thesis + the interpretive tradition this work sits in
-- **H2 count:** **6–10** (fewer, LONGER sections — 800–1500 words each). Sections are THEMATIC, not entity-cataloged.
-- **Analytical mode:** take and defend an interpretation; engage dissenting readings
-- **Special rule:** NEVER one section per character / chapter / author. Sections must be thematic (e.g. "Sacrifice as cosmology" — not "Pegasus Seiya").
-- **Special rule:** at least 2 body sections must put sources in tension with each other — find where scholars disagree and walk through it.
-- **Special rule:** this is the type where catalog-style reports fail hardest. Before submitting, double-check that no section is <400 words or entity-named.
-
-### Type 5 — Comparative Evaluation
-
-- **Source strategy:** 3–5 primary per comparand + 2–5 secondary per comparand (so N×5 to N×10 total). Depth scales with N.
-- **Target length:** 5,000–10,000 words
-- **Opening:** the comparison framework itself — the dimensions being scored and why they matter
-- **H2 count:** typically 1 per comparand + 2–4 synthesis sections (~8–12 total)
-- **Analytical mode:** explicit scoring on each dimension + a recommended pick with tradeoffs
-- **Special rule:** one comparison matrix in the body is MANDATORY (not optional)
-- **Special rule:** equal depth across comparands — if one section is 400 words and another is 1200, rebalance
-
-### Type 6 — Emerging / Cutting-Edge Research
-
-- **Source strategy:** 5–15 primary (preprints, conference papers, authoritative reviews if any) + 3–8 secondary (news, blog posts from authors). Primary-dominant.
-- **Target length:** 5,000–9,000 words
-- **Opening:** the open problem + why prior approaches fell short
-- **H2 count:** 8–12
-- **Analytical mode:** honest about disagreement; forecast 2–5 years out with caveats
-- **Special rule:** if a claim is from a 2024–2026 preprint, say so. Don't assume consensus in fast-moving fields.
-- **Special rule:** include an explicit "What we don't know yet" section
-- **Special rule:** do NOT pad with mature-field material to hit a source count. Fewer primary sources deeply engaged beats more sources shallowly skimmed.
-
-### Type 7 — Forecast / Strategy / Recommendation
-
-- **Source strategy:** 15–30 secondary (analyst reports, think-tanks, news) + 5–10 primary (official announcements, filings, datasets). Secondary-heavy.
-- **Target length:** 6,000–10,000 words
-- **Opening:** the decision / question being answered + the forces shaping it
-- **H2 count:** 8–12
-- **Analytical mode:** confident prescription with an explicit reasoning chain. Probability language over hedging.
-- **Special rule:** at least one body section must commit to a direction — not everything can be deferred to the Opinionated Synthesis at the end.
-- **Special rule:** acknowledge the time horizon explicitly — what's true in 6 months vs. 5 years.
-
-### Type 0 — General Research (fallback)
-
-Use the generic defaults: 15–25 / 30–50 / 50–80 source floors (see Step 3), framework opening, 12–20 H2 headings, 400–600 words per H2 (see Step 9).
+**A single prompt can blend activities** — that is normal. Pick ONE primary and optionally ONE secondary flavor. The primary determines the process and the structural backbone; the secondary informs the substance rules at Step 9. Example: "Analyze Saint Seiya's armor classes: for each significant character, cover techniques, story arcs, fate — and develop a thematic argument about what the armor means" is **collect** (primary — the per-character enumeration is the backbone) + **synthesize** (secondary — thematic beats layered into each entity section).
 
 ---
 
-When invoked, follow these steps **in order**. Do not skip steps. The CLI path will be provided by the CLAUDE.md — look for the "CLI path:" line in the Research Base section.
+## Step 0: Clarify if vague
 
-If you can't find the CLI path, check for the hyperresearch executable:
-```bash
-which hyperresearch 2>/dev/null || where hyperresearch 2>/dev/null || find . -path "*/.venv/*/hyperresearch*" -type f 2>/dev/null | head -1
-```
-Store it in a variable: `HPR="<path>"` for the rest of this workflow.
+If the request is vague or ambiguous, ask 1–3 focused questions before proceeding. Don't guess.
 
-## Step 1: Check existing knowledge
+---
 
-Before searching the web, check what's already in the research base:
+## Step 0.5: Check existing vault coverage first
 
 ```bash
-$HPR search "<topic>" --include-body -j
-$HPR sources list -j
+$HPR search "<topic>" -j
 ```
 
-If there's already substantial coverage, tell the user what's known and ask if they want deeper research or a specific angle.
+If the vault already has >10 relevant notes: tell the user, summarize what's there, and ask whether they want deeper research, a specific angle, or synthesis from existing notes. Don't re-fetch what's already curated.
 
-## Step 2: Search broadly
+---
 
-Run **multiple web searches** with different phrasings. Don't stop at one query:
+## Step 1: Classify + commit the verbatim prompt
+
+State your classification in writing BEFORE doing anything else. Copy the user's prompt verbatim into your working memory. This is the format you MUST output:
+
+```markdown
+## User Prompt (VERBATIM — gospel)
+> [paste the entire user message here, character-for-character. Do not
+> paraphrase. Do not summarize. Do not reformat. This text is the only
+> authoritative source for what the output should contain and look like.]
+
+## Primary activity
+<collect | synthesize | compare | forecast>
+
+## Secondary flavor (optional)
+<collect | synthesize | compare | forecast | none>
+
+## One-sentence justification
+<why this primary activity matches what the output needs to DO>
+
+## What the user explicitly asked for (extracted from the verbatim prompt)
+- **Explicit deliverables:** <list every specific ask — "answer A, B, C", "include a recommendation", "for each X give Y" — or "none">
+- **Explicit entities or items:** <every item named in the prompt, or "none">
+- **Explicit per-item fields:** <every field the prompt demands per entity — "power level / technique / fate" — or "none">
+- **Explicit structure:** <"one section per", "ranked list", "executive summary", etc., or "silent">
+- **Explicit format:** <prose / bullets / table / code / FAQ, or "silent">
+- **Explicit scope cues:** <"brief", "detailed", "deep dive", specific lengths, or "silent">
+- **Explicit ordering:** <chronological / by importance / custom, or "silent">
+
+## Core tension
+<what makes this question non-trivial — a paradox, a disagreement, a tradeoff,
+a constraint interaction, an open problem. One-to-three sentences. This is
+what the draft must earn its way through.>
+```
+
+Then **read the corresponding modality file with the Read tool.** The modality file tells you HOW to do the activity-specific parts (source strategy, substance rules, conformance checks). This dispatcher tells you WHAT steps to run and in what order.
+
+---
+
+## Tiebreaker questions
+
+When two activities seem equally applicable:
+
+**collect vs compare** — Does the user want coverage ("tell me everything") or evaluation ("which is best")? Recommendation expected or entities set against each other → **compare**. Coverage is the point and no recommendation is requested → **collect**.
+
+**collect vs synthesize** — Does the output need a defended thesis or just complete coverage? If the user explicitly asks for interpretation, meaning, or analysis alongside enumeration, the primary is usually **collect** (the enumeration is the dominant ask) and the secondary flavor is **synthesize**. Pure enumeration without thesis → **collect**. Pure thesis without per-entity coverage → **synthesize**.
+
+**synthesize vs forecast** — Is the claim about what IS (how it works, what it means) or what WILL BE (prediction, recommendation)? Past/present → **synthesize**. Future → **forecast**.
+
+**compare vs forecast** — Is the user asking which option is best NOW or which will be best LATER? Now → **compare**. Later → **forecast** (often with compare flavor).
+
+**Any activity when the prompt contains "for each X, provide Y / Z / W"** — The explicit per-entity field list is a collection contract. Route to **collect** as the primary regardless of subject, with any interpretive / comparative / predictive framing as secondary flavor. The per-entity contract takes precedence because it is the most specific kind of user mandate.
+
+---
+
+## Prompt fidelity — the gospel rule
+
+**Re-read the user's verbatim prompt at every checkpoint.** The prompt is inside the scaffold (Step 7). Every checkpoint re-opens the scaffold. Every time you re-open the scaffold, re-read the prompt first. Every structural decision must trace back to the prompt or a modality default that the prompt is silent on.
+
+- If the prompt specifies structure / format / entities / fields / ordering / scope: **the user's request is authoritative**. Modality defaults yield.
+- If the prompt is silent on any of those: **the modality default applies** to what the prompt left open.
+- The modality file is authoritative for SUBSTANCE (interpretation density, proportionate depth, probability language, mechanism clarity). Substance rules hold regardless of shape.
+
+**Never negotiate the user's contract.** If the user asked for 108 entities and 4 fields each, you owe 108 × 4 data points. You do NOT get to substitute "representative examples + thematic commentary". You do NOT get to silently downgrade "each" to "the most important". If the user's contract seems impossible to satisfy within a reasonable draft, surface that tension to the user and ask — do not paper over it by producing less than what was asked.
+
+---
+
+## Process discipline (applies to every activity)
+
+This protocol is **process-driven**. Each required step produces an **artifact** that a later step reads. Skipping a step does not save work — it breaks the dependency chain silently, and the later step operates on missing-but-pretended input. The draft then gets written without the tension analysis; the audit never fires; the report ships un-stress-tested.
+
+**Definition of task failure:** if a required artifact does not exist on disk or in the vault at the checkpoint where the next step expects it, the task has FAILED at that checkpoint. Failure is not fatal — it means: STOP the current step, return to the step that produces the missing artifact, complete it, and re-run the checkpoint. You may NOT compensate for a missing artifact by doing extra work inside the step that follows it.
+
+Read this section before doing anything else, then follow it literally. You will self-review four times in a single research session. If any review fails, you go back.
+
+### Required TODO list (build this immediately after Step 1 classification)
+
+Before executing Step 2, create this exact TODO list with the TodoWrite tool. Do NOT fetch anything, search anything, or write anything until the list exists:
+
+1. Check existing vault coverage (Step 0.5)
+2. Discover sources (Step 2)
+3. Fetch source batch or open the guided reading loop (Step 3)
+4. **Checkpoint 1: post-fetch review**
+5. Rabbit-hole pass with `--suggested-by` provenance (Step 4)
+6. Curate every source: tier + content_type + summary + analyst extract (Steps 5–6)
+7. Run link / lint / graph hubs (Steps 5–6)
+8. **Checkpoint 2: post-curate review**
+9. Write scaffold note WITH verbatim user prompt as first section (Step 7)
+10. Write comparisons note (Step 8)
+11. **Checkpoint 3: pre-draft gate — CRITICAL**
+12. Write `research/notes/final_report.md` (Step 9)
+13. Gap analysis + adversarial search (Step 10)
+14. Adversarial audit via `hyperresearch-auditor` — both modes in parallel (Step 11)
+15. **Checkpoint 4: post-audit review**
+16. Write Opinionated Synthesis section (Step 12)
+17. Save synthesis note + health checks (Steps 13–14)
+
+Mark each item `completed` only after its artifact exists AND you have verified it exists with a command. You may NOT mark item 12 (the draft) `in_progress` until items 1–11 are all `completed`. The TODO list is the process ledger.
+
+---
+
+## Zettelkasten conventions (apply in every activity)
+
+All notes follow atomic Zettelkasten conventions. The CLI manages the index.
+
+**Note `type:` field:** `source` | `synthesis` | `moc` | `scaffold` | `comparison`
+
+**Status lifecycle:** `draft` → `review` → `evergreen` → `stale` → `deprecated` → `archive`
+
+**Every source note must have:** `title`, `source` (URL), at least one `tag`, `summary` (≤120 chars), `status`, `tier`, `content_type`.
+
+**Epistemic metadata (required on every source note before Checkpoint 2):**
+
+- **`tier`** — what epistemic role this source plays:
+  - `ground_truth` — the artifact itself: official filings, product specs, datasets, primary texts, peer-reviewed papers with original data, regulatory text
+  - `institutional` — authoritative synthesizers: analyst reports, think-tanks, review/survey papers, textbooks, canonical criticism
+  - `practitioner` — how domain participants actually experience it: user reviews, community threads, practitioner blogs, postmortems, migration guides
+  - `commentary` — discussion without new signal: news summaries, opinion pieces, derivative explainers
+  - `unknown` — unclassified (default at fetch time; must be replaced during curation)
+- **`content_type`** — what kind of artifact this is: `paper` | `docs` | `article` | `blog` | `forum` | `dataset` | `policy` | `code` | `book` | `transcript` | `review` | `unknown`
+
+Tier and content_type are orthogonal: a `paper` can be `ground_truth` (original data) or `institutional` (a review). A `blog` can be `practitioner` (named engineer's postmortem) or `commentary` (derivative explainer).
+
+**Tagging:** Check existing tags first (`$HPR tags -j`). Reuse existing tags. Apply multiple relevant tags per note. Do not invent synonyms.
+
+**Wiki-links:** Connect related notes with `[[note-id]]`. Every note should link to at least one sibling.
+
+---
+
+## Step 2: Source discovery
+
+The modality file tells you the source strategy (what APIs to hit, what source types to prioritize, whether to run the academic sweep). Run it.
+
+Then, regardless of modality, run an **adversarial search round** — searches that specifically look for the failure case, the dissenting view, the critique, the contrarian, the known limitations. Every activity needs this:
 
 ```
-WebSearch("<topic>")
-WebSearch("<topic> research paper 2025 2026")
-WebSearch("<topic> deep dive technical")
-WebSearch("<related angle or subtopic>")
+WebSearch("<topic> criticism limitations problems")
+WebSearch("<topic> against the grain dissenting view")
+WebSearch("why <dominant view> is wrong")
 ```
 
-Collect ALL promising URLs — aim for 10-20 sources minimum. More is better. You'll prune later.
+A corpus without dissent is advocacy, not research. If the adversarial round returns nothing substantive, note that explicitly — it is itself a finding.
 
-## Step 3: Fetch everything
+---
 
-Spawn `hyperresearch-fetcher` subagents to fetch URLs in parallel. They run on Haiku (cheap).
+## Step 3: Fetch — guided reading loop (preferred) or batch
+
+**Default: the guided reading loop** (described below). Seed with 3–5 high-signal URLs, then let each iteration's analyst subagents propose next targets based on what the prior sources cite.
+
+**Batch fetch** only when the target set is already known and complete — e.g., the user handed you 10 URLs, or the modality file says to batch (compare activity with explicitly-named entities is the usual case).
+
+### Guided reading loop protocol
+
+The loop is a bounce between fetching and reading:
 
 ```
-Spawn hyperresearch-fetcher agents for each URL batch:
-- Batch 1: [url1, url2, url3, url4, url5]
-- Batch 2: [url6, url7, url8, url9, url10]
+fetch 3-5 seeds  →  hyperresearch-analyst reads each with goal in hand  →
+  analyst returns extract + "next_targets" (URLs, queries, names, claims to verify)  →
+  main agent fetches next_targets with --suggested-by flag  →
+  hyperresearch-analyst reads those  →  ...
 ```
 
-Each fetcher will report back with note IDs and interesting links found in the content.
+Each iteration is a research director: the analyst reads one source, proposes what to read next, and hands the decision back to the main agent. This discovers source trees you couldn't find by keyword search alone — the essay names three critics, those critics cite a 1998 monograph, the monograph references a specific passage in the primary work.
 
-**Over-collect, then engage deeply.** It's better to have too many sources than too few — but collection is a means to an argument, not the goal. A report built from 30 sources that disagree and force you to take positions beats a report built from 80 sources that each contribute one bullet of description. Read each source carefully. If you find yourself translating one source into one paragraph or one section, stop — you are building a catalog.
+**Phase 1 — Seed fetch.** Pick the 3–5 highest-signal URLs:
+- 1–2 canonical reference entries (Wikipedia, field survey, official docs)
+- 1–2 analytical/critical sources visible in search results
+- 0–1 adversarial/dissenting source
 
-**There is no time limit.** Do multiple rounds of fetching — as new subtopics and questions reveal themselves, launch new rounds of fetcher subagents in parallel to chase them down. The first round uncovers the landscape, the second digs into what you found, the third fills gaps. Keep going until you've exhausted the topic. Do not rush.
+Spawn `hyperresearch-fetcher` on ONLY those 3–5. Do NOT batch-fetch 20 URLs upfront — half get wasted on sources the loop would tell you to skip.
 
-**CHECKPOINT: Before writing any draft, stop and take stock:**
+#### When a fetch fails — try harder before giving up
+
+PDF hosts on academic faculty pages, ResearchGate, SSRN, and publisher sites are notoriously flaky (403, paywall walls, junk content, login walls). When a fetch returns `error`, `JUNK_CONTENT`, `AUTH_REQUIRED`, or any non-success status, **do NOT silently move on if the source is high-priority.** A high-priority source is one that:
+
+- Is the seminal paper an analyst specifically named as a `next_target`
+- Is the canonical source for the question (e.g., the original Maskin-Riley paper for an asymmetric-auctions query)
+- Is the only voice from a missing tier (e.g., the only practitioner perspective in a corpus of academic papers)
+
+For high-priority failures, work through this fallback chain in order — stop as soon as one succeeds:
+
+1. **Try alternative URLs for the same paper:**
+   - arXiv preprint version (`arxiv.org/abs/<id>` or `arxiv.org/pdf/<id>`)
+   - Author's personal page (search `"<author surname> <paper title> filetype:pdf"`)
+   - Department / institutional repository (search `"<paper title> site:<institution>.edu"`)
+   - SSRN, RePEc, NBER, OpenAlex, Semantic Scholar mirror
+   - Google Scholar's "All N versions" link
+2. **Try the visible-browser flag** on the original URL: `$HPR fetch "<url>" --visible ...`. The `--visible` flag runs the browser non-headless; many sites that block headless requests succeed when the browser is visible. Cost: ~5-10s slower per fetch.
+3. **If a login profile is configured for this vault** (`.hyperresearch/config.toml` has a `[web] profile = "<name>"` entry), crawl4ai uses it automatically — paywalled sites the user has logged into in that profile will succeed transparently. If profile-protected sites still fail, the profile may be expired; tell the user to re-run `hyperresearch setup` to refresh it. There is no `--profile` CLI flag — it's a per-vault config setting.
+4. **As a last resort**, search for a **summary or review** of the paper that captures its key claims (e.g., a textbook chapter that summarizes the result). Note this in the source's frontmatter `summary:` field as `(via summary, original PDF unavailable)`.
+5. **If all four fail and the source is genuinely irreplaceable**, surface the failure to the user — don't ship a draft that depends on a source you couldn't read.
+
+Document failures in the scaffold's "Where each source will land" section. The auditor will see the explicit gap and can flag whether the draft works around it correctly.
+
+**Low-priority fetch failures** (a peripheral source the analyst flagged with low confidence) — skip and move on. Don't waste five fallback attempts on a tangential source.
+
+#### Mandatory `--suggested-by` discipline at fetch time
+
+Every `$HPR fetch` call from Phase 2 onward MUST pass `--suggested-by <source-note-id>` AT FETCH TIME. Do NOT batch-fetch a list of next_targets first and then backfill breadcrumbs later — that produces disconnected provenance graphs that the rooted-tree lint catches as errors at Checkpoint 2.
+
+The pattern is: analyst returns `next_targets[]` with each target's `proposed_by` source id → main agent fetches each target with the corresponding `--suggested-by` flag in the same call. One subprocess per target, with the breadcrumb baked in.
+
 ```bash
-$HPR note list -j
+# CORRECT — breadcrumb at fetch time
+$HPR fetch "<url>" --suggested-by <source-id> --suggested-by-reason "<why>" -j
+
+# WRONG — fetch first, append breadcrumb later
+$HPR fetch "<url>" -j                  # creates seed-style note
+$HPR note edit <new-id> ...            # tries to graft a breadcrumb after the fact
 ```
-Review what you have. Don't chase a number — chase completeness:
-- What angles or subtopics are NOT yet covered?
-- Which notes reference sources you haven't fetched?
-- Are there counterarguments or alternative viewpoints missing?
-- Do you have primary sources or just secondhand summaries?
 
-If there's more to get, go get it. **Source count is a function of request type, not topic complexity** — use the parameter block from Step 0.5 (your classified primary type) as your primary guidance. Fall back to the universal floors below ONLY if you classified as Type 0 General Research:
-- Simple factual question: ~15–25 sources
-- Complex or technical topic: ~30–50 sources
-- PhD-level research question: ~50–80 sources
+Backfilling is supported (the fetch CLI is idempotent on re-call with `--suggested-by`), but the resulting provenance graph has disconnected components — the new note's breadcrumb points at the suggester, but if the suggester was itself a seed, the chain looks artificial. The rooted-tree provenance lint flags this and the audit-gate blocks save until you connect the islands.
 
-**Primary-heavy vs. secondary-heavy is the axis that matters most — getting this wrong is a worse failure than getting the count wrong.** "Primary" means the claim comes from first-hand: an original paper, an official document, a dataset, a product spec. "Secondary" means any description or discussion of a primary source. Types 1, 4, 5, 6 are primary-heavy — cite originals, engage with them deeply, prune irrelevant secondary coverage. Types 2, 7 are secondary-heavy — triangulate across many descriptions because no single secondary source is authoritative. Type 3 is balanced.
+**Phase 2 — Guided reading iterations.** For each fresh note, spawn the **`hyperresearch-analyst`** agent (Sonnet, registered at `.claude/agents/hyperresearch-analyst.md`) with `mode=guided`:
 
-Stop fetching when you can't find anything new worth adding, not when you hit a number. And be honest about the opposite failure: if you're still fetching past the type's range without a clear gap in mind, you're procrastinating on the writing.
+```
+research_goal: <the user's original verbatim prompt>
+sub_goal: <what this specific source should contribute>
+source_note_id: <the id of the note to read>
+mode: guided
+already_covered: <sub-topics prior iterations answered, or "none">
+already_fetched_urls: <output of `$HPR sources list -j`>
+```
 
-## Step 4: Go down rabbit holes
+Spawn multiple analysts in parallel — one per source in the current batch. Each returns: extract content + covered sub-topics + 2–5 next_targets + coverage status.
 
-Read the fetched notes and follow links to deeper material:
+**Phase 3 — Main agent orchestration.** After each iteration returns:
+
+1. **Track the iteration in TodoWrite.** Add `Iteration N: fetch [targets] from [sources]`. After it completes, mark with the coverage delta ("added 4 sources, 2 sub-topics newly covered"). This makes stalls visible.
+2. Collect every extract into a running knowledge accumulator.
+3. Merge and dedupe next_targets across all analysts. If three subagents propose the same URL, fetch it once — pass all three suggesting source IDs via repeated `--suggested-by` flags.
+4. Prioritize next_targets by: (a) which would most likely *change* the argument if they disagreed with current sources, (b) which sub-topics the corpus doesn't yet cover, (c) which tiers are missing.
+5. **Fetch the top 3–5 next_targets WITH `--suggested-by` flag. This is mandatory:**
+
+   ```bash
+   $HPR fetch "<url>" \
+     --tag <topic> \
+     --suggested-by <source-note-id-1> \
+     --suggested-by <source-note-id-2> \
+     --suggested-by-reason "<the analyst's justification>" \
+     -j
+   ```
+
+   Without this flag the data-flow chain breaks — the fetched note has no link back to the source that found it, and you cannot trace how the research graph assembled itself.
+
+   **Graceful duplicate handling:** if the URL is already in the vault, fetch will NOT error. It appends the breadcrumb to the existing note and returns `{ok: true, duplicate: true, backlinks_added: N}`. Fetch every next_target; let fetch handle dedup.
+
+6. Refresh `already_fetched_urls` (`$HPR sources list -j`). Pass it to the next iteration.
+7. Spawn `hyperresearch-analyst` on the new notes. Loop.
+
+**Phase 4 — Termination.** Exit when ANY of these fires:
+- **Coverage complete** — all analyst returns report `coverage: complete` for the sub-topics you need.
+- **Cycle detected** — next_targets repeat or every proposed target's fetch returns `duplicate: true` with `backlinks_added: 0`.
+- **Diminishing returns** — a full iteration adds zero new sub-topics. The TodoWrite delta tracker catches this.
+- **Iteration cap: 5 full loops** — more than this and the loop is drifting, not converging. Stop and move on.
+
+Then proceed to curation (Steps 5–6).
+
+---
+
+## Step 4: Rabbit holes — follow what sources point at
+
+Beyond the guided loop's automated next_targets, actively scan fresh notes for:
+
+- **Cited datasets / primary data** → fetch the original, not the summary
+- **Named scholars / practitioners / companies** → find their own writing
+- **Referenced historical cases / precedents** → fetch the case itself
+- **Interviews or quotes** → find the full transcript
+
+Every manual rabbit-hole fetch MUST also pass `--suggested-by` naming the source that sent you there:
 
 ```bash
-$HPR note show <note-id> -j
+$HPR fetch "<url>" \
+  --tag <topic> \
+  --suggested-by <source-note-id> \
+  --suggested-by-reason "<one-line reason>" \
+  -j
 ```
 
-For each note, look for:
-- **Papers cited** → fetch them (PDFs are fully supported — fetch directly)
-- **Documentation linked** → fetch it
-- **GitHub repos mentioned** → fetch the README
-- **Related topics referenced** → search and fetch
-- **People/companies mentioned** → fetch their pages
-- **Raw data, CSVs, datasets linked** → fetch and analyze them
-- **Statistics without primary sources** → search for and fetch the original data
+Claims carry more weight when the graph shows you traced them to primary sources.
 
-**PDFs work natively.** arXiv papers, NBER working papers, conference proceedings — fetch them directly. The tool auto-detects PDFs and extracts full text. Don't skip sources because they're PDFs.
+---
 
-**Use scholarly APIs for academic topics.** When the research is academic, use APIs to find papers:
-- arXiv API: `https://export.arxiv.org/api/query?search_query=...`
-- Semantic Scholar API: `https://api.semanticscholar.org/graph/v1/paper/search?query=...`
-- CrossRef API: `https://api.crossref.org/works?query=...`
+## Step 4.5: Note triage (MANDATORY throughout)
 
-Write code to call these, get structured paper data (citations, related work, abstracts), then fetch the actual PDFs.
+Never blindly `note show` every note. Triage first.
 
-Follow links deeply — don't stop at the first page. When a source links to more detailed material, primary research, or raw data, follow those links and fetch them too.
-
-**Run analysis when needed.** If you find raw data (tables, CSVs, statistics), write and run code to compute real figures, verify claims, calculate trends, and produce original analysis. Concrete numbers from actual data beat vague summaries.
-
-Spawn more fetcher agents for these secondary sources.
-
-**Do NOT stop collecting until you are certain you have enough breadth.** After each round of fetching, ask yourself: "Are there major angles, subtopics, or perspectives I haven't covered yet?" If yes, search and fetch more. If a topic has 5 facets, you need sources on all 5 — not just the first 2 you found. Keep going until you can confidently say the collection covers the full scope of the topic.
-
-## Step 4.5: Read notes efficiently — triage by frontmatter (MANDATORY)
-
-When inspecting notes in the research base, NEVER blindly `note show` every note. Bodies can be 15,000+ words; frontmatter summaries are usually under 40. **Triage first, body-read only when earned.** This protocol applies throughout the rest of the workflow — use it in Step 4 (rabbit holes), Step 8 (cross-source comparison), and Step 9 (draft writing).
-
-### Level 1 — Frontmatter sweep (cheap, always start here)
-
-```bash
-$HPR note list -j
-```
-
-Returns one object per note with `id`, `title`, `tags`, `summary`, `word_count`, `status` — **no bodies**. Scan this to build a relevance shortlist. For many claims the summary field is enough — a well-curated note's summary already tells you what the source claims, and you cite the source URL directly without re-reading the body.
-
-### Level 2 — Frontmatter-only show (targeted)
-
-For a single note whose summary hints at deeper value, pull its full frontmatter without the body:
-
-```bash
-$HPR note show <id> --meta -j
-```
-
-Adds `source`, `parent`, `created`, `updated`, `raw_file` (if the note has a PDF). Still cheap. Decide from here whether the body is worth pulling.
-
-### Level 3 — Inline body read (only for small notes)
-
-```bash
-$HPR note show <id> -j
-```
-
-Threshold: `word_count < 2000` (~2700 tokens). Small enough to read directly. Batch several at once: `note show <id1> <id2> <id3> -j`.
-
-### Level 4 — Targeted search with body, token-capped
-
-When you need content from multiple notes at once:
-
-```bash
-$HPR search "<precise question>" --include-body --max-tokens 6000 -j
-```
-
-`--max-tokens` truncates intelligently and flags `"truncated": true` on the last fitting result. Prefer this over N separate `note show` calls.
-
-### Level 5 — Delegate heavy notes to a Sonnet subagent (MANDATORY for large notes)
-
-For any note with `word_count > 6000` (~8000 tokens, often PDFs), do NOT dump it into your own context. Spawn a Sonnet subagent with a pointed extraction prompt:
-
-> Use a fresh Sonnet subagent:
-> "Read `research/notes/<id>.md` (and its raw file at `research/raw/<id>.pdf` if the frontmatter has `raw_file` set). Extract ONLY what answers this specific question: '<your precise question>'. Return under 500 words, with direct quotes for any non-trivial claim and the source URL. If the note doesn't actually answer the question, say so and stop."
-
-The subagent reads the full 20K+ tokens internally but returns only ~500 tokens to you — roughly a 40× context savings per large note, which compounds across a session.
-
-### Level 6 — Raw PDF re-extraction (rare)
-
-If a note has `raw_file: raw/<id>.pdf` in its frontmatter AND the extracted markdown looks garbled or is missing content you need (specific figure, table, equation), read the raw PDF directly with the Read tool. Most of the time the extracted markdown is sufficient — only fall back here when it's clearly broken.
-
-### Triage thresholds (guidance, not hard rules)
-
-| word_count | Tier | Action |
+| Level | Command | When |
 |---|---|---|
-| `< 2000` | Trivial | Read inline via Level 3. Batch with siblings. |
-| `2000 – 6000` | Medium | Level 2 frontmatter first. Body only if the summary suggests high value. |
-| `> 6000` | Heavy | Level 5 Sonnet delegation. Don't read inline. |
+| 1 — List | `$HPR note list -j` | Always start here. Summaries only, no bodies. |
+| 2 — Meta | `$HPR note show <id> --meta -j` | When the summary hints at deeper value. |
+| 3 — Inline | `$HPR note show <id> -j` | word_count < 2000. Batch small notes: `note show <id1> <id2> <id3> -j` |
+| 4 — Search | `$HPR search "<q>" --include-body --max-tokens 6000 -j` | When you want content across multiple notes. |
+| 5 — Subagent | Spawn `hyperresearch-analyst` (mode=extract) | word_count > 3000, OR whenever you need one specific answer from a big source. Never dump large notes inline. |
 
-Override with reason (e.g. a single 8000-word paper is your most important primary source — read it directly, once). But defaulting to "just `note show` everything" is how sessions run out of context and reports turn shallow.
+---
 
-## Step 5: Auto-link and curate
+## Steps 5–6: Curate every source
 
-Run the auto-linker to connect related notes:
+Raw fetched notes arrive with `status=draft`, `tier=unknown`, auto-detected `content_type`, and no summary. Curation has two parallel jobs:
+
+1. **Set metadata** — tier, content_type, summary, tags, status (you do this with `$HPR note update`)
+2. **Extract relevant content** — spawn `hyperresearch-analyst` on the source so you have an extract note grounded in the research goal
+
+**Both must happen for every fetched source.** The analyst extract is what gives you the substance to write deep prose about the source later; the metadata is what lets you query and filter the corpus during drafting.
+
+### Step A: Spawn the analyst on every source
+
+For research, the analyst is the default reading mechanism — not a fallback for big sources. Even small sources (1500 words) deserve analyst treatment because the analyst's URL-scan surfaces follow-up targets for the loop.
+
+```
+For each draft source note:
+  Spawn hyperresearch-analyst with:
+    research_goal: <the user's original verbatim prompt>
+    sub_goal: "establish what this source contributes and what URLs / authors / claims warrant follow-up"
+    source_note_id: <draft note id>
+    mode: guided
+    already_covered: <running list from prior analysts>
+    already_fetched_urls: <output of `$HPR sources list -j`>
+```
+
+Spawn 3–5 in parallel (Sonnet, cheap). Each analyst reads the source, persists an extract note (`--add-tag extract --parent <source-id>`), and returns an extract + next_targets + coverage status.
+
+Collect every analyst's next_targets into TodoWrite. After each batch, fetch the top next_targets WITH `--suggested-by` so the loop iterates. **The fetch:extract ratio after curation should be at least 1:1** — every fetched source has a paired extract note. The `analyst-coverage` lint rule catches misses at Checkpoint 2.
+
+### Step B: Set metadata from the analyst's findings
+
+The analyst's return tells you the tier and content_type. After it returns:
 
 ```bash
+$HPR note update <source-id> \
+  --tier <ground_truth|institutional|practitioner|commentary> \
+  --content-type <paper|docs|article|blog|forum|dataset|policy|code|book|transcript|review> \
+  --summary "<one-line description, can borrow from the analyst's extract>" \
+  --add-tag <topic> --add-tag <subtopic> \
+  --status review \
+  -j
+```
+
+**Tier and content_type are PER-NOTE decisions.** Never apply one value to the whole batch. A fandom wiki is `docs`; a news article is `article`; a named-engineer blog post is `blog`; a reddit thread is `forum`; a GitHub README is `code`. An arxiv paper on theory is `institutional`; the same paper reporting experimental data is `ground_truth`; a conference keynote transcript is `commentary`. Read each analyst return and make the call per source.
+
+### Completion check
+
+```bash
+$HPR lint --rule uncurated -j         # zero uncurated
+$HPR lint --rule provenance -j        # zero provenance issues (--suggested-by chain exists)
+$HPR lint --rule analyst-coverage -j  # zero analyst-coverage issues
 $HPR link --auto -j
-```
-
-Check what tags exist and ensure consistency:
-
-```bash
-$HPR tags -j
-```
-
-Update any notes missing summaries (auto-curation handles most, but fix any gaps):
-
-```bash
-$HPR lint -j
-$HPR repair -j
-```
-
-## Step 6: Discover the knowledge graph
-
-Find the hub notes and key connections:
-
-```bash
 $HPR graph hubs -j
-$HPR graph backlinks <most-linked-note-id> -j
 ```
 
-## Step 7: Build the conceptual scaffold (MANDATORY — before writing)
+If any lint returns issues, curation is NOT done. Go back, run more analyst calls, fetch proposed next_targets with `--suggested-by`, and re-run the lints before Checkpoint 2.
 
-This is the single biggest lever for report quality. Reports that look like references are built from a scaffold; reports that look like Wikipedia dumps are assembled by translating notes into sections. Before a single paragraph of prose, answer these four questions.
+---
 
-**Where to put the scaffold:** keep it in your working memory, or dump it to a temp file like `/tmp/scaffold.md`. **DO NOT save it as a hyperresearch note.** The research base is for durable source material, not ephemeral pre-writing analysis. Notes are forever; scaffolds are for the next hour of writing.
+## Step 7: Build the scaffold — with the verbatim user prompt as the first section
 
-1. **What is the hard question?** One sentence — the underlying difficulty, not the surface query.
-2. **What is the naive answer?** What a reader would guess before reading any sources. This is your foil — the thing the report has to explain away.
-3. **What is the structural tension?** What makes this topic worth 10,000 words? The paradox, the constraint, the thing sources disagree on, the unsettled question.
-4. **What is the progression?** Sketch 6–12 H2 section headings in **dependency order**. Each section must build on the previous one. If the headings could be shuffled, you have a catalog, not a report.
+**Required artifact:** a note tagged `scaffold` whose FIRST section is the user's verbatim prompt.
+**Verification:** `$HPR note list --tag scaffold -j` must return ≥1 entry after this step AND the body of that note must contain the verbatim user prompt.
+**On failure:** the draft has no anchor. Return to Step 7 and write the scaffold.
 
-The final report's **opening section MUST be a framework section**, not a definition section. Section 1 establishes the hard question and the structural tension. Not "X is a Y that does Z."
+Using the **Write tool**, create `research/scaffold.md` with this exact structure:
 
-## Step 8: Cross-source comparison (MANDATORY)
+```markdown
+## User Prompt (VERBATIM — gospel)
+> [the user's entire message, copied character-for-character from the prompt.
+> This is the authoritative source. Every subsequent step re-reads this
+> section. Do not paraphrase. Do not truncate. Do not reformat.]
 
-Sources earn their citations by being compared against each other, not by being listed in parallel. Find 3–5 places where your sources actually disagree, emphasize different things, or frame the same problem differently.
+## What the user explicitly asked for
+- **Explicit deliverables:** <list — or "none">
+- **Explicit entities or items:** <list — or "none">
+- **Explicit per-item fields:** <list — or "none">
+- **Explicit structure:** <or "silent">
+- **Explicit format:** <or "silent">
+- **Explicit scope cues:** <or "silent">
+- **Explicit ordering:** <or "silent">
+
+## Primary activity and secondary flavor
+- **Primary:** <collect | synthesize | compare | forecast>
+- **Secondary (optional):** <or "none">
+- **Why:** <one sentence>
+
+## Core tension
+<what makes this question non-trivial — the paradox, disagreement, tradeoff,
+or open problem the draft has to earn its way through>
+
+## The structural plan
+<Ordered list of sections the draft will produce. Honor every explicit
+structural mandate from "What the user explicitly asked for". Where the
+prompt is silent, apply the primary modality's default structural guidance.
+For each section, name it AND describe what it will contain in one line.>
+
+## Where each source will land
+<One line per curated source-id: which heading(s) it serves and in what role
+(ground-truth evidence, institutional synthesis, dissenting voice, etc.).>
+
+## Coverage checklist (the auditor will verify this)
+<One line per explicit contract from "What the user explicitly asked for".
+The auditor at Step 11 reads this checklist and verifies each item is
+ticked off in the draft. If the user said "for each of 108 Specters provide
+techniques and fate", there must be a coverage-checklist line that will be
+checked against the draft. Do not write vague checks.>
+```
+
+Then run:
 
 ```bash
-$HPR search "<topic>" --include-body -j
+$HPR note new "Scaffold: <topic>" --tag scaffold --status draft \
+  --body-file research/scaffold.md --summary "Scaffold for <topic>" -j
 ```
 
-For each disagreement, capture a short comparison block in the same scratch file as the scaffold from Step 7 — **NOT as a hyperresearch note**. These are ephemeral analysis artifacts that will end up as prose inside the final report, not durable KB entries:
-- what each source says, with URLs
-- why they differ (data, methodology, assumptions, era, scope)
-- your position on which is more credible, with reasoning
+**The verbatim user prompt goes FIRST.** This is non-negotiable. Every checkpoint re-opens the scaffold, and re-opening the scaffold means re-reading the prompt. The prompt lives inside the document so it cannot drift out of context.
 
-These comparisons become the backbone of body sections. If every source is corroborating every other source, you didn't need many sources — search again for contrarian views, criticism, or competing frameworks.
+---
+
+## Step 8: Cross-source comparisons
+
+**Required artifact:** a note tagged `comparison` containing 3–5 explicit source-vs-source disagreements with your position on each.
+**Verification:** `$HPR note list --tag comparison -j` must return ≥1 entry after this step.
+**On failure:** the thesis / recommendation / forecast has no stress test. "I did it in my head" is not acceptable.
+
+Find 3–5 places where sources disagree. Read both at Level 3+ before comparing.
+
+Using the **Write tool**, create `research/comparisons.md`:
+
+```markdown
+## Disagreement 1: <what axis are they disagreeing about>
+- Source A ([URL]): <claim/reading> because <reasoning/evidence>
+- Source B ([URL]): <different claim> because <different reasoning>
+- Why they differ: <theoretical framework? different data? different time window? different scope?>
+- My position: <which is more credible and why — take a side, with the evidence that tips the balance>
+```
+
+Then run:
+
+```bash
+$HPR note new "Comparisons: <topic>" --tag comparison --status draft \
+  --body-file research/comparisons.md --summary "Source comparison for <topic>" -j
+```
+
+---
 
 ## Step 9: Write the draft
 
-**First, pull up your classification from Step 0.5.** The parameter block for your primary type sets target length, H2 count, opening shape, and analytical mode. The hard constraints below are Type 0 defaults — they apply EXCEPT where your type's block overrides them. Notable overrides:
-- **Type 4 Humanities** targets 6–10 longer H2s (800–1500 words each), not 12–20.
-- **Type 2 Market** wants one section per vendor *cluster*, not per individual vendor.
-- **Type 5 Comparative** requires a mandatory comparison matrix in the body.
-- **Type 6 Emerging** requires a "What we don't know yet" section.
+**Before writing anything:** re-open `research/scaffold.md`. Re-read the verbatim user prompt. Re-read the "What the user explicitly asked for" extraction. Re-read the coverage checklist. This is mandatory — every draft session must begin with re-encountering the prompt.
 
-Now write the report. These are hard constraints (under Type 0; type-specific overrides apply where listed above):
+Then read your modality file's substance rules. The modality file tells you HOW to write: interpretation density (synthesize), enumerative completeness (collect), proportionate depth + recommendation (compare), probability language + time horizon (forecast).
 
-- **Target 400–600 words per H2 section.** Sections under 200 words get merged. Sections over 800 get split — only if both halves stay above 300. (Type 4 Humanities: 800–1500.)
-- **Aim for 12–20 H2 headings on a 10K-word report; 8–15 on a 5K-word report.** Above 25 is fragmentation — merge. (Type 4 Humanities: 6–10.)
-- **Never write one section per source or one section per named entity.** A single H2 section weaves 3–8 sources together. A character, vendor, or paper does not earn its own section unless it has >400 words of real analysis attached.
-- **Every body section ends with an analytical beat** — a 1–2 sentence "so what does this tell us" that integrates across the sources just cited. The Opinionated Synthesis at the end is NOT supposed to carry the synthesis load alone.
-- **Open with the framework from Step 7, not a definition.** Section 1 = hard question + naive answer + structural tension.
-- **Cite inline with parenthetical URLs.** Every non-trivial claim needs one. Prefer primary sources.
-- **Comparison tables over fact tables.** A good table contrasts cases on a common axis. A bad table dumps attributes of one entity.
-- **Word count targets.** Simple factual: 3,000–5,000. Complex/technical: 6,000–9,000. PhD-level: 9,000–12,000. Missing these is usually a signal that the scaffold from Step 7 is wrong — go back and fix the scaffold before writing more prose.
+**Write `research/notes/final_report.md`** as a normal markdown file (no frontmatter needed for the draft — final save happens at Step 13).
 
-## Step 10: Gap analysis (MANDATORY)
+### Shared writing constraints (apply to every activity)
 
-After writing your draft, stop and compare it against the original query. Re-read the user's request word by word:
-- What specific questions did they ask that I haven't fully answered?
-- What subtopics or angles did I miss entirely?
-- Where did I make claims without strong enough evidence?
-- What would an expert in this field say is missing?
+- **The opening must establish the core tension.** What makes this question non-trivial? What paradox, disagreement, tradeoff, or open problem is the draft earning its way through? If the user requested a specific opening shape (definitions, executive summary, narrative hook), honor that shape — then make it do tension-framing work.
+- **Every body section must earn its analytical beat.** A section that just describes facts without making an interpretive / comparative / forward move is a catalog entry, not a research contribution. Each section ends with a so-what, a comparison, a tension, or a forward beat.
+- **Sources in tension at least twice in the body.** Find two places where your sources disagree and walk the reader through the disagreement, naming both positions and explaining which is more defensible. Synthesis alone does not make up for this — the body itself must engage dissent.
+- **Every claim has a citation.** Inline parenthetical URL, or `[[note-id]]` if you want the reader to trace it in the vault.
+- **Tier weighting.** Anchor substantive claims in `ground_truth` sources. Use `institutional` for positioning. Use `practitioner` for reality checks. Use `commentary` only to characterize reception, never to establish a load-bearing claim.
+- **No padding to hit a length.** There is no length target. If your substance fits in 3,000 words, write 3,000 words. If it needs 12,000, write 12,000. A draft should be as long as the content demands.
 
-Launch a new round of research to fill every gap — web search, fetch, follow links, spawn fetcher subagents in parallel. Add the new material to your draft.
+### Activity-specific substance rules
 
-## Step 11: Adversarial audit (MANDATORY — do this twice)
+Open your modality file and read its Step 9 section. Its substance rules layer on top of the shared constraints above — they do not replace them.
 
-After the gap-filling round, launch two subagents in parallel to audit the revised draft:
+### Secondary flavor layering (MANDATORY when your scaffold declared a secondary)
 
-**Agent 1 — Comprehensiveness auditor:**
+If your Step 1 classification declared a secondary flavor, your draft must satisfy BOTH modalities' substance rules — not just the primary's. Read the **secondary modality's Step 9 substance rules AND its conformance checks** before you start writing.
+
+Conflict resolution:
+- **Primary wins on structure.** Section shape, entity-vs-thematic sequencing, comparison-matrix presence, scaffold skeleton — all determined by the primary modality.
+- **Secondary wins on substance within sections.** Per-paragraph density rules, tension requirements, interpretation/enumeration discipline — these layer on top of the primary's structure.
+
+Example (Q91-style: `primary=collect`, `secondary=synthesize`):
+- Collect (primary) forces per-character coverage across every entity category in the prompt. The structure is entity-based.
+- Synthesize (secondary) forces every paragraph to fuse fact with interpretive claim AND at least two body sections to put sources in tension.
+- The draft has entity-named sections (primary structure) where every paragraph inside makes an interpretive claim about what that entity means (secondary substance).
+
+The auditor applies BOTH check lists at Step 11. Secondary-flavor violations are **not waivable** — they are CRITICAL findings that block synthesis save via the `audit-gate` lint rule. If a prompt is genuinely 50/50 across two activities, plan to satisfy both; do not silently drop the secondary.
+
+---
+
+## Step 10: Gap analysis + adversarial search
+
+After the first draft, run adversarial searches specific to your activity — the modality file names the queries. Ask yourself:
+
+- Did you engage with the strongest counter-position?
+- Is every item in the scaffold's coverage checklist actually ticked off in the draft?
+- Are there tiers you're missing (all commentary, no ground_truth)?
+- Is there a named voice you should be citing that isn't in the vault yet?
+
+Fetch what's missing. Update the draft.
+
+---
+
+## Step 11: Adversarial audit — spawn `hyperresearch-auditor` twice
+
+**Required artifact:** text output from both `hyperresearch-auditor` runs in your context, plus every identified violation applied to the draft.
+**Verification:** in writing, list each violation the auditors raised and whether it has been fixed or explicitly rejected.
+**On failure:** an unapplied audit is equivalent to no audit. Task has FAILED at Checkpoint 4.
+
+**Spawn `hyperresearch-auditor` twice — once per mode. Run them SEQUENTIALLY, comprehensiveness first then conformance.** The auditor is a registered Claude Code agent (`.claude/agents/hyperresearch-auditor.md`) running on Opus. Both runs MUST receive the user's original research query **verbatim** — the same prompt you pasted into the scaffold.
+
+Run comprehensiveness first so its findings land in `research/audit_findings.json` without a write race, then run conformance which reads the file and appends its own entry.
+
 ```
-Read this report and search the research base ($HPR search, $HPR note show) to find gaps.
-What subtopics, angles, data points, or counterarguments are missing? What claims lack
-citations? What sections are shallow? Compare against the original query and be ruthless —
-list every gap you find.
+First spawn (wait for completion before the second):
+  research_query: <paste the user's verbatim prompt from scaffold §1>
+  modality: <collect | synthesize | compare | forecast>
+  mode: comprehensiveness
+  final_report_path: research/notes/final_report.md
+  scaffold_note_id: <scaffold note id>
+  comparison_note_id: <comparison note id>
+
+Second spawn (only AFTER the first has returned and written its entry):
+  research_query: <paste the user's verbatim prompt from scaffold §1>
+  modality: <collect | synthesize | compare | forecast>
+  mode: conformance
+  final_report_path: research/notes/final_report.md
+  scaffold_note_id: <scaffold note id>
+  comparison_note_id: <comparison note id>
 ```
 
-**Agent 2 — Logic and structure auditor:**
-```
-Read this report as a domain expert. The report should declare its request type
-(Step 0.5 classification) and follow the matching parameter block. Check specifically:
-  (1) Does section 1 establish a framework — hard question, naive answer, structural
-      tension — or does it just define terms?
-  (2) Are sections in dependency order? Does each section build on the previous one, or
-      could they be shuffled without loss?
-  (3) Are there sections under 200 words that should be merged into siblings?
-      (Type 4 Humanities: <400 is the floor, not 200.)
-  (4) Count H2 headings. Fragmentation thresholds vary by type: Type 0 General is >25 on
-      a <12K-word report; Type 4 Humanities is >12; Type 2 Market is >15.
-  (5) Does each body section end with an analytical beat, or does it just stop?
-  (6) Are sources compared against each other anywhere, or only listed in parallel?
-  (7) Does the argument flow logically — leaps, unsupported claims, contradictions?
-  (8) Does the report match its declared request type? If Type 4 Humanities, are sections
-      thematic rather than entity-catalog? If Type 5 Comparative, is there a mandatory
-      comparison matrix? If Type 6 Emerging, is there a "What we don't know yet" section?
-      If Type 2 Market, is there a position on who is winning? Flag every type violation.
-List every weakness with specific section names and direct quotes.
-```
+After both have returned, verify `research/audit_findings.json` has TWO new entries (one per mode) before proceeding. If only one mode's entry is present, re-spawn the missing mode — the `audit-gate` lint rule will fail at Step 13 if either is missing.
 
-Pass your full draft report text to both agents.
+The auditor reads your modality file's "Conformance checks" section, applies each check, persists its findings to `research/audit_findings.json`, and returns a text summary with `pass` / `needs_fixes` / `failed` status. Apply every CRITICAL finding before saving the synthesis, and mark each fixed finding's `fixed_at` field in the JSON file as you go. The auditor also reads the scaffold — so it re-encounters the verbatim prompt — and verifies the draft honors the scaffold's coverage checklist.
 
-**After each audit round:**
-1. Read both agents' feedback
-2. If they found missing topics or weak arguments — do another round of web search + fetching
-3. If the structure auditor flagged fragmentation, short sections, or a missing framework — **consolidate and rewrite, don't just patch.** Merging five 100-word sections into one 500-word section is a rewrite, not an edit. This is where catalog-style drafts become argument-style drafts.
-4. Rewrite the report with new sources and structural fixes
-5. Run the audit again (second loop) on the revised report
+---
 
-**Do at least one audit loop. Do two if the first found significant gaps.** Only finalize after auditors have no major complaints.
+## Step 12: Opinionated synthesis
 
-**While audit agents are running, don't idle.** Use the wait time to:
-- Improve weak or missing summaries on notes (`$HPR note update <id> --summary "..." -j`)
-- Add more specific tags to under-tagged notes (`$HPR note update <id> --add-tag <tag> -j`)
-- Add `[[wiki-links]]` between related notes
-- Run `$HPR lint -j` and fix issues
-- Read notes you haven't reviewed yet for links worth following
-
-## Step 12: Opinionated synthesis (MANDATORY — end of report)
-
-A comprehensive catalog of facts is not a report. Before finalizing, you **MUST** append a section titled **`## Opinionated Synthesis`** at the very end of the report. This is where you stop reciting what sources said and start **reasoning across them**.
-
-This section **complements — it does not replace** — the per-section analytical beats from Step 9. If all the analysis is dumped in this appendix and the body sections are purely descriptive, the report is still a catalog with a synthesis bolted onto the end. Both are required.
-
-**Your Opinionated Synthesis section MUST include:**
-
-1. **Comparative analysis across categories.** Don't just describe each group or concept in isolation — compare them. What do the groups have in common? Where do they differ? What patterns emerge when you look at them side by side? Build at least one comparison table if the topic supports it.
-
-2. **Thematic threads and progression.** What themes cut across the whole topic? What's the narrative arc? How do things evolve over time, across versions, across authors, across schools of thought? Identify the throughlines.
-
-3. **Your reasoned position.** Take a defensible stance. What's the most important finding? What's over-hyped? What's underrated? What do you expect to change in the next 2–5 years? Label it clearly as your own analysis, grounded in the sources you fetched.
-
-4. **Open questions and limitations.** What did the sources NOT answer? What would an expert say is still unclear? Where is the research thin? Name the gaps explicitly.
-
-5. **Concluding thoughts.** One tight paragraph that ties everything back to the user's original question. What's the takeaway they should remember?
-
-**Structure of the synthesis section (use these subheadings exactly):**
+Append this to the end of the draft:
 
 ```markdown
 ## Opinionated Synthesis
 
-### Comparative Analysis
-<cross-cutting comparisons — tables where useful>
+### <Activity-specific header — see modality file>
+<the cross-cutting picture the modality demands: thematic threads for
+synthesize, comparison matrix for compare, position-with-horizon for
+forecast, coverage summary for collect>
 
 ### Thematic Threads
-<patterns, progressions, throughlines across the topic>
+<patterns across the body sections that the per-section analysis couldn't
+surface — what the whole corpus is saying that no single source said>
 
 ### My Reasoned Position
-<your defensible stance, clearly labeled as analysis>
+<your defensible stance, explicitly labeled. Synthesize demands a thesis;
+compare demands a recommendation; forecast demands a prediction with
+probability language and a time horizon; collect demands a "what this whole
+set amounts to" claim.>
 
 ### Open Questions
-<gaps in the research, what the sources didn't answer>
+<what the sources didn't settle, what data is unavailable, what would
+change your position>
 
 ### Concluding Thoughts
-<one tight paragraph, answers the original question>
+<one tight paragraph: the single most important thing a reader should
+take away — and why>
 ```
 
-**Do NOT skip this section.** A report without an Opinionated Synthesis is incomplete. Even 9,000 words of carefully cataloged facts is just reference material without it. The synthesis is what separates a research report from a Wikipedia dump.
+---
 
-## Step 13: Save the final report
+## Steps 13–14: Save and present
 
-Save the final reviewed report as a synthesis note:
+**Before saving the synthesis**, run the audit-gate lint to confirm the audit loop is closed. This is a hard gate — the synthesis cannot be saved until it returns zero error-severity issues:
 
 ```bash
-cat > /tmp/synthesis.md << 'SYNTHESIS'
-# <Topic> — Research Synthesis
+$HPR lint --rule audit-gate -j
+```
 
-## Key Findings
-<your synthesis here>
+The `audit-gate` rule checks three conditions against `research/audit_findings.json`:
 
+1. **Both audit modes must have appended a run.** If the file has a comprehensiveness run but no conformance run (or vice versa), the gate fails with a missing-mode error — spawn the missing auditor mode and retry.
+2. **No unresolved CRITICAL findings in the most recent conformance run.** Every CRITICAL must have a non-null `fixed_at` timestamp. Walk the unresolved list, apply the fix to `research/notes/final_report.md`, and mark `fixed_at: <current ISO timestamp>` on the finding in the JSON file. If a finding cannot be fixed (e.g. the auditor misread the draft), resolve it by marking `fixed_at` with a `notes` field explaining why the rejection is safe — but that is a last resort, not a bypass.
+3. **IMPORTANT findings surface as `info` severity** (advisory, does not block save). They appear in the lint output so you see them before committing. You are strongly encouraged to patch them if they name real gaps — they often do. Mark each as `fixed_at` in the JSON once patched.
+
+After applying fixes:
+- If you patched the draft, re-spawn the conformance auditor (which will append a fresh run to the findings file) and re-run the lint.
+- If `audit-gate` returns zero error-severity issues — proceed to save.
+- If it still fails, diagnose which specific finding is blocking and address it. **Do NOT bypass the gate by editing `audit_findings.json` to clear findings without patching the draft first.**
+
+This is how the audit loop actually closes: findings are persisted → fixes are applied → `fixed_at` is set → the lint passes → the synthesis saves. Each step leaves an artifact on disk.
+
+Using the **Write tool**, create `research/synthesis.md`:
+
+```markdown
+# <Topic> — Synthesis
+## Position
+<your thesis / recommendation / forecast / coverage summary>
 ## Sources
-<wiki-links to all source notes: [[note-id-1]], [[note-id-2]], etc.>
-
+<[[note-id-1]], [[note-id-2]], ...>
 ## Open Questions
-<what wasn't answered, what needs more research>
-SYNTHESIS
-
-$HPR note new "Synthesis: <topic>" --tag <topic> --tag synthesis --type moc --status review --body-file /tmp/synthesis.md --summary "<one-line summary of findings>" -j
+<unresolved>
 ```
 
-## Step 14: Present to user
+Then run:
 
-Present your findings with:
-
-1. **Executive summary** — 2-3 sentence answer to their question
-2. **Key findings table** — the most important discoveries
-3. **Sources collected** — how many notes, from which domains
-4. **Hub notes** — the most-referenced/important notes in the graph
-5. **Open questions** — what you didn't find or what needs more research
-6. **How to explore** — tell them they can ask follow-up questions and you'll search the KB
-
-Example closing:
-```
-Research complete. 15 sources collected on "<topic>":
-- 3 primary papers, 5 technical blogs, 4 documentation pages, 3 news articles
-- Hub notes: [[key-note-1]], [[key-note-2]]
-- All sources are saved and searchable across sessions.
-
-Ask me anything about this topic — I'll search the research base first.
+```bash
+$HPR note new "Synthesis: <topic>" --tag <topic> --tag synthesis --type moc \
+  --status review --body-file research/synthesis.md \
+  --summary "<one-line position>" -j
 ```
 
-## Important rules
+Present to the user: your position in 2–3 sentences, the key structural beats, sources collected, and what would change your position.
 
-- **NEVER use WebFetch for source pages.** Always use `$HPR fetch` or the fetcher subagent.
-- **Over-collect, then prune.** Fetch aggressively. Deprecate irrelevant notes after synthesis.
-- **Save raw content.** Don't rewrite or summarize sources before saving. The full text is the value.
-- **Follow links.** A blog post about a paper is not the paper. Fetch the paper.
-- **Save your synthesis.** Every research session should produce a synthesis note that future agents can find.
+---
+
+## Process review checkpoints
+
+Each checkpoint is a STOP point. Run the commands, state results in writing, decide whether the task has failed.
+
+### Checkpoint 1 — after Step 3 (post-fetch)
+
+**Purpose:** verify the corpus has enough voice diversity before reading it.
+
+```bash
+$HPR note list --status draft -j | python -c "import sys,json; d=json.load(sys.stdin)['data']; print(f'draft notes: {len(d)}')"
+$HPR sources list -j | python -c "
+import sys, json
+from collections import Counter
+from urllib.parse import urlparse
+d = json.load(sys.stdin)['data']
+sources = d if isinstance(d, list) else d.get('sources', [])
+total = len(sources)
+domains = Counter(urlparse(s['url']).netloc.replace('www.','') for s in sources if s.get('url'))
+print(f'total sources: {total}, unique domains: {len(domains)}')
+for dom, count in domains.most_common(10):
+    pct = count / max(total, 1) * 100
+    flag = ' <-- OVER 30% (concentrated)' if pct > 30 else ''
+    print(f'  {count:>3}  ({pct:>5.1f}%)  {dom}{flag}')
+"
+```
+
+**Pass conditions:**
+- [ ] At least one note fetched from each mandatory adversarial search in your modality file
+- [ ] **At least one source explicitly dissents from / criticizes the dominant view.** "Dominant view" is what the bulk of your corpus implicitly endorses; the dissenting source must contradict it directly (not just complicate it). State the dominant view in writing and identify which source is the dissent. If you cannot identify one, you have NOT satisfied the adversarial round — go fetch one before proceeding.
+- [ ] No single domain represents >30% of fetched sources (voice diversity)
+- [ ] At least 5 unique non-reference voices (critical essays, named-author blog posts, peer-reviewed papers — NOT listicles or reference wikis)
+
+**On failure:** run additional searches with diversified queries, vary the source types, seek named voices. For the dissent gap specifically: search for the named opponent of the dominant figure ("Roubini on inflation" rather than "inflation criticism"), look for retractions/withdrawals, look for "we tried X and switched to Y" postmortems. Return to Step 2.
+
+### Checkpoint 2 — after Steps 5–6 (post-curate)
+
+**Purpose:** verify every source has been analyzed AND classified.
+
+```bash
+$HPR lint --rule uncurated -j
+$HPR lint --rule provenance -j
+$HPR lint --rule analyst-coverage -j
+$HPR note list --all -j | python -c "import sys,json; from collections import Counter; notes=json.load(sys.stdin)['data']; t=Counter(n.get('tier') for n in notes if n.get('status')!='draft'); ct=Counter(n.get('content_type') for n in notes if n.get('status')!='draft'); print(f'tiers: {dict(t)}'); print(f'content_types: {dict(ct)}')"
+```
+
+**Pass conditions:**
+- [ ] Zero `uncurated` issues
+- [ ] Zero `provenance` **errors** — the rule itself computes the non-seed ratio and errors when under 30% on a corpus >10, so if this lint returns zero errors the guided loop fired adequately. Read its output carefully; its message tells you `non_seeds / total` directly.
+- [ ] Zero `analyst-coverage` issues (at least 33% of fetched sources have a paired extract note)
+- [ ] Tier and content_type distributions are nuanced (not one dominant value)
+- [ ] At least two tiers represented
+- [ ] At least three content_types represented
+
+**On failure:** re-classify per-note based on each analyst's return; spawn analysts on skipped sources; **run the guided reading loop**: spawn `hyperresearch-analyst` on existing sources, collect their `next_targets`, and fetch the top 3-5 WITH `--suggested-by <source-note-id>`. You cannot proceed to Step 7 (scaffold) until the guided loop has fired at least once — the provenance chain is a load-bearing invariant.
+
+**Specifically when `provenance` errors:** the rule message will say something like *"Only 3/19 source notes (16%) have breadcrumbs — the guided reading loop did not fire"*. Read that number literally. If it's below 30%, you MUST return to Step 4 and run the guided loop: spawn an analyst on each existing source, collect `next_targets`, fetch each target with `--suggested-by <source-note-id> --suggested-by-reason "<why>"`, then re-run Checkpoint 2. Skipping this means the draft rests on seed fetches alone and the bouncing-loop-discovered critical voices never made it into the corpus.
+
+### Checkpoint 3 — BEFORE Step 9 (pre-draft gate — CRITICAL)
+
+**Purpose:** this is the gate that protects the draft from being written on a broken foundation.
+
+```bash
+$HPR note list --tag scaffold -j | python -c "import sys,json; d=json.load(sys.stdin)['data']; print(f'scaffold notes: {len(d)}')"
+$HPR note list --tag comparison -j | python -c "import sys,json; d=json.load(sys.stdin)['data']; print(f'comparison notes: {len(d)}')"
+$HPR note list --tag extract -j | python -c "import sys,json; d=json.load(sys.stdin)['data']; print(f'extract notes: {len(d)}')"
+$HPR lint --rule scaffold-prompt -j
+$HPR lint --rule uncurated -j
+$HPR lint --rule provenance -j
+$HPR lint --rule analyst-coverage -j
+$HPR lint --rule workflow -j
+```
+
+**Pass conditions:**
+- [ ] Scaffold note count ≥ 1
+- [ ] Zero `scaffold-prompt` issues — the scaffold body MUST contain the verbatim user prompt as its first section. This is machine-checked; the gospel rule is non-negotiable.
+- [ ] Comparison note count ≥ 1
+- [ ] Extract note count ≥ 30% of fetched source count
+- [ ] Zero `uncurated`, `provenance`, `analyst-coverage`, `workflow` issues
+
+**On failure:** you CANNOT write the draft. Return to the step that produces the missing artifact. If `scaffold-prompt` failed, return to Step 7 and re-write the scaffold with the user's verbatim prompt as its first section — do not fudge it.
+
+### Checkpoint 4 — after Step 11 (post-audit)
+
+**Purpose:** verify the audit fired and its findings were applied.
+
+**Pass conditions:**
+- [ ] `hyperresearch-auditor` was spawned twice (comprehensiveness + conformance) and both returned
+- [ ] Every violation flagged has been fixed in `research/notes/final_report.md` OR explicitly rejected in writing with a reason
+- [ ] If the conformance auditor flagged missing scaffold / comparison / extract notes, you returned to the relevant checkpoint and fixed it
+
+**On failure:** spawn the auditor (or re-spawn) and apply the findings. Do not save the synthesis note until this checkpoint passes.
+
+---
+
+## CLI path
+
+Find the `hyperresearch` executable from CLAUDE.md ("CLI path:" line) and store it:
+
+```bash
+HPR="<path from CLAUDE.md>"
+```

@@ -25,6 +25,31 @@ class NoteType(StrEnum):
     MOC = "moc"
 
 
+class Tier(StrEnum):
+    """Epistemic role of a source — how it functions as evidence."""
+    GROUND_TRUTH = "ground_truth"
+    INSTITUTIONAL = "institutional"
+    PRACTITIONER = "practitioner"
+    COMMENTARY = "commentary"
+    UNKNOWN = "unknown"
+
+
+class ContentType(StrEnum):
+    """Artifact kind — what the note physically is."""
+    PAPER = "paper"
+    DOCS = "docs"
+    ARTICLE = "article"
+    BLOG = "blog"
+    FORUM = "forum"
+    DATASET = "dataset"
+    POLICY = "policy"
+    CODE = "code"
+    BOOK = "book"
+    TRANSCRIPT = "transcript"
+    REVIEW = "review"
+    UNKNOWN = "unknown"
+
+
 def slugify(text: str) -> str:
     """Convert text to a URL-friendly slug. Preserves underscores."""
     text = text.lower().strip()
@@ -56,12 +81,15 @@ class NoteMeta(BaseModel):
     fetch_provider: str | None = None
     status: NoteStatus = NoteStatus.DRAFT
     type: NoteType = NoteType.NOTE
+    tier: Tier | None = None             # Epistemic role (ground_truth/institutional/practitioner/commentary)
+    content_type: ContentType | None = None  # Artifact kind (paper/docs/article/blog/...)
     aliases: list[str] = Field(default_factory=list)
     parent: str | None = None
     deprecated: bool = False             # Explicitly marked as outdated
     reviewed: datetime | None = None     # Last time a human verified accuracy
     expires: datetime | None = None      # Auto-stale after this date
     summary: str | None = None
+    raw_file: str | None = None          # Relative path to raw artifact (e.g. raw/<id>.pdf)
 
     @field_validator("tags", mode="before")
     @classmethod

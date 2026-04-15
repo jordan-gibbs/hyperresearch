@@ -14,3 +14,16 @@ build/
 .env
 bench/
 codex_bench/
+
+# Agent install outputs — generated per-user by `hyperresearch install`.
+# These files contain absolute paths resolved to the installing user's
+# Python environment. NEVER commit them. The authoritative versions live
+# in src/hyperresearch/skills/ (skills) and src/hyperresearch/core/hooks.py
+# (agent templates).
+.claude/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+
+# Per-vault research output
+research/

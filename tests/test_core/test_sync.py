@@ -96,3 +96,30 @@ def test_sync_excludes_hyperresearch_dir(tmp_vault):
     (tmp_vault.root / ".hyperresearch" / "test.md").write_text("---\ntitle: Bad\n---\nShould not sync")
     plan = compute_sync_plan(tmp_vault)
     assert all(".hyperresearch" not in str(p) for p in plan.to_add)
+
+
+def test_sync_excludes_research_root_staging_files(tmp_vault):
+    """Files at research/ root (scaffold.md, comparisons.md, synthesis.md)
+    are staging files the agent writes then registers via `note new`. They
+    must NOT appear as orphan notes in the vault index — the current
+    behavior would produce missing-title/tags/summary lint spam on every run.
+    """
+    from hyperresearch.core.note import write_note
+
+    # Real notes under research/notes/
+    write_note(tmp_vault.notes_dir, "Real Note", body="# Real\n")
+
+    # Staging files at research/ root
+    research_root = tmp_vault.research_dir
+    (research_root / "scaffold.md").write_text("# Scaffold staging\n")
+    (research_root / "comparisons.md").write_text("# Comparisons staging\n")
+    (research_root / "synthesis.md").write_text("# Synthesis staging\n")
+
+    plan = compute_sync_plan(tmp_vault)
+
+    # Only the real note should be added.
+    added_names = [p.name for p in plan.to_add]
+    assert "real-note.md" in added_names
+    assert "scaffold.md" not in added_names
+    assert "comparisons.md" not in added_names
+    assert "synthesis.md" not in added_names
