@@ -267,6 +267,7 @@ Spawn hyperresearch-merger with:
   sub_run_artifacts: {
     "run-a": {
       "scaffold_path": "research/notes/scaffold-run-a.md",
+      "comparisons_path": "research/notes/comparisons-run-a.md",
       "final_report_path": "research/notes/final_report-run-a.md",
       "audit_findings_path": "research/audit_findings-run-a.json"
     },

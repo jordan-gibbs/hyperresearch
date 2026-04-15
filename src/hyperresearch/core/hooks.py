@@ -815,6 +815,33 @@ scope is: one complete protocol pass, producing one per-run draft plus
 one per-run audit-findings file, all written into the shared vault
 under per-run filenames.
 
+## Canonical per-run artifacts — the ONLY files you write
+
+Your sub-run writes EXACTLY these four per-run files and nothing else.
+Filenames are fixed — do not invent semantic variants.
+
+1. `research/notes/scaffold-<run_id>.md` — your ONE scaffold
+2. `research/notes/comparisons-<run_id>.md` — your ONE comparisons note
+3. `research/notes/final_report-<run_id>.md` — your ONE draft
+4. `research/audit_findings-<run_id>.json` — your audit history
+
+**Forbidden:** creating additional scaffolds like
+`scaffold-saint-seiya-armor-analysis.md` alongside `scaffold-run-a.md`,
+or multiple comparisons files like `comparisons-run-a.md` AND
+`comparisons-saint-seiya-classification-disputes.md`. One scaffold,
+one comparisons, one draft per sub-run. No exceptions. If you feel the
+urge to create a second semantic-name file, STOP — the extra content
+goes INSIDE the single prescribed file, as additional sections, not
+into a parallel file.
+
+Extracts are the one category with many files per sub-run — one per
+source — and they live at `research/notes/extract-*.md` with BOTH
+`extract` and `<run_id>` tags (see Step 4 below).
+
+Source notes (fetched via `$HPR fetch`) are shared across sub-runs and
+NOT per-run — they live at `research/notes/<source-slug>.md` with no
+per-run suffix, because they ARE the shared corpus.
+
 ## Inputs the orchestrator will pass
 
 - **research_query**: the user's original research question, copied
@@ -867,14 +894,37 @@ under per-run filenames.
    The nudge is a lens, not a rewrite. Under no circumstance does the
    nudge appear in the scaffold, the draft, or any audit artifact.
 
-3. **Scaffold with the verbatim prompt.** Build the scaffold exactly as
-   SKILL.md Step 7 specifies, with `research_query` copied character-for-
-   character as the first section. Save to the per-run filename:
+3. **Scaffold with the verbatim prompt — ONE file.** Build the scaffold
+   exactly as SKILL.md Step 7 specifies, with `research_query` copied
+   character-for-character as the first section. Save to the per-run
+   filename:
 
    `research/notes/scaffold-<run_id>.md`
 
    (Not `research/scaffold.md`. The per-run path is mandatory so the
-   three sub-runs don't collide.)
+   three sub-runs don't collide. Do NOT also create semantic-name
+   scaffolds like `scaffold-<topic>-analysis.md` — one scaffold per
+   sub-run, full stop. Extra analysis lives INSIDE this single file.)
+
+   When you register the scaffold with `$HPR note new`, use
+   `--body-file research/notes/scaffold-<run_id>.md --add-tag scaffold`
+   and the title should be plain (e.g., `"Scaffold"`), not a semantic
+   title like `"Scaffold: Saint Seiya Armor Analysis"` — the scaffold's
+   CONTENT carries the topic specificity; the filename and title stay
+   generic-per-run so the merger can locate them predictably.
+
+3a. **Comparisons note — ONE file.** SKILL.md Step 8 produces cross-
+    source comparisons. In a sub-run, write this to the per-run filename:
+
+    `research/notes/comparisons-<run_id>.md`
+
+    Register with `$HPR note new --body-file research/notes/comparisons-<run_id>.md --add-tag comparisons --add-tag <run_id>`.
+
+    (Not `research/comparisons.md`. Three sub-runs writing to one
+    staging path race. Do NOT also create semantic-name comparisons
+    files like `comparisons-saint-seiya-classification-disputes.md`
+    alongside the prescribed one — extra comparisons live INSIDE the
+    single prescribed file, as additional sections.)
 
 4. **Per-run tagging on every extract note.** When you (or a spawned
    analyst) creates an extract note via `$HPR note new`, include BOTH
@@ -917,12 +967,15 @@ under per-run filenames.
    loop), pass `--audit-file research/audit_findings-<run_id>.json` so
    the lint checks the same file your audits wrote to.
 
-8. **Per-run draft filename.** Write the draft at Step 9 to:
+8. **Per-run draft filename — ONE file.** Write the draft at Step 9 to:
 
    `research/notes/final_report-<run_id>.md`
 
-   (Not `research/notes/final_report.md`. The merger produces that
-   path later.)
+   (Not `research/notes/final_report.md` — that's the merger's output.
+   Do NOT also create semantic-name drafts like
+   `final_report-<topic>-analysis.md` alongside the prescribed one.
+   One draft per sub-run. If the draft feels too broad for one file,
+   the correct fix is sections inside it, not a second file.)
 
 9. **Evidence recovery pass (Step 9.5).** Spawn `hyperresearch-rewriter`
    as normal, passing `final_report_path=research/notes/final_report-<run_id>.md`.
@@ -938,8 +991,9 @@ under per-run filenames.
 11. **Return to the orchestrator** with a short summary (under 500 words):
     - `run_id`: `<run-a|run-b|run-c>`
     - `final_report_path`: `research/notes/final_report-<run_id>.md`
-    - `audit_findings_path`: `research/audit_findings-<run_id>.json`
     - `scaffold_path`: `research/notes/scaffold-<run_id>.md`
+    - `comparisons_path`: `research/notes/comparisons-<run_id>.md`
+    - `audit_findings_path`: `research/audit_findings-<run_id>.json`
     - `source_count`: how many sources YOU fetched (minimum-fetch audit)
     - `extract_count`: how many extract notes you produced with
       `<run_id>` tag
@@ -972,6 +1026,16 @@ under per-run filenames.
 - **Per-run tag discipline on extracts is mandatory.** Every extract
   note you persist must carry both `extract` and `<run_id>` tags, or
   the merger cannot attribute the extract.
+- **No filename drift on per-run files.** You produce EXACTLY ONE
+  scaffold, ONE comparisons note, and ONE draft per sub-run, at the
+  fixed paths listed above. Do NOT create semantic-name variants
+  alongside them — not `scaffold-<topic>.md` next to
+  `scaffold-<run_id>.md`, not `comparisons-<subtopic>.md` next to
+  `comparisons-<run_id>.md`, not `final_report-<angle>.md` next to
+  `final_report-<run_id>.md`. The merger locates your artifacts by
+  exact filename; every extra variant is invisible clutter that also
+  dilutes the merger's input budget. Richer content goes INSIDE the
+  single prescribed file, as additional sections.
 - **High-value overlap is OK.** If a source looks essential, fetch it
   even if you suspect a sibling sub-run might. The ensemble benefits
   from cross-run agreement too; uniqueness is a bonus, not a
@@ -1033,8 +1097,9 @@ compilation + de-duplication + union, not re-drafting.
   character; any drift halts the merge with a CRITICAL finding.
 - **run_ids**: `["run-a", "run-b", "run-c"]`
 - **sub_run_artifacts**: dict mapping each `run_id` to
-  `{{scaffold_path, final_report_path, audit_findings_path}}`.
+  `{{scaffold_path, comparisons_path, final_report_path, audit_findings_path}}`.
   Example: `run-a` → `{{scaffold_path: research/notes/scaffold-run-a.md,
+  comparisons_path: research/notes/comparisons-run-a.md,
   final_report_path: research/notes/final_report-run-a.md,
   audit_findings_path: research/audit_findings-run-a.json}}`
 - **parent_final_report_path**: `research/notes/final_report.md` (the
