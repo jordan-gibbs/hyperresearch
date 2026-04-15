@@ -441,15 +441,31 @@ Using the **Write tool**, create `research/scaffold.md` with this exact structur
 <what makes this question non-trivial — the paradox, disagreement, tradeoff,
 or open problem the draft has to earn its way through>
 
-## Prompt decomposition — one H2/H3 per named item (MANDATORY)
+## Prompt decomposition — ATOMIC, one H2/H3 per item (MANDATORY)
 <Extract EVERY explicitly named subtopic, entity, context, field, or dimension
-from the verbatim prompt. Examples: "liability in ADAS accidents" names
-{technical ADAS principles, legal frameworks, case law, regulatory guidelines};
-"Diamond Sutra in daily life, workplace, business, marriage, parenting,
-emotional well-being, interpersonal dynamics" names 7 contexts. Each MUST
-become its own H2 or H3 in the draft — NEVER collapse or merge. If the prompt
-names 7 contexts, deliver 7 sections. The audit at Step 11 FAILS if any
-prompt-named item is silently dropped or merged.>
+from the verbatim prompt. This is ATOMIC DECOMPOSITION — split every
+`and`-conjoined ask, every `as well as`, every comma-separated list,
+every "furthermore / additionally / in particular" into its own bullet.
+
+Examples:
+- "liability in ADAS accidents" names {technical ADAS principles, legal
+  frameworks, case law, regulatory guidelines} — 4 items.
+- "Diamond Sutra in daily life, workplace, business, marriage, parenting,
+  emotional well-being, interpersonal dynamics" names 7 contexts — 7 items.
+- "explain the differences and connections between A2A and MCP, and
+  elaborate on A2A's innovative aspects and the specific problems it
+  addresses" names FOUR items: [differences, connections, innovations,
+  problems]. NOT two items, NOT three — four. Collapsing "differences
+  and connections" into a combined section is the single most common
+  instruction-following failure. Do not do it.
+
+Each item becomes its own H2 or H3 in the draft — NEVER collapse or merge
+atomic items. If the prompt names 7 contexts, deliver 7 sections. If an
+`and`-conjoined pair genuinely overlaps, still give each its own heading
+with cross-reference text ("see also §X") rather than silent merging.
+
+The audit at Step 11 counts the atomic items here and verifies the draft
+has one dedicated H2/H3 per item. A shortfall is a CRITICAL finding.>
 
 - item 1: <section title>
 - item 2: <section title>
@@ -533,13 +549,15 @@ Then read your modality file's substance rules. The modality file tells you HOW 
 - **Every body section must earn its analytical beat.** A section that just describes facts without making an interpretive / comparative / forward move is a catalog entry, not a research contribution. Each section ends with a so-what, a comparison, a tension, or a forward beat.
 - **Sources in tension at least twice in the body.** Find two places where your sources disagree and walk the reader through the disagreement, naming both positions and explaining which is more defensible. Synthesis alone does not make up for this — the body itself must engage dissent.
 - **Cite aggressively. Every factual claim, every number, every attributed position, every direct or paraphrased quote gets an inline citation.** Use parenthetical URLs like `([Author Year](url))` or `([short source name](url))`. **The same source can and should be cited multiple times** across different sections whenever it anchors a different claim — treat each citation as an independent audit point, not a one-per-source rationing. A 5,000-word deep-research draft should carry **40-80 inline citations** (density of 8-16 per 1000 words); anything under 5 per 1000 reads as under-sourced to both human reviewers and automated judges. Shallow citation is the single most common failure mode in structured research writing.
-- **Exhaustive sub-topic coverage.** For every explicitly named subtopic, entity, context, or field in the user's verbatim prompt, produce a dedicated H2 or H3 section — do not collapse or merge prompt-named items. If the prompt asks for 7 contexts, deliver 7 sections. Every prompt-named subtopic should itself carry ≥3 inline citations.
+- **Exhaustive sub-topic coverage — one H2 per atomic scaffold item.** Open your scaffold's "Prompt decomposition" section and count the atomic items. Your draft has at least that many dedicated H2 or H3 sections, each titled to map obviously to one atomic item. Collapsed sections (titling "Differences & Connections" as one H2 when the prompt named BOTH as atomic asks) are the single most common instruction-following failure mode — the RACE judge rewards visible structural separation. If two atomic items genuinely overlap, still give each its own heading with a cross-reference ("see also §X") rather than silent merging. Every prompt-named subtopic should itself carry ≥3 inline citations.
 - **Tier weighting.** Anchor substantive claims in `ground_truth` sources. Use `institutional` for positioning. Use `practitioner` for reality checks. Use `commentary` only to characterize reception, never to establish a load-bearing claim. Still cite commentary when quoting reception.
 - **Length serves substance, not the reverse.** There is no fixed length target. BUT deep-research drafts typically run 5,000-12,000 words because exhaustive sub-topic coverage plus dense citation plus source-vs-source tension cannot fit in 2,000 words. If you find yourself at 3,000 words on a complex prompt, you are probably collapsing sections or under-citing — reconsider both.
 
 - **Pick numbers over hedges.** When the prompt asks a quantitative question ("how much", "how many", "to what extent", "by when"), pin down a specific figure or a tight range and cite the source. A concrete number with a citation beats an abstract characterization every time. If the evidence genuinely disagrees, state the range and name the sources on each side. Don't dodge into "this varies" or "it depends" when the user asked for a number.
 
 - **Inline citations as bracketed references AND a final Sources section.** In addition to inline parenthetical URLs, number every unique source `[1]`, `[2]`, `[3]` the first time it appears, reuse the same number on later citations, and include a `## Sources` section at the end of the draft listing `[N] Short title — URL` for every reference. This dual format (parenthetical inline + numbered footnote style + end Sources list) gives both human readers and automated reviewers a traceable audit path. Do NOT invent alternative citation formats (no unicode bracket pairs, no `†`, no author-year-only). Numbered plus final Sources list is the standard here.
+
+- **`[N]` → Sources entry is 1-to-1 and bidirectional.** Every `[N]` inline in your draft MUST correspond to exactly one entry in the `## Sources` section. Every entry in `## Sources` MUST have at least one matching inline `[N]` in the body. Do not list a source you did not cite. Do not cite a source you did not list. When you finish writing, do a reconciliation pass: grep your own draft for every `[N]` marker, cross-check against the Sources list, and DELETE any Sources entry that has zero inline citations. A fabricated Sources list (ghost references) is worse than a short one — it signals to reviewers that you padded the bibliography without using the content. The ensemble merger will halt with a CRITICAL if it finds broken references post-fusion; catch them in your own sub-run before shipping.
 
 - **Never re-search a query you already ran in this session, and never paste a URL into a search engine.** Keep a running list of search queries you've already made, and avoid repeating them verbatim — if a query returned shallow results, rephrase meaningfully before retrying. URLs go to `$HPR fetch`, not `WebSearch`. Loop-burn from redundant search is a real failure mode.
 

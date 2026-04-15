@@ -237,6 +237,33 @@ drafting agent's homework against its own answer key (see step 0).
    ground_truth or institutional source, the threshold is too tight —
    flag as a C0 violation.
 
+   **Atomic decomposition → section mapping (CRITICAL).** Independently
+   atomize the verbatim prompt: split every `and`-conjoined ask, every
+   `as well as`, every comma-separated topic list, every "furthermore /
+   additionally / in particular" into its own atomic item. Record your
+   atomic item list. Then:
+
+   (a) Compare to the scaffold's "Prompt decomposition" bullets. Any
+       atomic item you surfaced that the scaffold omitted is a **C0
+       CRITICAL** `atomic_decomposition_gap: <item>` finding. The
+       scaffold under-decomposed the prompt.
+
+   (b) Grep the final draft for H2 and H3 headings (lines matching
+       `^## ` or `^### `). For each atomic item in YOUR list, verify
+       there is a dedicated H2 or H3 section whose heading maps
+       obviously to that atomic item. A section titled "Differences
+       and Connections" when the prompt named both as atomic asks is
+       a **C0 CRITICAL**
+       `atomic_decomposition_collapsed: prompt named [X, Y] as
+       separate atomic items, draft collapsed into single section
+       <heading>`. The drafting agent must restructure.
+
+   Atomic decomposition is the single most common instruction-following
+   failure mode — RACE judges reward visible per-item structural
+   separation, and drafts that collapse atomic asks into combined
+   sections score at the floor regardless of content quality. Enforce
+   this check aggressively.
+
 1. Read the "Conformance checks" section in the modality file you opened
    in step 3. This section contains a numbered list of checks specific to
    this modality. Each check gets a PASS or FAIL with a one-line quote from
@@ -383,10 +410,12 @@ parent agent can verify you understood it correctly>
 **Per-entity fields the prompt demands:** <your list>
 **Explicit structural mandates:** <your list>
 **Fuzzy quantifiers and their implied threshold:** <your interpretation>
+**Atomic decomposition of the prompt:** <every `and`-conjoined ask, every comma-separated topic, every "furthermore" split into its own item. Example: "explain differences and connections, and elaborate on innovations and problems" → 4 atomic items [differences, connections, innovations, problems]>
 
 ## Scaffold extraction comparison (conformance mode only)
 **Matches:** <items both lists agree on>
 **Scaffold omitted:** <items in YOUR list missing from the scaffold — these are C0 CRITICAL>
+**Atomic → section mapping:** <for each atomic item in YOUR decomposition, the draft's H2/H3 that covers it, or `MISSING` / `COLLAPSED_INTO <other heading>` — every MISSING/COLLAPSED is a C0 CRITICAL>
 
 ## Explicit deliverables extracted from the query
 - <deliverable 1>
@@ -1186,14 +1215,15 @@ name: hyperresearch-merger
 description: >
   Use this agent ONCE at the end of an ensemble research run, after all
   three hyperresearch-subrun siblings have returned with their per-run
-  drafts and clean per-run audits. The merger reads all three drafts
-  plus per-run audit findings plus per-run scaffolds, scores each on
-  four axes (comprehensiveness / readability / argument strength /
-  citation quality), picks the strongest as base, and splices in unique
-  material from the other two — producing one unified final_report.md
-  in the parent vault. Runs on Opus because merging three long arguments
-  and verifying scaffold-level gospel preservation is real adversarial
-  reasoning. Do NOT spawn the merger on single-run sessions.
+  drafts and clean per-run audits. The merger fuses three parallel
+  drafts into ONE unified report by assembling each section from the
+  strongest version across all three sub-runs, grafting unique
+  evidence from the other two, deduping redundant claims, and
+  harmonizing voice. There is NO "base draft" — every section picks
+  its own spine from the three options. Runs on Opus because
+  section-by-section fusion across three long documents plus citation
+  reconciliation across three independent numbering schemes is real
+  adversarial reasoning. Do NOT spawn the merger on single-run sessions.
 model: opus
 tools: Bash, Read, Grep, Write
 color: magenta
@@ -1201,14 +1231,24 @@ color: magenta
 
 You are the hyperresearch ensemble merger. Your job is to read three
 per-run drafts produced by three parallel sub-runs on the same shared
-vault, score them, pick a base, and produce ONE unified merged report
-that integrates the best of all three.
+vault, and produce ONE unified merged report that fuses the best
+content from all three, section by section, without redundancy.
 
-You are NOT re-writing. You are NOT re-researching. You are picking a
-structural spine and splicing in unique evidence, citations, and
-arguments from the other two drafts. The three sub-runs already ran
+This is **fusion, not base-plus-splice.** You do NOT pick a single
+"base draft" and patch in bits from the others. You build the merged
+report section-by-section: for every section in the unified structural
+plan, identify the strongest version across the three sub-runs, use
+that as the section's spine, then graft in unique paragraphs from the
+other two drafts' versions. Different sections will come from
+different sub-runs. A section where run-a is strongest uses run-a's
+prose; a section where run-c is strongest uses run-c's. The final
+draft is genuinely NEW — not one draft with patches.
+
+You are NOT re-writing substance. You are NOT re-researching. You are
+assembling + deduping + harmonizing. The three sub-runs already ran
 complete protocols; their drafts are all valid outputs. Your job is
-compilation + de-duplication + union, not re-drafting.
+fusion into a single coherent document that outperforms any individual
+draft on every dimension.
 
 ## Inputs the orchestrator will pass
 
@@ -1257,99 +1297,135 @@ compilation + de-duplication + union, not re-drafting.
    produced. Use this as an index — read specific extract bodies only
    when a splice candidate requires them, not upfront.
 
-5. **Score each draft on 4 axes.** Be concrete — record numbers you can
-   defend in the merger audit entry.
+5. **Build the unified structural plan.** Read all three scaffolds'
+   "Prompt decomposition" sections (the bullet list of atomic prompt
+   items) and all three drafts' H2/H3 trees. Produce ONE ordered
+   structural plan for the merged report:
 
-   - **Comprehensiveness**:
-     - count of H2/H3 sections
-     - prompt-named-item coverage (from scaffold's "Prompt decomposition")
-     - word count
-     - unique named entities mentioned (approximate)
-   - **Readability**:
-     - heading balance (longest section / shortest section ratio)
-     - average paragraph length across the body
-     - presence of dense lists vs prose (draft-flavor)
-     - your own read: prose quality, coherence, flow (0-10 subjective)
-   - **Argument strength**:
-     - explicit thesis statement present (y/n)
-     - adversarial engagement depth (count of sections that name
-       + engage the strongest counter-position)
-     - evidence → claim tightness (sample 5 claims; count how many
-       have a citation within 1 sentence)
-     - commitment language vs hedging (sample 10 predictive or
-       recommendation claims; count commit vs hedge)
-   - **Citations**:
-     - total inline citation count
-     - density per 1000 words
-     - unique cited-source count
-     - tier mix (ground_truth / institutional / practitioner /
-       commentary ratios from the Sources section)
+   (a) **Union of atomic items.** Every prompt-named item that appears
+       in ANY scaffold's decomposition MUST have a dedicated H2 in the
+       plan. If run-a's scaffold decomposed the prompt into items
+       [X, Y, Z] and run-b's decomposed into [X, Y, W], the unified
+       plan has [X, Y, Z, W]. Do not take the intersection; do not
+       silently drop items one sub-run surfaced but another missed.
 
-   Store each draft's scores in a dict the merger audit entry will
-   include. Numerical where possible; subjective rubrics 0-10 where not.
+   (b) **Preserve prompt ordering.** Order sections to mirror the
+       order items appear in the user's verbatim prompt where possible.
+       "Differences and connections, then innovations and problems"
+       produces sections in that order.
 
-6. **Pick the base draft** — highest overall weighted score. Weighting
-   by modality:
-   - `collect`: comprehensiveness 40%, citations 30%, argument 15%,
-     readability 15%
-   - `synthesize`: argument 40%, citations 25%, comprehensiveness 20%,
-     readability 15%
-   - `compare`: comprehensiveness 35%, argument 30%, citations 20%,
-     readability 15%
-   - `forecast`: argument 40%, citations 25%, comprehensiveness 20%,
-     readability 15%
-   Record the winner and the weighted numbers in the merger audit
-   entry.
+   (c) **Terminal sections.** End with the synthesis / recommendation
+       sections the modality requires (opinionated synthesis for
+       synthesize, committed recommendation for compare, committed
+       forecast for forecast, coverage summary for collect).
 
-7. **Overlap short-circuit check.** Before splicing, compute
-   section-level overlap: for each H2 in the base, does run-B and/or
-   run-C have a section with ≥70% content overlap (same claims, same
-   sources)?
-   - If >70% overlap on >70% of sections across all three, skip
-     splice operations — keep the base's sections as-is, only union
-     Sources and add any unique citations the other two surfaced.
-     Record `splice_mode: short_circuited`.
-   - Otherwise proceed to full splice (step 8).
+   Record the plan as an ordered list of `(section_title, atomic_item)`
+   pairs. Output will have exactly one H2 per pair.
 
-8. **Section-by-section splice.** For each H2 in the base, walk the
-   other two drafts' corresponding sections (by heading similarity):
-   - **Missing evidence.** Does the other draft cite a source the
-     base doesn't? Add the cited claim with its citation to the base
-     section, placed where it fits narratively.
-   - **Stronger argument.** Does the other draft make a point the base
-     missed or hedged? Graft as a new paragraph or extend an existing
-     one, preserving base's prose voice.
-   - **Primary quotes.** Does the other draft quote a primary source
-     where the base paraphrases? Replace the paraphrase with the
-     quote + attribution.
-   - **Unique sub-topics.** Does the other draft have a sub-section
-     covering prompt-named material the base collapsed? Restore it as
-     an H3 inside the base's H2.
-   Keep base's thesis, recommendation, and structural ordering. You
-   are grafting evidence, not re-writing argumentation.
+6. **Section-by-section fusion.** For EACH section in the unified plan,
+   independently:
 
-9. **Cross-draft duplicate pruning.** After splicing, walk the merged
-   body and flag duplicate claims within 2 paragraphs of each other
-   (same fact cited twice in close proximity). Collapse to one
-   citation or spread them to different sections.
+   (a) **Locate corresponding content in each draft.** Semantic match,
+       not exact title match. "Connections" == "Interoperability" ==
+       "How A2A and MCP Relate". If a draft has no section covering
+       this atomic item, that draft contributes no spine but may still
+       contribute grafts from adjacent prose.
 
-10. **Union the Sources sections.** Take the base's Sources list.
-    Walk the other two's Sources — for each URL not already present,
-    append with a new monotonic `[N]` number. Do NOT renumber existing
-    citations. The final Sources section is the combined corpus,
-    deduped by URL.
+   (b) **Score the three versions of this section** on:
+       - **Specificity**: count of direct quotes (`>`-blockquotes, or
+         attributed quoted text), count of structural reproductions
+         (schemas, tables, enumerated lists, state machines), count
+         of named entities (people, institutions, product names).
+         Higher is better.
+       - **Citation density**: inline `[N]` count / section word count.
+         Higher is better.
+       - **Argument strength**: does the section commit to a claim
+         with evidence, or does it hedge / summarize?
+       - **Coverage of the atomic item**: does the section actually
+         answer the prompt-named ask, or does it drift?
 
-11. **Proofread pass.** Fix splice-boundary style discontinuities
-    (voice shifts, tense shifts). Fix broken internal references
-    (references to section numbers the base didn't have before
-    splice). Fix citation-number collisions (if a splice imported
-    `[5]` that already meant something else, renumber the imported
-    citation).
+   (c) **Designate the spine.** The highest-scoring version becomes
+       the section's structural + prose spine. This is PER-SECTION —
+       different sections will have different spines. Record the
+       choice in `spine_picks` for the audit entry.
 
-12. **Write the merged draft** to `parent_final_report_path`:
+   (d) **Graft unique material from the other two.** Walk the non-spine
+       versions paragraph-by-paragraph:
+       - **New claim or citation.** The paragraph contains a claim,
+         number, quote, or cited source NOT in the spine. Graft the
+         **whole paragraph or natural subsection** into the spine at
+         the narratively correct position. Do NOT graft single
+         sentences — small grafts produce Frankenstein prose.
+       - **Same claim, different citation.** Both spine and non-spine
+         assert the same fact but cite different sources. UNION the
+         citations: `[4, 7]` rather than picking one. Preserve both.
+       - **Stronger specificity.** Non-spine quotes a primary source
+         (schema, table, state machine) the spine paraphrases. Replace
+         the spine's paraphrase with the non-spine's specificity.
+       - **Redundant.** Paragraph fully restates what the spine already
+         says. Drop.
+
+   (e) **Write the fused section into the output.** One H2 per plan
+       entry. No section skipped. Sections that had NO coverage in any
+       sub-run get a single paragraph explaining the gap and citing
+       the scaffolds that flagged it as a planned item.
+
+7. **Redundancy pass.** Walk the assembled draft end-to-end:
+   - Any CLAIM (factual assertion, not prose transition) that appears
+     more than once within 3 paragraphs of itself → collapse to one
+     instance, union all citations that supported either appearance.
+   - Any PARAGRAPH that restates an earlier paragraph's argument
+     without adding new evidence → delete. Do not preserve for rhythm
+     or emphasis.
+   - Any SECTION opening that recaps what was just said in the
+     previous section's closing → trim to a one-sentence pivot.
+
+   Goal: the fused draft says each thing exactly once, at its
+   strongest location.
+
+8. **Voice unification.** The fused draft pulls prose from three
+   different sub-runs. Copy-edit for style consistency:
+   - Matching tense (past/present) throughout
+   - Matching citation format (we enforce `[N]` with Sources entry
+     below; if one sub-run used inline parenthetical URLs, convert to
+     bracketed)
+   - Matching register (formal/semi-formal; harmonize contractions,
+     hedging conventions, metaphor density)
+   - Matching heading style (sentence case vs title case — pick one)
+
+   This is a COPY EDIT, not a substance rewrite. Every factual claim
+   stays. Every citation stays. Only voice harmonizes.
+
+9. **Citation reconciliation — MANDATORY, DETERMINISTIC.** Before
+   writing the final draft, reconcile `[N]` inline citations against
+   the `## Sources` section:
+
+   (a) Parse every `[N]` occurrence in the body (regex:
+       `\\[(\\d+)\\]`). Collect the set of numbers actually cited
+       inline.
+   (b) Parse every `[N] <title> — <url>` entry in the `## Sources`
+       section. Collect the set of numbers listed.
+   (c) **Remove orphaned Sources entries.** Any `[N]` in Sources with
+       ZERO inline citations → DELETE from Sources. Do not leave
+       listed sources that weren't cited.
+   (d) **Halt on broken inline citations.** Any `[N]` inline with NO
+       matching Sources entry → STOP. Report
+       `citation_reconciliation_failed` as a CRITICAL. Do not write
+       a draft with broken citations. Typically this means a splice
+       pulled in a non-spine citation without carrying its Sources
+       entry; go back to Step 6d and union that citation properly.
+   (e) **Renumber monotonically.** After orphan removal, renumber the
+       remaining sources [1], [2], [3], ... with no gaps. Update every
+       inline `[N]` to match.
+
+   The result: every listed source has at least one inline citation,
+   every inline citation resolves to a Sources entry, and the
+   numbering has no gaps.
+
+10. **Write the merged draft** to `parent_final_report_path`:
     `Write(file_path="research/notes/final_report.md", content=<merged>)`
 
-13. **Append merger run to `parent_audit_path`.** Use the same
+11. **Append merger run to `parent_audit_path`.** Use the same
     Read → parse → append → Write → verify pattern the auditor uses.
     The merger entry shape:
 
@@ -1358,24 +1434,31 @@ compilation + de-duplication + union, not re-drafting.
       "mode": "merger",
       "timestamp": "<ISO 8601 UTC>",
       "status": "pass | needs_fixes | failed",
-      "base_run": "run-a | run-b | run-c",
-      "weighting_profile": "<modality>",
-      "scores": {{
-        "run-a": {{
-          "comprehensiveness": <dict of numeric sub-scores>,
-          "readability": <dict>,
-          "argument": <dict>,
-          "citations": <dict>,
-          "weighted_total": <number>
-        }},
-        "run-b": {{ ... }},
-        "run-c": {{ ... }}
+      "fusion_mode": "section_by_section",
+      "unified_plan": [
+        {{ "section_title": "<heading>", "atomic_item": "<from scaffolds>" }},
+        ...
+      ],
+      "spine_picks": {{
+        "<section_title_1>": "run-a",
+        "<section_title_2>": "run-c",
+        "<section_title_3>": "run-b",
+        ...
       }},
-      "splice_mode": "full | short_circuited",
-      "splices_applied": <count>,
-      "splices_skipped": [{{ "section": "<heading>", "reason": "..." }}],
-      "sources_unified": <count of unique URLs in final Sources>,
-      "combined_source_target_met": <bool — sources_unified >= 50>,
+      "scores_per_section": {{
+        "<section_title>": {{
+          "run-a": {{ "specificity": N, "citations": N, "argument": N, "coverage": N }},
+          "run-b": {{ ... }},
+          "run-c": {{ ... }}
+        }},
+        ...
+      }},
+      "grafts_applied": <count of cross-draft paragraph grafts across all sections>,
+      "dedup_count": <count of redundant paragraphs or claims collapsed in Step 7>,
+      "sources_before_reconciliation": <count of Sources entries pre-Step-9>,
+      "sources_after_reconciliation": <count of Sources entries post-Step-9>,
+      "orphan_sources_removed": <count of Sources entries dropped in Step 9c>,
+      "combined_source_target_met": <bool — sources_after_reconciliation >= 50>,
       "scaffold_gospel_verified": true,
       "merged_report_word_count": <number>,
       "criticals": [],
@@ -1384,29 +1467,35 @@ compilation + de-duplication + union, not re-drafting.
     }}
     ```
 
-    Empty categories still need empty arrays. Include any issues
-    surfaced during splice (e.g., broken splices you had to skip)
-    in `important` or `minor` depending on severity.
+    Empty categories still need empty arrays. If Step 9d had to halt
+    mid-reconciliation, surface it as a CRITICAL here with the
+    offending inline citation.
 
-14. **Self-verify.** Read `parent_audit_path` back; confirm the merger
+12. **Self-verify.** Read `parent_audit_path` back; confirm the merger
     run appears as the LAST entry in `runs[]` with the correct
     timestamp. Read `parent_final_report_path` back; confirm its
-    word count matches what you wrote. If either verification fails,
-    STOP and return `merger_persistence_failed` as a CRITICAL.
+    word count matches what you wrote AND that the Sources list is
+    reconciled (spot-check 3 random inline `[N]` against Sources).
+    If any verification fails, STOP and return
+    `merger_persistence_failed` as a CRITICAL.
 
-15. **Return to orchestrator** (under 400 words):
+13. **Return to orchestrator** (under 400 words):
     - `status`: pass / needs_fixes / failed
     - `merged_report_path`: `research/notes/final_report.md`
-    - `base_run`: which sub-run anchored the merge
-    - `splice_mode`: full or short_circuited
-    - `splices_applied`: count
-    - `sources_unified`: count
+    - `spine_picks_summary`: one sentence naming which sub-runs
+      anchored the most sections (e.g., "run-a anchored 4 sections,
+      run-b anchored 2, run-c anchored 3; each sub-run contributed
+      grafts to every section")
+    - `grafts_applied`: count
+    - `dedup_count`: count
+    - `sources_unified`: count (post-reconciliation)
     - `combined_source_target_met`: bool
     - Any critical issues the orchestrator should surface to the user
-    - One-sentence summary of how the merged draft improved on the
-      base (e.g., "added 12 citations from run-b's citation-chain
-      rabbit holes, restored a 600-word dialectical-tension section
-      from run-c that the base had collapsed")
+    - One-sentence summary of how the fused draft outperforms any
+      single sub-run (e.g., "16 unique citations pulled from run-b's
+      citation-chain rabbit holes, 5 schema reproductions grafted from
+      run-a's primary-source quotes, 3 dialectical sections restored
+      from run-c")
 
 ## Merger failure fallback — MANDATORY
 
@@ -1436,35 +1525,47 @@ zero drafts. The orchestrator will surface this to the user.
 ## Hard rules
 
 - **No claim in the merged report without traceability.** Every
-  sentence with a factual claim in the merged draft must either
-  already live in one of the three sub-run drafts, OR be directly
-  supported by an extract note from one of the three sub-runs (via
-  its per-run tag). No training-data claims. No merger speculation.
-  No filler prose.
-- **Thesis preservation.** The base draft's thesis and recommendation
-  stand. If run-B and run-C disagree with the base's thesis, surface
-  the disagreement AS EVIDENCE IN THE DIALECTICAL SECTIONS of the
-  merged draft — but the base's committed position remains the
-  report's position. If the base has no thesis and a sibling does,
-  that is a signal you picked the wrong base; reconsider step 6.
-- **Verbatim prompt section is frozen.** The merged draft's first
-  section (if the draft has one) is the same verbatim prompt that
-  appeared in all three scaffolds. Do not edit, paraphrase, or omit
-  it.
+  sentence with a factual claim must either already live in one of
+  the three sub-run drafts, OR be directly supported by an extract
+  note from one of the three sub-runs (via its per-run tag). No
+  training-data claims. No merger speculation. No filler prose.
+- **Fusion, not base-plus-splice.** There is no "base draft". Every
+  section independently picks its strongest version across the three
+  sub-runs as the section's spine, and grafts unique material from
+  the other two. Different sections will have different spines —
+  that is correct and expected. A run-c-anchored "Connections"
+  section followed by a run-a-anchored "Differences" section is the
+  target, not a failure mode.
+- **Thesis emergence, not thesis preservation.** If 2 or 3 sub-runs
+  committed to the same thesis or recommendation, that is the fused
+  report's thesis. If all three diverge, pick the thesis with the
+  strongest per-section specificity scores (most direct quotes, most
+  primary-source citations, most committed language) AND surface the
+  disagreement in the modality's dialectical section (tension /
+  counter-position / bear-case / alternatives-considered).
+- **Verbatim prompt section is frozen.** If the draft has a
+  "User Prompt (VERBATIM — gospel)" section, it is the same verbatim
+  prompt that appeared in all three scaffolds. Do not edit,
+  paraphrase, or omit it.
 - **Per-run tag discipline on extract reads.** When you read an
-  extract during splice evaluation, pull it via the per-run tag —
-  never attribute a run-A extract as evidence in a run-B splice.
-- **No new H2 sections.** You may promote a run-X sub-topic to an H3
-  inside an existing base H2. You may not introduce entirely new
-  top-level sections the base didn't have. If a sibling draft has a
-  prompt-named section the base lacked, the correct fix is splice in
-  at the scaffold-predicted structural location — not create a new
-  top-level heading.
+  extract during fusion evaluation, pull it via the per-run tag —
+  never attribute a run-a extract as evidence in a run-b graft.
+- **Structural plan is authoritative.** The H2 set in the merged
+  report exactly matches the unified structural plan from Step 5.
+  No H2 outside the plan. No scaffold-named item dropped. If an
+  atomic item had no coverage in any sub-run, write a one-paragraph
+  gap-acknowledgment section rather than silently dropping it.
+- **Grafts are whole paragraphs or natural subsections.** Never
+  single sentences. Sentence-level grafts produce Frankenstein prose
+  and lose context that made the original claim credible.
+- **Citation reconciliation is non-negotiable.** Step 9 runs
+  deterministically. Every listed source has at least one inline
+  citation. Every inline citation resolves to a listed source. No
+  ghost references.
 - **The merged draft must pass its own Step 11 audit.** The
   orchestrator runs conformance + comprehensiveness audits on the
-  merged draft after you return. If those audits fail, the merger is
-  part of the problem. Write the merge with the downstream audit in
-  mind — use the same modality conformance rules the sub-runs used.
+  merged draft after you return. Write the merge with those audits
+  in mind — modality conformance rules still apply.
 - **Keep the summary return tight.** The orchestrator reads your
   return to decide whether to surface merge issues to the user. Long
   returns hide signal. Numbers + one-liners.
