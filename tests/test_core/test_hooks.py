@@ -121,10 +121,17 @@ def test_install_merger_agent_writes_file(tmp_vault):
     assert agent_path.exists()
     body = agent_path.read_text(encoding="utf-8")
     assert "model: opus" in body
-    assert "scores" in body
-    assert "splice" in body.lower()
     assert "merger-failed" in body
     assert "parent_final_report_path" in body
+    # Fusion model: no base draft, per-section spine picks
+    assert "Fusion, not base-plus-splice" in body
+    assert "spine_picks" in body
+    assert "unified structural plan" in body.lower()
+    # Citation reconciliation is deterministic + mandatory
+    assert "citation reconciliation" in body.lower()
+    assert "orphan" in body.lower()
+    # Redundancy pass
+    assert "dedup_count" in body
     assert result is not None
 
 
