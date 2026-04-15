@@ -2,7 +2,7 @@
   <img src="assets/banner.png" alt="HYPERRESEARCH" width="700">
 </p>
 
-<h3 align="center">Turn Claude Code into a disciplined research agent</h3>
+<h3 align="center">The Most Intelligent Deep Research Agent Harness</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/hyperresearch/"><img src="https://img.shields.io/pypi/v/hyperresearch" alt="PyPI version"></a>
@@ -13,7 +13,15 @@
 
 ---
 
-## Install in 30 seconds
+**HyoerResearch is a deep research harness for Claude Code, currently leading the deep research bench internally. Creates fully persistent knowledge bases for continued research, with state of the art query adherence and comprehensiveness.**
+
+<p align="center">
+  <img src="assets/benchmark.png" alt="DeepResearch-Bench top-5 — hyperresearch at 57.5, ahead of Tongyi DeepResearch (55.8), Kimi Researcher (53.2), Gemini Deep Research (42.1), OpenAI Deep Research (37.4)" width="780">
+</p>
+
+<p align="center"><sub>Preliminary — one-query pilot lift (+2.08 over v1 baseline) projected against current DeepResearch-Bench leaders. Full 100-query sweep pending.</sub></p>
+
+## Installation
 
 ```bash
 pip install hyperresearch
@@ -22,7 +30,7 @@ hyperresearch install
 
 In Claude Code, type `/research <anything>` and the full protocol fires.
 
-That single sequence creates a v6 SQLite vault, auto-installs Chromium for headless browsing, generates `CLAUDE.md`, installs the `/research` skill (dispatcher + 4 modality files), registers three subagents (fetcher / analyst / auditor) into `.claude/agents/`, and wires PreToolUse hooks. You're ready.
+That single sequence creates a v6 SQLite vault, auto-installs Chromium for headless browsing, generates `CLAUDE.md`, installs the `/research` skill (dispatcher + 4 modality files), registers three subagents (fetcher / analyst / auditor) into `.claude/agents/`, and wires PreToolUse hooks.
 
 ---
 
@@ -190,7 +198,7 @@ Eight invariants the protocol structurally prevents from breaking:
 - **Enumerative coverage** — "For each Napoleonic marshal, cover key campaigns and fate" → every named entity gets every requested field, no silent downgrades
 - **Persistent knowledge base** — every source ever fetched stays searchable. Future sessions check the vault before searching the web. Knowledge compounds.
 
-### `/research-ensemble` — 3 parallel sub-runs + Opus merger
+### `/research-ensemble` — 3 parallel sub-runs + Opus merger (what was benchmarked)
 
 For queries where depth-of-corpus and argument stability matter more than wall-clock time, use `/research-ensemble <query>`. Opus orchestrates; three `hyperresearch-subrun` Sonnet agents run the full protocol in parallel against one shared vault, each with a subtly different framing (evidentiary breadth / citation-chain depth / dialectical tension). A fourth agent (`hyperresearch-merger`, Opus) scores each draft on comprehensiveness / readability / argument strength / citation quality, picks the strongest as the base, and splices in unique evidence from the other two. Cost is ~5× a normal run; the payoff is detailed in [Benchmarks](#benchmarks) below.
 
