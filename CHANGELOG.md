@@ -13,12 +13,11 @@ This release replaces the three-parallel-drafts-plus-merger ensemble design with
 - **`NoteType.INTERIM`** — new first-class note type for depth-investigator outputs. Persisted in the vault with `type: interim` and tagged `locus-<name>` for indexability. Added to the SQLite CHECK constraint via migration v7.
 - **`locus-coverage` lint rule** — reads `research/loci.json` (Layer 2 output) and verifies every identified locus has a corresponding interim-report note. Missing interims flag as errors.
 - **`patch-surgery` lint rule** — reads `research/patch-log.json` (Layer 6 output) and surfaces any critical finding the patcher skipped. The 500-char "patch too large" regeneration guard is also surfaced at warning severity.
-- **`--layercake` bench flag** — replaces `--ensemble`. Routes runs to `bench/runs_layercake/`, tags exports with `-layercake`, forces Opus orchestrator, bumps default timeout to 3600s.
 - **Schema v7 migration** — safely rebuilds the `notes` table with `'interim'` added to the type CHECK constraint on existing vaults.
 
 ### Removed
 
-- **`/research-ensemble` skill** — entire 525-line protocol deleted. The slash command no longer registers. Old skill file preserved on the `feat/benchmark-real-gates` branch for comparison.
+- **`/research-ensemble` skill** — the three-parallel-sub-run ensemble protocol is gone. The slash command no longer registers.
 - **Retired subagents** — `hyperresearch-analyst`, `hyperresearch-auditor`, `hyperresearch-rewriter`, `hyperresearch-subrun`, `hyperresearch-merger` are no longer installed. On reinstall, any vault that had them gets them pruned automatically by `_prune_retired_agents()`.
 - **`analyst-coverage` lint rule** — superseded by `locus-coverage` (extracts were the ensemble era's per-source deep-read artifact; interim notes are the layercake equivalent scoped per locus).
 
@@ -38,7 +37,6 @@ This release replaces the three-parallel-drafts-plus-merger ensemble design with
 ### Breaking changes
 
 - Scripts calling `hyperresearch install` on a pre-v0.7 vault will get the old agent files pruned. Pre-existing `research/audit_findings.json` and extract notes stay in the vault (no user data is deleted) but the protocol no longer references them.
-- `bench/harness.py --ensemble` and `bench/evaluate.py --ensemble` are gone — use `--layercake` / `--no-layercake`.
 - `analyst-coverage` in `hyperresearch lint --rule ...` is gone — use `locus-coverage` and `patch-surgery`.
 
 ## [0.4.0] - 2026-04-13
