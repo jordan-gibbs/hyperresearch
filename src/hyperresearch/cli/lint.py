@@ -20,7 +20,7 @@ RULES = {
     "uncurated": "Non-draft notes without tier or content_type classification",
     "workflow": "Layercake artifacts missing (scaffold, loci, interim notes)",
     "scaffold-prompt": "Scaffold notes missing the verbatim user prompt as first section (gospel rule)",
-    "benchmark-report": "Benchmark final report missing required wrapper contract sections",
+    "wrapper-report": "Final report missing required wrapper contract sections when a harness pinned the canonical query",
     "audit-gate": "Unresolved CRITICAL findings in research/audit_findings.json block synthesis save",
     "provenance": "Source notes with no --suggested-by breadcrumb chain (data-flow chain broken)",
     "locus-coverage": "Loci identified in Layer 2 missing their interim-report notes (depth investigator skipped)",
@@ -451,14 +451,14 @@ def lint(
                         "note_path": row["path"],
                         "message": (
                             "Scaffold prompt does not exactly match research/prompt.txt. "
-                            "The verbatim prompt is a hard contract in benchmark runs — "
+                            "The verbatim prompt is a hard contract when a harness pins it — "
                             "re-copy it character-for-character under the "
                             "`## User Prompt (VERBATIM — gospel)` header."
                         ),
                     })
                 continue
 
-            # Fallback for non-benchmark vaults with no canonical prompt artifact:
+            # Fallback for vaults without a canonical-prompt artifact with no canonical prompt artifact:
             # require non-trivial content after the header so the rule still
             # protects against empty placeholder scaffolds.
             quote_chars = len(extracted_prompt)
@@ -475,8 +475,8 @@ def lint(
                     ),
                 })
 
-    if "benchmark-report" in rules_to_run:
-        # The rule activates when either signals a wrapped/benchmark context:
+    if "wrapper-report" in rules_to_run:
+        # The rule activates when either signals a wrapped harness context:
         #   - research/prompt.txt exists (harness pinned the canonical query)
         #   - research/wrapper_contract.json exists (harness declared packaging)
         #
@@ -496,7 +496,7 @@ def lint(
                 )
             except (OSError, json.JSONDecodeError) as exc:
                 issues.append({
-                    "rule": "benchmark-report",
+                    "rule": "wrapper-report",
                     "severity": "error",
                     "note_id": "<vault>",
                     "message": (
@@ -511,7 +511,7 @@ def lint(
             report_path = vault.root / "research" / "notes" / "final_report.md"
             if not report_path.exists():
                 issues.append({
-                    "rule": "benchmark-report",
+                    "rule": "wrapper-report",
                     "severity": "error",
                     "note_id": "<vault>",
                     "message": (
@@ -526,7 +526,7 @@ def lint(
                     report_body = report_path.read_text(encoding="utf-8-sig").replace("\r\n", "\n")
                 except OSError as exc:
                     issues.append({
-                        "rule": "benchmark-report",
+                        "rule": "wrapper-report",
                         "severity": "error",
                         "note_id": "<vault>",
                         "message": (
@@ -545,7 +545,7 @@ def lint(
                 missing_headers = [h for h in required_headers if h not in report_body]
                 if missing_headers:
                     issues.append({
-                        "rule": "benchmark-report",
+                        "rule": "wrapper-report",
                         "severity": "error",
                         "note_id": "<vault>",
                         "message": (
@@ -570,7 +570,7 @@ def lint(
                 leaked = [h for h in forbidden_headers if h in report_body]
                 if leaked:
                     issues.append({
-                        "rule": "benchmark-report",
+                        "rule": "wrapper-report",
                         "severity": "error",
                         "note_id": "<vault>",
                         "message": (

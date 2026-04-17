@@ -100,14 +100,14 @@ def test_scaffold_prompt_warns_when_quote_too_short(tmp_vault):
 
 def test_scaffold_prompt_fails_when_canonical_prompt_mismatch(tmp_vault):
     (tmp_vault.root / "research" / "prompt.txt").write_text(
-        "Exact benchmark prompt text.\nSecond line.",
+        "Exact wrapped prompt text.\nSecond line.",
         encoding="utf-8",
     )
     _write_scaffold(
         tmp_vault,
         body=(
             "## User Prompt (VERBATIM — gospel)\n"
-            "> Exact benchmark prompt text.\n"
+            "> Exact wrapped prompt text.\n"
             "> Second line with drift.\n\n"
             "## What the user explicitly asked for\n"
             "- thing\n"
@@ -141,11 +141,11 @@ def _write_wrapper_contract(vault, **fields):
     )
 
 
-def test_benchmark_report_requires_terminal_sections_from_wrapper_contract(tmp_vault):
+def test_wrapper_report_requires_terminal_sections_from_wrapper_contract(tmp_vault):
     """When wrapper_contract.json declares required_terminal_sections, the
-    benchmark-report rule must fail if any are missing from the final report."""
+    wrapper-report rule must fail if any are missing from the final report."""
     (tmp_vault.root / "research" / "prompt.txt").write_text(
-        "Exact benchmark prompt text.",
+        "Exact wrapped prompt text.",
         encoding="utf-8",
     )
     _write_wrapper_contract(
@@ -156,14 +156,14 @@ def test_benchmark_report_requires_terminal_sections_from_wrapper_contract(tmp_v
         ],
     )
     (tmp_vault.root / "research" / "notes" / "final_report.md").write_text(
-        "# Report\n\n## Body\nSome benchmark content.\n",
+        "# Report\n\n## Body\nSome body content.\n",
         encoding="utf-8",
     )
 
-    _, out = _run_lint(tmp_vault, rule="benchmark-report")
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
     import json
     data = json.loads(out)
-    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "benchmark-report"]
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
     assert len(issues) == 1
     assert issues[0]["severity"] == "error"
     assert "required_terminal_sections" in issues[0]["message"]
@@ -171,10 +171,10 @@ def test_benchmark_report_requires_terminal_sections_from_wrapper_contract(tmp_v
     assert "Concluding Thoughts" in issues[0]["message"]
 
 
-def test_benchmark_report_passes_when_required_sections_present(tmp_vault):
+def test_wrapper_report_passes_when_required_sections_present(tmp_vault):
     """Wrapper contract + report with all declared sections => no issues."""
     (tmp_vault.root / "research" / "prompt.txt").write_text(
-        "Exact benchmark prompt text.",
+        "Exact wrapped prompt text.",
         encoding="utf-8",
     )
     _write_wrapper_contract(
@@ -187,26 +187,26 @@ def test_benchmark_report_passes_when_required_sections_present(tmp_vault):
     (tmp_vault.root / "research" / "notes" / "final_report.md").write_text(
         (
             "# Report\n\n"
-            "## Body\nSome benchmark content.\n\n"
+            "## Body\nSome body content.\n\n"
             "## Opinionated Synthesis\n\n"
             "### Concluding Thoughts\nE\n"
         ),
         encoding="utf-8",
     )
 
-    _, out = _run_lint(tmp_vault, rule="benchmark-report")
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
     import json
     data = json.loads(out)
-    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "benchmark-report"]
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
     assert issues == []
 
 
-def test_benchmark_report_without_contract_only_checks_hygiene(tmp_vault):
+def test_wrapper_report_without_contract_only_checks_hygiene(tmp_vault):
     """With prompt.txt but no wrapper_contract.json, the rule should NOT
     flag missing terminal sections (since nothing was declared required).
     Scaffold-leak hygiene is still enforced."""
     (tmp_vault.root / "research" / "prompt.txt").write_text(
-        "Exact benchmark prompt text.",
+        "Exact wrapped prompt text.",
         encoding="utf-8",
     )
     (tmp_vault.root / "research" / "notes" / "final_report.md").write_text(
@@ -214,42 +214,42 @@ def test_benchmark_report_without_contract_only_checks_hygiene(tmp_vault):
         encoding="utf-8",
     )
 
-    _, out = _run_lint(tmp_vault, rule="benchmark-report")
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
     import json
     data = json.loads(out)
-    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "benchmark-report"]
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
     assert issues == []
 
 
-def test_benchmark_report_forbids_scaffold_leaks_without_contract(tmp_vault):
+def test_wrapper_report_forbids_scaffold_leaks_without_contract(tmp_vault):
     """Scaffold-leak hygiene runs regardless of whether wrapper_contract.json
     declares forbidden_body_sections — the canonical base list from
     SCAFFOLD_ONLY_SECTION_HEADERS is always forbidden."""
     (tmp_vault.root / "research" / "prompt.txt").write_text(
-        "Exact benchmark prompt text.",
+        "Exact wrapped prompt text.",
         encoding="utf-8",
     )
     (tmp_vault.root / "research" / "notes" / "final_report.md").write_text(
         (
             "# Report\n\n"
             "## User Prompt (VERBATIM — gospel)\n"
-            "> Exact benchmark prompt text.\n\n"
+            "> Exact wrapped prompt text.\n\n"
             "## Body\nContent.\n"
         ),
         encoding="utf-8",
     )
 
-    _, out = _run_lint(tmp_vault, rule="benchmark-report")
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
     import json
     data = json.loads(out)
-    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "benchmark-report"]
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
     assert len(issues) == 1
     assert issues[0]["severity"] == "error"
     assert "leaking scaffold-only sections" in issues[0]["message"]
     assert "User Prompt (VERBATIM" in issues[0]["message"]
 
 
-def test_benchmark_report_honors_wrapper_extra_forbidden_sections(tmp_vault):
+def test_wrapper_report_honors_wrapper_extra_forbidden_sections(tmp_vault):
     """A wrapper can declare ADDITIONAL forbidden body sections on top of the
     canonical base list."""
     _write_wrapper_contract(
@@ -265,39 +265,39 @@ def test_benchmark_report_honors_wrapper_extra_forbidden_sections(tmp_vault):
         encoding="utf-8",
     )
 
-    _, out = _run_lint(tmp_vault, rule="benchmark-report")
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
     import json
     data = json.loads(out)
-    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "benchmark-report"]
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
     assert len(issues) == 1
     assert "Internal-only scratch" in issues[0]["message"]
 
 
-def test_benchmark_report_inactive_without_signals(tmp_vault):
+def test_wrapper_report_inactive_without_signals(tmp_vault):
     """No prompt.txt, no wrapper_contract.json => rule is inactive, no issues."""
     (tmp_vault.root / "research" / "notes" / "final_report.md").write_text(
         "# Report\n\n## Body\nRegular /research output.\n",
         encoding="utf-8",
     )
 
-    _, out = _run_lint(tmp_vault, rule="benchmark-report")
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
     import json
     data = json.loads(out)
-    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "benchmark-report"]
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
     assert issues == []
 
 
-def test_benchmark_report_unreadable_contract_surfaces_error(tmp_vault):
+def test_wrapper_report_unreadable_contract_surfaces_error(tmp_vault):
     """Malformed wrapper_contract.json produces an error rather than silently
     disabling the rule."""
     (tmp_vault.root / "research" / "wrapper_contract.json").write_text(
         "{not valid json",
         encoding="utf-8",
     )
-    _, out = _run_lint(tmp_vault, rule="benchmark-report")
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
     import json
     data = json.loads(out)
-    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "benchmark-report"]
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
     assert any("wrapper_contract.json" in i["message"] for i in issues)
 
 

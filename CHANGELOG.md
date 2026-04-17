@@ -38,6 +38,7 @@ This release replaces the three-parallel-drafts-plus-merger ensemble design with
 
 - Scripts calling `hyperresearch install` on a pre-v0.7 vault will get the old agent files pruned. Pre-existing `research/audit_findings.json` and extract notes stay in the vault (no user data is deleted) but the protocol no longer references them.
 - `analyst-coverage` in `hyperresearch lint --rule ...` is gone — use `locus-coverage` and `patch-surgery`.
+- The `benchmark-report` lint rule is renamed to `wrapper-report`. The rule's logic is unchanged — it fires whenever `research/prompt.txt` or `research/wrapper_contract.json` is present and enforces the wrapper's contract on the final report. The rename reflects what the rule actually does (wrapper-contract enforcement) rather than the specific harness context where it was first used.
 
 ## [0.4.0] - 2026-04-13
 

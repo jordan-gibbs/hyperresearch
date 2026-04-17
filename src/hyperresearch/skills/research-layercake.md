@@ -27,7 +27,7 @@ This is the orchestrator. You are running it as Opus. The pipeline spawns specia
 
 - If `research/prompt.txt` exists, read it. Its contents are the canonical research query. GOSPEL.
 - Otherwise, use the user's verbatim prompt as the canonical research query.
-- Extract wrapper requirements separately: required save path, citation format, terminal-section shape, benchmark contract. These are binding but NOT part of the query.
+- Extract wrapper requirements separately: required save path, citation format, terminal-section shape, wrapper contract. These are binding but NOT part of the query.
 - If `research/wrapper_contract.json` exists, read it — it encodes forbidden body sections and required terminal sections for the ambient wrapper.
 
 **Vault tag.** Generate a short slug from the canonical query. Every note created during this run gets this tag so you can scope searches later.
@@ -275,14 +275,14 @@ echo '{"applied": [], "escalations": []}' > research/polish-log.json
 
 2. **Run the lint gate.**
 ```bash
-$HPR lint --rule benchmark-report --json
+$HPR lint --rule wrapper-report --json
 $HPR lint --rule locus-coverage --json
 $HPR lint --rule scaffold-prompt --json
 $HPR lint --rule patch-surgery --json
 ```
 
 If any rule returns `error` severity issues, address them before declaring the run complete:
-- `benchmark-report`: scaffold leaked into the body — spawn the polish auditor once more with the specific leak flagged
+- `wrapper-report`: scaffold leaked into the body — spawn the polish auditor once more with the specific leak flagged
 - `locus-coverage`: a locus identified in Layer 2 has no interim note in the vault — a depth investigator failed silently; do not re-run, just note it in the run log
 - `scaffold-prompt`: the scaffold's `## User Prompt (VERBATIM — gospel)` does not match `research/prompt.txt` exactly — fix the scaffold
 - `patch-surgery`: the draft's churn from Layer 4 → final exceeds the safety threshold — this is a red flag that regeneration snuck in somewhere; read the patch log and investigate

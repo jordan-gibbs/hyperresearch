@@ -14,7 +14,7 @@ from pathlib import Path
 
 # Scaffold-only section headers that must NEVER appear in a final_report draft.
 # Used by critic agents (as detection patterns), the polish auditor, and the
-# `benchmark-report` lint rule. Single canonical source of truth so prompts +
+# `wrapper-report` lint rule. Single canonical source of truth so prompts +
 # lint stay in sync.
 #
 # Matching is prefix-based on the header line — this way the list tolerates

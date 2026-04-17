@@ -13,9 +13,9 @@ The research protocol has ONE process spine (this file) and FOUR modality files 
 
 **There are no numeric targets in this protocol.** No word counts, no H2 counts, no words-per-section floors. A draft is as long as the substance demands and as short as the structure allows. The user's own scope cues (if any) are the only length guidance that applies.
 
-**The canonical research query is gospel in this session.** In a normal interactive run, that is the user's verbatim prompt. In wrapped runs (benchmark harness, higher-level orchestrators, etc.), a file at `research/prompt.txt` overrides the wrapper text and becomes the canonical research query for the scaffold and every downstream `research_query` parameter. It gets copied into the scaffold at Step 7 and every subsequent step re-reads it. Whenever you are unsure what to do, re-read the canonical query. Whenever the draft feels like it's drifting, re-read the canonical query. The auditor at Step 11 grades the draft against the canonical query — not against any abstract notion of quality.
+**The canonical research query is gospel in this session.** In a normal interactive run, that is the user's verbatim prompt. In wrapped runs (an invoking harness, higher-level orchestrators, etc.), a file at `research/prompt.txt` overrides the wrapper text and becomes the canonical research query for the scaffold and every downstream `research_query` parameter. It gets copied into the scaffold at Step 7 and every subsequent step re-reads it. Whenever you are unsure what to do, re-read the canonical query. Whenever the draft feels like it's drifting, re-read the canonical query. The auditor at Step 11 grades the draft against the canonical query — not against any abstract notion of quality.
 
-**Wrapper requirements are a SECOND contract, not part of the query.** The invoking environment may separately require a save path, citation format, or terminal section shape (for example a benchmark-required `## Opinionated Synthesis` block). Record those requirements separately in the scaffold and obey them. Do NOT paste wrapper instructions into the `## User Prompt (VERBATIM — gospel)` section — that section is reserved for the canonical research query only.
+**Wrapper requirements are a SECOND contract, not part of the query.** The invoking environment may separately require a save path, citation format, or terminal section shape (for example a harness-required `## Opinionated Synthesis` block). Record those requirements separately in the scaffold and obey them. Do NOT paste wrapper instructions into the `## User Prompt (VERBATIM — gospel)` section — that section is reserved for the canonical research query only.
 
 ---
 
@@ -60,7 +60,7 @@ First resolve the canonical research query and the wrapper contract:
 
 - If `research/prompt.txt` exists, read it and use its contents EXACTLY as the canonical research query.
 - Otherwise, use the user's verbatim prompt as the canonical research query.
-- Separately extract any wrapper requirements from the current session instructions: required save path, required citation format, required closing block, benchmark-specific structure, or other packaging constraints. These are binding, but they are NOT part of the canonical query.
+- Separately extract any wrapper requirements from the current session instructions: required save path, required citation format, required closing block, harness-specific structure, or other packaging constraints. These are binding, but they are NOT part of the canonical query.
 
 Then copy the canonical research query into your working memory. This is the format you MUST output:
 
