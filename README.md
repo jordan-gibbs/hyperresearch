@@ -13,7 +13,7 @@
 
 ---
 
-**HyoerResearch is a deep research harness for Claude Code, currently leading the deep research bench internally. Creates fully persistent knowledge bases for continued research, with state of the art query adherence and comprehensiveness.**
+**HyperResearch is a deep research harness for Claude Code, currently leading the deep research bench leaderboard (pending third party evaluation). HyperResearch creates fully persistent knowledge bases for continued research, with state of the art query adherence and comprehensiveness.**
 
 <p align="center">
   <img src="assets/benchmark.png" alt="DeepResearch-Bench top-5 — hyperresearch at 57.5, ahead of Tongyi DeepResearch (55.8), Kimi Researcher (53.2), Gemini Deep Research (42.1), OpenAI Deep Research (37.4)" width="780">
@@ -28,9 +28,9 @@ pip install hyperresearch
 hyperresearch install
 ```
 
-In Claude Code, type `/research <anything>` and the full protocol fires.
+In Claude Code, type `/research-layercake <anything>` and the full flagship protocol fires — **a 7-phase pipeline that discovers width first, derives depth loci from the width corpus, runs parallel depth investigations, drafts once, and patches the draft via adversarial critics (no regeneration).** This is the default way to use hyperresearch. If you want a faster single-pass run instead, type `/research <anything>`.
 
-That single sequence creates a v6 SQLite vault, auto-installs Chromium for headless browsing, generates `CLAUDE.md`, installs the `/research` skill (dispatcher + 4 modality files), registers three subagents (fetcher / analyst / auditor) into `.claude/agents/`, and wires PreToolUse hooks.
+That single install command creates a v7 SQLite vault, auto-installs Chromium for headless browsing, generates `CLAUDE.md`, installs both skills (`/research-layercake` and `/research`), registers eight subagents (fetcher / loci-analyst / depth-investigator / dialectic-critic / depth-critic / width-critic / patcher / polish-auditor) into `.claude/agents/`, and wires PreToolUse hooks.
 
 ---
 
@@ -91,6 +91,64 @@ The save gate blocks until every CRITICAL is **genuinely** resolved. Bookkeeping
 
 ---
 
+## `/research-layercake` — 7 phases, one draft, patched not regenerated (the default)
+
+The flagship research surface and the default way to use hyperresearch. Type `/research-layercake <query>` in Claude Code. This is the mode the [benchmark numbers](#benchmarks) ran on.
+
+**Width before depth, then one draft patched by adversarial critics.** An Opus orchestrator walks a seven-phase pipeline: wide corpus sweep → rabbithole identification → parallel depth investigations → single draft → three adversarial readings → surgical patch pass → polish audit.
+
+### The 7 phases
+
+1. **Width sweep.** The orchestrator spawns parallel `hyperresearch-fetcher` Haiku agents to build a 30–80 source corpus covering the topic's corners. Academic APIs (Semantic Scholar, arXiv, OpenAlex, PubMed) run BEFORE web search — citation-ranked canonical papers before derivative commentary.
+2. **Loci analysis.** Two `hyperresearch-loci-analyst` Sonnet agents read the width corpus in parallel and each returns 1–8 specific "depth loci" — questions where deeper investigation would meaningfully improve the final report. The orchestrator dedupes their outputs and clamps to 6.
+3. **Depth investigation.** One `hyperresearch-depth-investigator` Sonnet agent per locus, in parallel. Each investigator can spawn its own fetchers (capped at 10 new sources), reads the existing vault, and writes ONE `interim-<locus>.md` note with dense synthesis, direct quotes, and citations. The orchestrator consumes these interim notes during Layer 4.
+4. **Draft.** The orchestrator writes `research/notes/final_report.md` ONCE, weaving the width corpus with the interim notes under the modality file's substance rules (collect / synthesize / compare / forecast).
+5. **Adversarial critique.** Three Opus critics fire in parallel: `dialectic-critic` (counter-evidence the draft missed), `depth-critic` (shallow spots the interim notes could fill), `width-critic` (topical corners the draft ignores despite the corpus supporting them). Each returns a findings JSON with structured `suggested_patch` entries — never a rewrite.
+6. **Patch pass.** `hyperresearch-patcher` (Sonnet, **tool-locked to `[Read, Edit]`**) reads all three findings files and applies them as surgical Edit hunks. Per-hunk cap: `new_string` may be at most 500 chars longer than `old_string`. The patcher physically cannot Write — it has no path to regenerate the draft.
+7. **Polish audit.** `hyperresearch-polish-auditor` (Sonnet, also `[Read, Edit]` only) strips hygiene leaks (YAML frontmatter, scaffold sections, prompt echoes), cuts filler phrases ("Importantly", "It is worth noting"), removes redundancy, and breaks long sentences — all via surgical Edits. Structural mismatches (wrong format for the prompt, missing sections) escalate to the orchestrator rather than getting force-patched.
+
+### Why the tool lock matters
+
+The load-bearing invariant of layercake is: **after Layer 4 the draft is only ever modified by small Edit hunks.** This is enforced at the Claude Code tool-allowlist level — the patcher and polish auditor do not have `Write` or `Bash`. If a critic's finding cannot fit into a ≤500-char hunk, it escalates to the orchestrator as a structural issue instead of triggering a regeneration. This prevents the "just rewrite it" failure mode that plagues post-hoc review in long-running agent pipelines.
+
+### Opting out — faster single-pass mode
+
+Layercake is the default because width-plus-depth-plus-adversarial-review beats a single investigator on almost every real research query. If you want a faster single-pass run — e.g., for a quick sanity-check or a prompt where one pass is plenty — type `/research <query>` instead. Single-pass fires the same modality rules on one Sonnet agent, no loci analysis, no critics, no patcher.
+
+A rule of thumb: use `/research-layercake` for anything you would want a human researcher to take seriously. Use `/research` when you just want the vault populated and a first-pass draft in front of you quickly.
+
+---
+
+## The vault: persistent, searchable, compounding
+
+hyperresearch is not a one-shot report generator. Every fetched source lands in a durable SQLite-indexed vault that every future research session can reuse. Knowledge compounds across sessions; the tool's value grows with the corpus.
+
+### What persists
+
+- **Raw source material, not rewritten summaries.** Fetched content keeps its original formatting — headings, tables, code blocks, technical details. If the source is a PDF, pymupdf extracts the full text and the original PDF lives at `research/raw/<note-id>.pdf`. Every note carries its source URL, fetch timestamp, tier classification, and `--suggested-by` breadcrumb pointing at whichever note surfaced it.
+- **Extract notes** — per-source analyst reads with direct quotes, context markers, one-line summaries, and inherited tier + content-type tags. These are the second derivative of raw content and stay in the vault as first-class, queryable notes.
+- **Scaffolds, comparisons, audit findings** — every research session's planning artifacts and adversarial review trail persist alongside the sources they drew on. Past synthesis notes are discoverable next to the raw sources that justified them.
+- **The knowledge graph** — `[[wiki-links]]` between notes form a queryable graph. `hyperresearch graph hubs` surfaces the most-connected notes in a domain; `hyperresearch graph backlinks <id>` shows every note that references a given source.
+
+### Searchability
+
+Before any web search the vault gets queried first — the hook reminds Claude Code, and the protocol checks explicitly:
+
+```bash
+hyperresearch search "ion-trap gate fidelity" -j           # Full-text across every note
+hyperresearch search "quantum" --tier ground_truth -j      # Filter by epistemic tier
+hyperresearch search "attention" --include-body -j         # Full-body search, not just titles
+hyperresearch note show <id> <id> <id> -j                  # Batch-read notes in one call
+```
+
+When the vault already holds ≥10 relevant notes on a topic, `/research` tells the user so and asks whether to dig deeper, take a new angle, or synthesize from the existing corpus — instead of re-fetching what's already there. The sunk-cost of past research pays forward.
+
+### Markdown is truth, SQLite is cache
+
+Notes live as plain markdown with YAML frontmatter in `research/notes/`. The SQLite index is fully rebuildable — delete it and `hyperresearch sync` reconstructs it from the markdown. The vault is inspectable in any editor, version-controllable in git, and readable without the tool installed. hyperresearch stores and indexes; it does not hide data behind the tool.
+
+---
+
 ## Why it works on hard research
 
 Your AI agent searches the web, skims sources, writes an answer that sounds good, and ships it. There's no scaffold, no audit, no source-vs-source comparison, no provenance, no way to know if it actually engaged with the strongest counter-position. Hyperresearch breaks that pattern through structural enforcement:
@@ -143,13 +201,18 @@ Your AI agent searches the web, skims sources, writes an answer that sounds good
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Subagent triad**, each picked for its job:
+**Subagent roster**, each picked for its job:
 
 | Agent | Model | Role |
 |---|---|---|
 | `hyperresearch-fetcher` | **Haiku** | Mechanical URL fetching via crawl4ai. Cheap, fast, parallel. |
-| `hyperresearch-analyst` | **Sonnet** | Reads one source with research goal in hand. Writes a focused extract, proposes 2-5 next URLs for the loop. |
-| `hyperresearch-auditor` | **Opus** | Adversarial review in two modes against the verbatim prompt. Persists structured findings the save gate verifies. |
+| `hyperresearch-loci-analyst` | **Sonnet** | Reads the width corpus, returns 1–8 depth loci with rationale. Spawn 2 in parallel, dedupe. |
+| `hyperresearch-depth-investigator` | **Sonnet** | Investigates one locus: fetches new sources, writes one interim-report note per locus. |
+| `hyperresearch-dialectic-critic` | **Opus** | Finds counter-evidence the draft missed, emits structured findings with surgical patches. |
+| `hyperresearch-depth-critic` | **Opus** | Finds shallow spots where interim notes could fill specifics. |
+| `hyperresearch-width-critic` | **Opus** | Finds topical corners the corpus supports but the draft ignores. |
+| `hyperresearch-patcher` | **Sonnet** | Tool-locked `[Read, Edit]`. Applies critic findings as surgical Edit hunks. Cannot regenerate. |
+| `hyperresearch-polish-auditor` | **Sonnet** | Tool-locked `[Read, Edit]`. Cuts filler, strips hygiene leaks, breaks long sentences. |
 
 **Routing** — the dispatcher classifies every request by **what the output needs to do**, not what the subject is:
 
@@ -166,16 +229,17 @@ A query about a fictional franchise can be `collect` (per-character enumeration)
 
 ## What's enforced
 
-Eight invariants the protocol structurally prevents from breaking:
+Nine invariants the protocol structurally prevents from breaking:
 
-1. **Verbatim prompt as gospel** — `scaffold-prompt` lint blocks at Checkpoint 3 if the scaffold doesn't open with the user's exact prompt
+1. **Verbatim prompt as gospel** — `scaffold-prompt` lint blocks if the scaffold doesn't open with the user's exact prompt
 2. **Rooted-tree provenance** — `--suggested-by` chain must form a real tree from at least one seed; isolated breadcrumbs flagged
-3. **Analyst coverage** — at least 1 extract per 3 sources, no silent skipping
-4. **Adversarial dissent** — at least one source explicitly contradicts the dominant view, named in writing
-5. **Audit-gate self-cert detection** — CRITICAL findings marked fixed get their underlying lint rules re-run
-6. **Save blocked** until every CRITICAL is genuinely resolved
-7. **Schema integrity** — `tier` and `content_type` are SQLite CHECK-constrained vocabularies; corrupted frontmatter cannot poison the index
-8. **PDF + raw artifact persistence** — fetched PDFs land in `research/raw/` and the `raw_file` frontmatter field survives every re-serialization
+3. **Locus coverage** — every Layer 2 locus must have a Layer 3 `interim-<name>.md` note; missing interims flag as errors
+4. **Patch-only draft modification** — after Layer 4, the patcher and polish auditor are tool-locked to `[Read, Edit]`. They cannot regenerate; the ≤500-char hunk-expansion cap is a mechanical tripwire
+5. **Critical findings never silently skip** — `patch-surgery` lint surfaces any critical finding the patcher couldn't apply
+6. **Schema integrity** — `tier`, `content_type`, and `type` are SQLite CHECK-constrained vocabularies; corrupted frontmatter cannot poison the index
+7. **PDF + raw artifact persistence** — fetched PDFs land in `research/raw/` and the `raw_file` frontmatter field survives every re-serialization
+8. **Interim notes are persisted, not ephemeral** — depth-investigator outputs stay in the vault forever; future sessions can query them
+9. **Hygiene leaks caught on the way out** — scaffold sections, YAML frontmatter, and prompt echoes are stripped by the polish auditor before ship
 
 ---
 
@@ -196,11 +260,8 @@ Eight invariants the protocol structurally prevents from breaking:
 - **Forecasting + strategy** — "Will US inflation stay above 3% through 2026?" → ground-truth statistics + institutional analysis + named contrarians, probability language not hedge
 - **Interpretive analysis** — "What does *Blood Meridian*'s violence mean?" → primary text + critical tradition + dissenting reading, every paragraph fuses fact with interpretive claim
 - **Enumerative coverage** — "For each Napoleonic marshal, cover key campaigns and fate" → every named entity gets every requested field, no silent downgrades
-- **Persistent knowledge base** — every source ever fetched stays searchable. Future sessions check the vault before searching the web. Knowledge compounds.
 
-### `/research-ensemble` — 3 parallel sub-runs + Opus merger (what was benchmarked)
-
-For queries where depth-of-corpus and argument stability matter more than wall-clock time, use `/research-ensemble <query>`. Opus orchestrates; three `hyperresearch-subrun` Sonnet agents run the full protocol in parallel against one shared vault, each with a subtly different framing (evidentiary breadth / citation-chain depth / dialectical tension). A fourth agent (`hyperresearch-merger`, Opus) scores each draft on comprehensiveness / readability / argument strength / citation quality, picks the strongest as the base, and splices in unique evidence from the other two. Cost is ~5× a normal run; the payoff is detailed in [Benchmarks](#benchmarks) below.
+All of the above run under the default [`/research-layercake`](#research-layercake--7-phases-one-draft-patched-not-regenerated-the-default) mode: width sweep → loci analysis → depth investigations → one draft → three adversarial critics → surgical patch pass → polish audit. For faster turnaround when the query doesn't warrant the full pipeline, type `/research <query>` for a single-pass run.
 
 ---
 
@@ -210,8 +271,8 @@ One command sets up the full integration:
 
 - **`.claude/settings.json`** — PreToolUse hook that nudges Claude Code to check the vault before any raw web search
 - **`.claude/skills/hyperresearch/`** — `/research` skill (dispatcher + 4 modality files: collect / synthesize / compare / forecast)
-- **`.claude/skills/research-ensemble/`** — `/research-ensemble` skill (3× parallel sub-runs + Opus merger; see [Benchmarks](#benchmarks))
-- **`.claude/agents/`** — six registered subagents: `hyperresearch-fetcher` (Haiku), `hyperresearch-analyst` (Sonnet), `hyperresearch-auditor` (Opus), `hyperresearch-rewriter` (Sonnet), `hyperresearch-subrun` (Sonnet, ensemble), `hyperresearch-merger` (Opus, ensemble)
+- **`.claude/skills/research-layercake/`** — `/research-layercake` skill (the 7-phase pipeline; see [Benchmarks](#benchmarks))
+- **`.claude/agents/`** — eight registered subagents: `hyperresearch-fetcher` (Haiku), `hyperresearch-loci-analyst` (Sonnet), `hyperresearch-depth-investigator` (Sonnet), `hyperresearch-dialectic-critic` (Opus), `hyperresearch-depth-critic` (Opus), `hyperresearch-width-critic` (Opus), `hyperresearch-patcher` (Sonnet, `[Read, Edit]`-locked), `hyperresearch-polish-auditor` (Sonnet, `[Read, Edit]`-locked)
 - **`CLAUDE.md`** at the vault root — the full research workflow, automatically loaded by Claude Code on every session
 
 hyperresearch is Claude Code-only for now. Codex, Cursor, and Gemini support was trimmed from v0.6 to focus the surface area — may return as real integrations later.
@@ -275,19 +336,11 @@ LinkedIn, Twitter, Facebook, Instagram, and TikTok automatically use a visible b
 
 Hyperresearch is being evaluated on the [DeepResearch Bench](https://github.com/Ayanami0730/deep_research_bench) RACE eval (Gemini-2.5-Pro judges reports on comprehensiveness, insight, instruction-following, readability). Full per-modality scores and head-to-head comparisons vs other research harnesses will land here as the 100-query sweep completes. **Status:** in progress.
 
-### Ensemble lift — preliminary data point
+### Historical note — the ensemble architecture (preserved on `feat/benchmark-real-gates`)
 
-Query 91 from DeepResearch-Bench ("detailed analysis of the Saint Seiya franchise, structured around armor classes, per-character power/techniques/arcs/fate") is a deep-collect query with ~100 named entities. One data point so far:
+Before v0.7 the flagship mode was `/research-ensemble`: three parallel sub-runs (breadth / depth / dialectical) against a shared vault, fused by an Opus merger. It lifted +2.08 overall against single-run on Query 91 of DeepResearch-Bench, with readability as the biggest gain (+4.20, merger smoothing splice boundaries). Layercake supersedes it: width + loci-derived depth + a patched-not-regenerated draft is a different bet — one draft shaped by adversarial readings rather than three drafts compiled together. The old ensemble branch is preserved in git for comparison.
 
-| Variant | Overall | Comp. | Insight | Inst. | Read. | Cost | Time |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| `/research` single-run (sonnet, v1 baseline) | **52.74** | 52.95 | 58.74 | 51.28 | 51.90 | ~$1.50 | ~8 min |
-| `/research-ensemble` (3× sonnet + opus merger) | **54.82** | 54.52 | 58.57 | 53.30 | 56.10 | $21.98 | 57 min |
-| **Delta** | **+2.08** | +1.57 | −0.17 | +2.02 | +4.20 | ~14× | ~7× |
-
-Readability is the biggest single lift (+4.20) — the merger smooths splice boundaries and harmonizes voice across the three sub-runs. Instruction-following (+2.02) gains from three independent passes cross-checking the prompt's entity list; prompt-named entities the base run collapsed get restored from sibling runs. Comprehensiveness (+1.57) comes from the 3-way evidence union (167 sources fetched into the shared corpus vs ~30 for a single run). Insight is flat as expected — the merger is a compiler, not a re-thinker; it can't deepen an argument beyond what the strongest sub-run already had.
-
-One query is not a benchmark. Full 100-query sweep coming next. The cost ceiling is honest: ~5× per query at the tool-call level, ~14× here because `/research` ran on Sonnet and `/research-ensemble` requires Opus orchestration + Opus merger. Use ensemble where the query earns it; use `/research` for everything else.
+Full 100-query sweep under layercake coming next. Layercake takes longer and uses more model calls than `/research` because width+depth+3×critics+patcher+polish is more work than a single pass — use layercake where the query earns it, use `/research` for everything else.
 
 ---
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS notes (
     status       TEXT NOT NULL DEFAULT 'draft'
                      CHECK (status IN ('draft','review','evergreen','stale','deprecated','archive')),
     type         TEXT NOT NULL DEFAULT 'note'
-                     CHECK (type IN ('note','raw','index','moc')),
+                     CHECK (type IN ('note','raw','index','moc','interim')),
     tier         TEXT
                      CHECK (tier IS NULL OR tier IN ('ground_truth','institutional','practitioner','commentary','unknown')),
     content_type TEXT

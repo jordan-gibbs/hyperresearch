@@ -28,15 +28,31 @@ This project uses hyperresearch as an agent-driven research knowledge base. The 
 
 ### MANDATORY: How to do research
 
-When the user asks you to research a topic, follow the full step-by-step workflow in `.claude/skills/hyperresearch/SKILL.md`. **Do NOT use WebFetch for source pages** — use `{hpr} fetch` instead.
+When the user asks you to research a topic, **default to `/research-layercake`** — the 7-phase pipeline that discovers width first, derives depth loci from the width corpus, runs parallel depth investigations, drafts once, and patches the draft via adversarial critics (no regeneration). The protocol lives in `.claude/skills/research-layercake/SKILL.md`.
+
+Use the single-pass `/research` skill only when the user explicitly asks for a faster run or when the query is trivial enough that the layercake overhead is wasteful. The single-pass protocol lives in `.claude/skills/hyperresearch/SKILL.md`.
+
+**Do NOT use WebFetch for source pages** — use `{hpr} fetch` instead.
 
 SKILL.md classifies your request by cognitive activity (what the output needs to DO, not what the subject IS) and routes to one of 4 modality files: SKILL-collect.md (enumerative coverage with per-entity fields), SKILL-synthesize.md (defended thesis or mechanism explanation), SKILL-compare.md (per-entity evaluation with committed recommendation), or SKILL-forecast.md (forward-looking prediction with explicit time horizon). The dispatcher owns the shared protocol (discovery, fetch, guided reading loop, curation, scaffold, comparisons, draft, audit, synthesis). Each modality file encodes only the substance rules and conformance checks specific to that activity. Read SKILL.md first — it owns the process and will tell you which modality file to open next for substance guidance.
 
-**The user's verbatim prompt is gospel.** SKILL.md requires the prompt to be copied verbatim into the first section of `research/scaffold.md` — every subsequent step re-reads it from there. The adversarial audit at Step 11 grades the draft against the verbatim prompt, not against an abstract notion of quality.
+**The canonical research query is gospel.** In normal runs that is the user's verbatim prompt. In wrapped runs, if `research/prompt.txt` exists, that file is the canonical research query for the scaffold and every downstream subagent call. Keep wrapper instructions separate: required save path, citation format, or benchmark-specific closing sections are binding packaging requirements, but they do NOT belong inside the `## User Prompt (VERBATIM — gospel)` section.
 
-### Ensemble mode — `/research-ensemble` for depth-over-speed
+### Layercake pipeline — 7 phases
 
-For complex queries where variance and depth-of-corpus matter more than wall-clock time, use `/research-ensemble <query>` instead of `/research`. The ensemble orchestrator (Opus) spawns three parallel `hyperresearch-subrun` Sonnet agents with subtly different framings (evidentiary breadth, citation-chain depth, dialectical tension), all sharing the same unified vault. A fourth agent — `hyperresearch-merger` (Opus) — reads all three drafts, scores each on comprehensiveness / readability / argument strength / citation quality, and compiles a unified final report. Cost is ~5x a normal `/research` run. Protocol lives in `.claude/skills/hyperresearch/SKILL-ensemble.md`.
+Width first, depth second, one draft, patched not regenerated.
+
+1. **Width sweep** — 30-80 sources fetched in parallel via `hyperresearch-fetcher` batches. Academic APIs before web search.
+2. **Loci analysis** — 2 `hyperresearch-loci-analyst` subagents read the width corpus in parallel and each returns 1-8 specific "depth loci" (questions where deeper investigation pays off). The orchestrator dedupes and clamps to 6.
+3. **Depth investigation** — 1 `hyperresearch-depth-investigator` per locus, in parallel. Each can spawn its own fetchers (up to 10 new sources per locus) and writes ONE `interim-{{locus}}.md` note to the vault.
+4. **Draft** — the orchestrator writes `research/notes/final_report.md` ONCE, weaving the width corpus with the interim notes and following the modality file's substance rules.
+5. **Adversarial critique** — 3 critics in parallel: `hyperresearch-dialectic-critic` (counter-evidence the draft missed), `hyperresearch-depth-critic` (shallow spots the interim notes could fill), `hyperresearch-width-critic` (topical corners the draft ignores). Each returns a findings JSON with `suggested_patch` entries.
+6. **Patch pass** — `hyperresearch-patcher` (tool-locked to `[Read, Edit]`) reads all three findings files and applies them as surgical Edit hunks. It cannot Write. It cannot regenerate. Per-hunk ≤500-char expansion cap.
+7. **Polish audit** — `hyperresearch-polish-auditor` (also `[Read, Edit]` only) strips hygiene leaks, cuts filler, breaks long sentences, flags structural mismatches to the orchestrator.
+
+The patching invariant is load-bearing: after Layer 4 the draft is only ever modified by small Edit hunks. If a critic's finding cannot fit into a ≤500-char hunk, it escalates to the orchestrator as a structural issue. This prevents the "just rewrite it" failure mode that plagues post-hoc review in long-running agent pipelines.
+
+Layercake takes longer than a single `/research` pass — that is the trade you are making on purpose by invoking the default mode.
 
 ### Why {hpr} fetch, not WebFetch
 
