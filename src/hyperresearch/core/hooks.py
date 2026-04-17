@@ -407,6 +407,35 @@ argumentative. A descriptive "on balance, the sources converge on..."
 is insufficient — that's still a summary. You must COMMIT to a claim
 the orchestrator can cite.
 
+**Prescriptive specificity.** Whenever the evidence supports it, state
+a specific rule, threshold, percentage, time window, or named mechanism
+— not just a directional claim. This is the biggest source of
+prescriptive authority in the final report, and it's the single move
+that separates confident expert prose from LLM-style directional prose.
+
+- Weak: "Manufacturers should bear greater liability for handover
+  design defects."
+- Strong: "Manufacturers bear design-defect liability when handover
+  warning windows fall below 10 seconds at highway speeds, because
+  the detection-to-reaction cognitive floor is ~1.5s + reorient time
+  (5—8s for typical drivers per Zhang 2022 [N])."
+
+- Weak: "Some form of standardized recording would be useful."
+- Strong: "EDR/DSSAD must record 30—60 seconds pre-crash and 10—15
+  seconds post-crash, plus sensor-fusion state and handover timestamps,
+  to enable plaintiff's counsel to reconstruct the decision window [N]."
+
+- Weak: "The evidence points to a larger role for manufacturer
+  liability."
+- Strong: "In L3 operations within ODD, presumptive manufacturer
+  liability should attach unless the manufacturer proves driver
+  deviation from a specific, timely, sensorially-salient warning [N]."
+
+If the evidence you read doesn't support specific numbers, say so
+explicitly ("sources in the corpus don't quantify this threshold")
+— but don't hedge the direction itself. Directional + specific is
+ideal; directional-only is the fallback; vague is rejected.
+
 ## Open questions
 
 Bullets. What did you want to find out but couldn't, given the source
@@ -841,11 +870,11 @@ hand findings to the patcher (Layer 6). You do NOT modify the draft.
     {{
       "severity": "critical|major|minor",
       "atomic_item": "the specific prompt fragment that isn't honored — quote it verbatim from research_query",
-      "failure_mode": "missing|under-covered|wrong-order|wrong-format",
+      "failure_mode": "missing|under-covered|wrong-order|wrong-format|vague-recommendation",
       "anchor": "first 60—120 chars of the draft paragraph where the failure surfaces (or empty if the item is entirely missing)",
       "issue": "One sentence: what the prompt asked and what the draft does instead",
       "suggested_patch": {{
-        "kind": "insert|rename|reorder|reshape",
+        "kind": "insert|rename|reorder|reshape|specify",
         "old_text": "exact text currently in draft (for Edit match; empty when inserting into a new location)",
         "new_text": "exact text the patcher should produce",
         "notes": "why this wording satisfies the prompt's atomic item"
@@ -863,9 +892,59 @@ hand findings to the patcher (Layer 6). You do NOT modify the draft.
   prose). This must be fixed before ship.
 - **`major`** — an item is present but under-covered (a paragraph where
   the prompt implied a dedicated section), OR the order is scrambled
-  (prompt named A then B then C; draft does B, A, C).
+  (prompt named A then B then C; draft does B, A, C), OR a
+  recommendation the prompt asked for is abstract where the evidence
+  supports specificity.
 - **`minor`** — item is present and adequate, but a specific phrasing
   or sub-bullet the prompt implied is missing; low-leverage.
+
+## Prescriptive-specificity check (failure_mode: `vague-recommendation`)
+
+When the prompt asks for recommendations, frameworks, rules, or
+guidelines, the draft's responses must include **specific thresholds,
+numbers, time windows, percentages, or named mechanisms** whenever the
+evidence in the vault supports them. Abstract recommendations read as
+LLM-directional prose; specific recommendations read as expert
+argument. This distinction is the largest single gap between
+agent-generated reports and PhD-quality reference answers.
+
+For every recommendation-shaped claim in the draft, check:
+
+1. Does the claim have a specific threshold? ("below 10 seconds",
+   "above 60 mph", "L3 within ODD")
+2. Does it name a specific mechanism? ("rebuttable presumption",
+   "strict liability", "24-hour OTA notification")
+3. Does it cite specific numbers? ("30—60s pre-crash", "80% of L3
+   accidents", "six-month sunset")
+
+If the draft's recommendation lacks specificity AND the vault contains
+evidence that would support a specific version of it, emit a finding
+with `failure_mode: "vague-recommendation"` and `kind: "specify"`. The
+suggested_patch should replace the abstract wording with the specific
+version, citing the vault evidence.
+
+Example finding:
+
+```json
+{{
+  "severity": "major",
+  "atomic_item": "Propose specific regulatory guidelines for manufacturer data access",
+  "failure_mode": "vague-recommendation",
+  "anchor": "Standardized data recording requirements would ensure plaintiff access",
+  "issue": "Draft recommends 'standardized recording' abstractly; vault contains Zhang 2022 + EU PLD reform evidence supporting specific 30—60s pre-crash + 10—15s post-crash windows.",
+  "suggested_patch": {{
+    "kind": "specify",
+    "old_text": "Standardized data recording requirements would ensure plaintiff access",
+    "new_text": "Standardized data recording requirements — specifically 30—60 seconds pre-crash plus 10—15 seconds post-crash, with sensor-fusion state and handover timestamps [N] — would ensure plaintiff access",
+    "notes": "Matches Zhang 2022's forensic-reconstruction window and aligns with EU PLD reform timing disclosure requirements."
+  }}
+}}
+```
+
+Abstract recommendations where the evidence genuinely doesn't support
+specifics — flag as `minor` and note "vault does not contain
+quantitative evidence for this threshold" in the issue so the patcher
+doesn't try to fabricate a number.
 
 ## Rules
 
