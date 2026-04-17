@@ -13,13 +13,7 @@
 
 ---
 
-**HyperResearch is a deep research harness for Claude Code, currently leading the deep research bench leaderboard (pending third party evaluation). HyperResearch creates fully persistent knowledge bases for continued research, with state of the art query adherence and comprehensiveness.**
-
-<p align="center">
-  <img src="assets/benchmark.png" alt="DeepResearch-Bench top-5 — hyperresearch at 57.5, ahead of Tongyi DeepResearch (55.8), Kimi Researcher (53.2), Gemini Deep Research (42.1), OpenAI Deep Research (37.4)" width="780">
-</p>
-
-<p align="center"><sub>Preliminary — one-query pilot lift (+2.08 over v1 baseline) projected against current DeepResearch-Bench leaders. Full 100-query sweep pending.</sub></p>
+**HyperResearch is a deep research harness for Claude Code. It produces adversarially-audited reports with full source provenance and creates a persistent, searchable knowledge base that compounds across sessions.**
 
 ## Installation
 
@@ -93,7 +87,7 @@ The save gate blocks until every CRITICAL is **genuinely** resolved. Bookkeeping
 
 ## `/research-layercake` — 7 phases, one draft, patched not regenerated (the default)
 
-The flagship research surface and the default way to use hyperresearch. Type `/research-layercake <query>` in Claude Code. This is the mode the [benchmark numbers](#benchmarks) ran on.
+The flagship research surface and the default way to use hyperresearch. Type `/research-layercake <query>` in Claude Code.
 
 **Width before depth, then one draft patched by adversarial critics.** An Opus orchestrator walks a seven-phase pipeline: wide corpus sweep → rabbithole identification → parallel depth investigations → single draft → three adversarial readings → surgical patch pass → polish audit.
 
@@ -271,7 +265,7 @@ One command sets up the full integration:
 
 - **`.claude/settings.json`** — PreToolUse hook that nudges Claude Code to check the vault before any raw web search
 - **`.claude/skills/hyperresearch/`** — `/research` skill (dispatcher + 4 modality files: collect / synthesize / compare / forecast)
-- **`.claude/skills/research-layercake/`** — `/research-layercake` skill (the 7-phase pipeline; see [Benchmarks](#benchmarks))
+- **`.claude/skills/research-layercake/`** — `/research-layercake` skill (the 7-phase pipeline)
 - **`.claude/agents/`** — eight registered subagents: `hyperresearch-fetcher` (Haiku), `hyperresearch-loci-analyst` (Sonnet), `hyperresearch-depth-investigator` (Sonnet), `hyperresearch-dialectic-critic` (Opus), `hyperresearch-depth-critic` (Opus), `hyperresearch-width-critic` (Opus), `hyperresearch-patcher` (Sonnet, `[Read, Edit]`-locked), `hyperresearch-polish-auditor` (Sonnet, `[Read, Edit]`-locked)
 - **`CLAUDE.md`** at the vault root — the full research workflow, automatically loaded by Claude Code on every session
 
@@ -329,18 +323,6 @@ profile = "research"
 ```
 
 LinkedIn, Twitter, Facebook, Instagram, and TikTok automatically use a visible browser to avoid session kills.
-
----
-
-## Benchmarks
-
-Hyperresearch is being evaluated on the [DeepResearch Bench](https://github.com/Ayanami0730/deep_research_bench) RACE eval (Gemini-2.5-Pro judges reports on comprehensiveness, insight, instruction-following, readability). Full per-modality scores and head-to-head comparisons vs other research harnesses will land here as the 100-query sweep completes. **Status:** in progress.
-
-### Historical note — the ensemble architecture (preserved on `feat/benchmark-real-gates`)
-
-Before v0.7 the flagship mode was `/research-ensemble`: three parallel sub-runs (breadth / depth / dialectical) against a shared vault, fused by an Opus merger. It lifted +2.08 overall against single-run on Query 91 of DeepResearch-Bench, with readability as the biggest gain (+4.20, merger smoothing splice boundaries). Layercake supersedes it: width + loci-derived depth + a patched-not-regenerated draft is a different bet — one draft shaped by adversarial readings rather than three drafts compiled together. The old ensemble branch is preserved in git for comparison.
-
-Full 100-query sweep under layercake coming next. Layercake takes longer and uses more model calls than `/research` because width+depth+3×critics+patcher+polish is more work than a single pass — use layercake where the query earns it, use `/research` for everything else.
 
 ---
 
