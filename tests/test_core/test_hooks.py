@@ -186,6 +186,10 @@ def test_install_patcher_agent_is_edit_only(tmp_vault):
     assert "Write" not in body.split("tools:")[1].split("\n")[0]
     assert "500" in body  # hunk size rule
     assert "regenerat" in body.lower()  # the invariant spelled out
+    # Integrate-don't-caveat rule lifts insight score by preventing
+    # hedge-appending patches that dilute committed claims.
+    assert "Integrate, don't caveat" in body
+    assert "scoping the claim" in body
     assert result is not None
 
 
@@ -201,6 +205,10 @@ def test_install_polish_auditor_agent_is_edit_only(tmp_vault):
     assert "tools: Bash" not in body
     # scaffold-only section list must be injected
     assert "User Prompt (VERBATIM" in body
+    # Hedge-language cutting category — strikes softeners on claims the
+    # paragraph already supports with evidence. Highest-leverage polish cut.
+    assert "Hedge language that softens committed claims" in body
+    assert "suggests that" in body
     assert result is not None
 
 

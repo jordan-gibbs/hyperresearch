@@ -787,6 +787,44 @@ Target log schema:
   citation, insert the `[N]` marker in the body but leave the Sources
   list alone.
 
+## Integrate, don't caveat
+
+When a critic finding is about counter-evidence the draft missed, you
+have two ways to patch it. Prefer the first; reject the second:
+
+- **Integrate by scoping the claim.** The existing claim is probably
+  too broad. Narrow it with the counter-evidence's domain or
+  condition. Example: draft says "X is true." Counter-evidence says
+  "X is false in China because Y." Good patch: "X holds in Europe
+  and North America; in China, Y creates a different regime in which
+  X does not apply [N]." This turns the counter-evidence into a
+  scope bound on the claim — the thesis gets sharper, not weaker.
+
+- **Append-as-caveat (BAD).** Draft says "X is true." Patch appends
+  "though this may resolve differently in other regimes." This adds
+  hedge words to a claim that was previously committed. It reads as
+  backpedaling, it makes the claim less specific, and the polish
+  auditor will strike the hedge anyway. Avoid this pattern.
+
+The difference in one sentence: integrate-by-scoping tells the reader
+*where and why* the claim is true; append-as-caveat tells the reader
+*that the writer is no longer sure*. The first strengthens insight;
+the second weakens it. A draft that shifts from "X is true"
+→ "X is true in scope A; Y is true in scope B because Z" has gained
+argumentative density. A draft that shifts from "X is true" → "X may
+be true, though it might differ elsewhere" has lost density.
+
+This applies especially to findings from the **dialectic-critic** and
+**width-critic** — those critics surface omitted counter-positions
+and coverage gaps. Those findings are prompts to scope the claim,
+not prompts to hedge it.
+
+If the critic's `suggested_patch.new_text` is itself in
+append-as-caveat form, you may rewrite it into integrate-by-scoping
+form within the ≤500-char cap. The suggested_patch is a suggestion;
+your job is to apply the *finding* well, not to copy the *suggestion*
+verbatim if you can see a better patch.
+
 ## Reporting back
 
 Tell the orchestrator:
@@ -875,6 +913,45 @@ Edit out filler phrases where they add no information:
 Edit out sentences that restate the prior sentence. If a paragraph ends
 with a sentence that summarizes what the prior two sentences said, the
 summary sentence usually goes.
+
+### 3a. Hedge language that softens committed claims
+
+The draft upstream was built to commit to positions. If the patcher
+or any earlier layer added hedging verbs that soften a claim the
+paragraph already supports with evidence, strike the hedge. This is
+one of the highest-leverage cuts you can make — hedging dilutes the
+argumentative density that generates insight scoring.
+
+Watch for these softeners, in context where the surrounding evidence
+would support a stronger claim:
+
+- **`suggests that`** when used to introduce a conclusion the cited
+  evidence already supports directly. "Data X suggests Y" → "Data X
+  shows Y" (or just delete "suggests that" entirely if the next
+  clause is already assertive).
+- **`may`, `might`, `could`** used to hedge a conclusion the
+  paragraph has already made. "The evidence *may* indicate..." →
+  "The evidence indicates..." when the evidence is in the same
+  sentence or paragraph. Keep the hedge only when the claim is
+  genuinely speculative (no evidence cited, or cited evidence does
+  not fully support the claim).
+- **`appears to`, `seems to`, `tends to`** — same pattern. If the
+  surrounding citations support the claim, drop the softener. "X
+  tends to cause Y [3][5]" → "X causes Y [3][5]".
+- **Appended caveats that dilute rather than scope.** If a sentence
+  makes a committed claim and then appends "though this may resolve
+  differently in other regimes" WITHOUT naming the other regime and
+  the reason it differs, that caveat is hedge-shaped weakening.
+  Either delete it (if the claim is strong enough to stand) or
+  escalate to the orchestrator noting the claim may need scoping —
+  but do not leave a bare "may be different" hedge on the draft.
+
+Do NOT strike hedges on genuinely speculative claims (forecasts
+without data, open questions, places where the underlying evidence
+is contested). The rule is: if the same paragraph provides evidence
+that supports the stronger claim, the hedge is filler and should go.
+If the evidence is absent or weak, the hedge is honesty and should
+stay.
 
 ### 4. Repetitive sections
 
