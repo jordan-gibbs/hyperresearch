@@ -21,6 +21,43 @@ This is the orchestrator. You are running it as Opus. The pipeline spawns specia
 
 ---
 
+## Subagent spawn contract (applies to every Task call you make)
+
+Every subagent in the pipeline needs context about **what they're for, where they sit in the pipeline, and what the user actually asked**. When you spawn ANY subagent via the Task tool, the prompt you pass must include the following three pieces — in this order, near the top:
+
+1. **`research_query` — verbatim, block-quoted.** The canonical user question. If `research/prompt.txt` exists, that file's content IS the research_query. Do not paraphrase, do not summarize, do not "clean up" — paste it character-for-character. This is every subagent's north star; an agent without the research_query in its prompt is guaranteed to drift off the user's ask.
+
+2. **Pipeline position statement.** One sentence naming what layer the subagent is running in, what came before, what comes after. Example: *"You are Layer 3 (depth investigator) of the layercake pipeline. Layer 2's loci analysts produced `research/loci.json`; after you return, Layer 3.5 will reconcile your committed position against the other investigators'."* This prevents subagents from doing adjacent layers' work (e.g., patchers trying to regenerate, critics trying to fix).
+
+3. **The subagent's specific inputs.** What the subagent prompt documents as its required fields (vault_tag, output_path, locus, etc.). These vary per subagent — see each agent's description for its schema.
+
+Skipping any of these three in a Task prompt is a process violation. A fetcher that doesn't see the research_query fetches URLs without context for why; a critic that doesn't see the pipeline position may patch the draft directly (it shouldn't); a patcher that doesn't see the research_query applies findings without the north-star check.
+
+Concrete Task-call template:
+
+```
+subagent_type: hyperresearch-<agent-name>
+prompt: |
+  RESEARCH QUERY (verbatim, gospel):
+  > {{paste contents of research/prompt.txt OR user's literal prompt here, character-for-character}}
+
+  PIPELINE POSITION: You are Layer N of the 7-phase layercake pipeline.
+  Prior layers: {{list what's already run and what artifacts they produced}}.
+  After you: {{list what comes next and what it expects from your output}}.
+
+  YOUR INPUTS:
+  - <input_1>: <value>
+  - <input_2>: <value>
+  - ...
+
+  {{Any agent-specific guidance beyond what's already in the agent's
+  own prompt file.}}
+```
+
+This contract applies to ALL subagent Task calls — fetchers included. A fetcher that knows the research_query can make smarter quality calls ("is this URL relevant to *this* question?") than one fetching blind.
+
+---
+
 ## Inputs and setup
 
 **Canonical research query.** Resolve the same way the single-pass `/research` skill does:
@@ -211,8 +248,9 @@ echo '{"applied": [], "skipped": [], "conflicts": []}' > research/patch-log.json
    If you skip this step the patcher will silently have nowhere to write its log, will inline the log in its response instead, and you may mis-capture or drop the data entirely. This has historically been the single most common Layer 6 failure mode — do not skip it.
 
 2. **Spawn the patcher ONCE.** Pass:
+   - `research_query` — canonical, verbatim (same as every other subagent). The patcher checks every finding against this before applying; findings that don't serve the research_query are rejected.
    - `draft_path` — `research/notes/final_report.md`
-   - `findings_paths` — list of the three critic JSONs
+   - `findings_paths` — list of the four critic JSONs (dialectic / depth / width / instruction)
    - `patch_log_path` — `research/patch-log.json` (already stubbed above)
 
 3. **The patcher is tool-locked to `[Read, Edit]`.** It physically cannot Write. It can only call Edit with old_string/new_string pairs, each bounded by the ≤500-char expansion rule. Its job is to: (a) apply each finding's patch as an Edit on the draft file, and (b) populate the pre-stubbed patch log via Edit on `research/patch-log.json`.
