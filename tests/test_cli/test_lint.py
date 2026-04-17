@@ -1200,3 +1200,128 @@ def test_patch_surgery_empty_log_without_findings_is_silent(tmp_vault):
         if i.get("rule") == "patch-surgery"
     ]
     assert issues == []
+
+
+# ---------------------------------------------------------------------------
+# instruction-coverage — atomic items from prompt-decomposition must
+# appear in the final report
+# ---------------------------------------------------------------------------
+
+
+def _write_decomposition(vault, entities=None, formats=None):
+    import json as _json
+    research = vault.root / "research"
+    research.mkdir(parents=True, exist_ok=True)
+    data = {
+        "sub_questions": [],
+        "entities": entities or [],
+        "required_formats": formats or [],
+        "required_sections": [],
+        "time_horizons": [],
+        "scope_conditions": [],
+    }
+    (research / "prompt-decomposition.json").write_text(
+        _json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _write_final_report(vault, body: str):
+    notes_dir = vault.root / "research" / "notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    (notes_dir / "final_report.md").write_text(body, encoding="utf-8")
+
+
+def test_instruction_coverage_passes_when_all_entities_present(tmp_vault):
+    _write_decomposition(tmp_vault, entities=[
+        {"name": "Alpha Method", "type": "concept"},
+        {"name": "Beta Framework", "type": "concept"},
+    ])
+    _write_final_report(tmp_vault,
+        "# Report\n\n## Alpha Method\nContent about the Alpha Method.\n\n"
+        "## Beta Framework\nContent about the Beta Framework.\n"
+    )
+    _, out = _run_lint(tmp_vault, rule="instruction-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "instruction-coverage"
+    ]
+    assert issues == []
+
+
+def test_instruction_coverage_flags_missing_entities(tmp_vault):
+    _write_decomposition(tmp_vault, entities=[
+        {"name": "Alpha Method"},
+        {"name": "Beta Framework"},
+        {"name": "Gamma Protocol"},
+    ])
+    _write_final_report(tmp_vault,
+        "# Report\n\n## Alpha Method\nContent about the Alpha Method.\n"
+    )
+    _, out = _run_lint(tmp_vault, rule="instruction-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "instruction-coverage"
+    ]
+    assert len(issues) == 1
+    assert "2 atomic entity" in issues[0]["message"]
+    assert "Beta Framework" in issues[0]["message"]
+    assert "Gamma Protocol" in issues[0]["message"]
+    # 2 missing → warning, 3+ would be error
+    assert issues[0]["severity"] == "warning"
+
+
+def test_instruction_coverage_errors_on_three_plus_missing(tmp_vault):
+    _write_decomposition(tmp_vault, entities=[
+        {"name": "Alpha"},
+        {"name": "Beta"},
+        {"name": "Gamma"},
+        {"name": "Delta"},
+    ])
+    _write_final_report(tmp_vault, "# Report\n\nOnly Alpha is here.\n")
+    _, out = _run_lint(tmp_vault, rule="instruction-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "instruction-coverage"
+    ]
+    # Beta, Gamma, Delta all missing → error severity
+    entity_issues = [i for i in issues if "atomic entity" in i["message"]]
+    assert len(entity_issues) == 1
+    assert entity_issues[0]["severity"] == "error"
+
+
+def test_instruction_coverage_flags_missing_format(tmp_vault):
+    _write_decomposition(tmp_vault,
+        entities=[{"name": "X"}],
+        formats=["mind map of causal structure", "ranked list of tradeoffs"],
+    )
+    _write_final_report(tmp_vault, "# Report\n\n## X\nPlain prose about X.\n")
+    _, out = _run_lint(tmp_vault, rule="instruction-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "instruction-coverage"
+           and "Required format" in i["message"]
+    ]
+    assert len(issues) == 1
+    assert "mind map" in issues[0]["message"]
+    assert "ranked list" in issues[0]["message"]
+
+
+def test_instruction_coverage_noop_when_no_decomposition(tmp_vault):
+    """Non-layercake runs have no decomposition file — rule stays silent."""
+    _, out = _run_lint(tmp_vault, rule="instruction-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "instruction-coverage"
+    ]
+    assert issues == []

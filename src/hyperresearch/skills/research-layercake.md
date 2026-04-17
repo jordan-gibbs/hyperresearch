@@ -2,8 +2,10 @@
 name: research-layercake
 description: >
   Deep research via the LAYERCAKE architecture — a 7-phase pipeline:
-  width sweep → loci analysis → depth investigation → draft → three
-  adversarial critics in parallel → surgical patch pass → polish audit.
+  prompt decomposition → width sweep → loci analysis → depth
+  investigation → draft → four adversarial critics in parallel
+  (dialectic / depth / width / instruction) → surgical patch pass →
+  polish audit.
   The patcher and polish auditor are TOOL-LOCKED to Read + Edit: they
   cannot regenerate the draft, only apply surgical hunks. Invoke with
   /research-layercake.
@@ -72,6 +74,54 @@ This contract applies to ALL subagent Task calls — fetchers included. A fetche
 **Modality.** Classify the query by cognitive activity the same way `/research` does: collect / synthesize / compare / forecast. The modality file lives at `.claude/skills/hyperresearch/SKILL-<modality>.md`. You will read it before writing the Layer 4 draft.
 
 Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same scaffold template the single-pass skill uses (see `.claude/skills/hyperresearch/SKILL.md` Step 7). The scaffold is your private planning document — it MUST NOT appear anywhere in the final report.
+
+---
+
+## Layer 0.5 — Prompt decomposition
+
+**Goal:** before any research happens, decompose the user's prompt into its atomic items. This artifact is read by the instruction-critic in Layer 5 and by the final draft in Layer 4 to make sure the pipeline doesn't drift from what was actually asked.
+
+**Why this layer exists:** the single dimension where the pipeline has the widest variance is whether the draft structurally mirrors the prompt. When the prompt asks for "for each significant character, describe techniques / arcs / fate" and the draft produces per-character sections with those three fields in order — that's a structural match, high instruction-following. When the prompt asks the same thing and the draft organizes around thematic analysis with characters mentioned as illustrations — that's a structural mismatch, even if every fact is in there. The decomposition makes the structural requirement explicit, in writing, BEFORE drafting.
+
+### Procedure
+
+1. Re-read the canonical research_query end to end.
+2. Walk through it and extract every atomic item — anything that's a discrete thing the prompt named. These fall into categories:
+   - **Sub-questions** — explicit or implicit questions the draft must answer ("What cues influence this?" → atomic: "cues influencing X")
+   - **Named entities / categories** — every character, product, company, concept, time period, etc. the prompt names by name
+   - **Required formats** — "mind map", "ranked list", "FAQ", "tabular", "scenario matrix", etc.
+   - **Required sections** — "include X section", "end with Y", "begin with Z"
+   - **Time horizons** — "through 2027", "next 12 months", "historical through 2010-present"
+   - **Scope conditions** — "for non-academic contexts", "under SIL-4 constraints"
+3. Write `research/prompt-decomposition.json`:
+
+```json
+{
+  "sub_questions": [
+    "What is the specific question this addresses?",
+    "..."
+  ],
+  "entities": [
+    {"name": "Bronze Saints", "type": "category", "required_fields": ["techniques", "arcs", "fate"]},
+    ...
+  ],
+  "required_formats": [
+    "mind map of causal structure",
+    "5-tier support/resistance table"
+  ],
+  "required_sections": [
+    "## Opinionated Synthesis (if wrapper_contract demands it)"
+  ],
+  "time_horizons": ["2010-present", "12-month forward"],
+  "scope_conditions": ["urban rail specifically, not mainline"]
+}
+```
+
+4. Every atomic item you put here becomes a draft requirement in Layer 4 and a critic-verifiable check in Layer 5. If you leave an atomic item out of the decomposition, the instruction-critic won't catch it. Be thorough — inflation (including items the prompt didn't actually name) is worse than omission, because the critic will then demand content the user didn't ask for.
+
+5. **Do NOT include wrapper-contract requirements here** — those live in `research/wrapper_contract.json` separately. The decomposition is ONLY about what the user's actual prompt named.
+
+**Exit criterion:** `research/prompt-decomposition.json` exists, is valid JSON, and every atomic item in it can be pointed at a specific passage of the research_query.
 
 ---
 
@@ -180,56 +230,63 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
 
 ## Layer 4 — Draft (orchestrator, single pass)
 
-**Goal:** write ONE draft that weaves the width corpus with the depth interim notes AND engages the cross-locus tensions from `research/comparisons.md`, following the modality file's substance rules.
+**Goal:** write ONE draft that weaves the width corpus with the depth interim notes AND engages the cross-locus tensions from `research/comparisons.md` AND mirrors the atomic items from `research/prompt-decomposition.json`, following the modality file's substance rules.
 
-1. **Re-read `research/comparisons.md`.** The tensions there are your argumentative spine. Keep the document open in your working context while drafting.
+1. **Re-read `research/prompt-decomposition.json`.** Every atomic item named there is a draft requirement. For each sub-question, the draft must answer it. For each named entity, the draft must address it (in a dedicated section, subsection, or paragraph, as the decomposition's structure implies). For each required format, the draft must honor it. You are mirroring the user's structure, not reorganizing the topic around your own analytical axes.
 
-2. **Read your modality file now.** Open `.claude/skills/hyperresearch/SKILL-<modality>.md` and apply its substance rules. Pay particular attention to the modality's insight-generation rules — these are the rules that push you from reporting evidence to interpreting it.
+2. **Re-read `research/comparisons.md`.** The tensions there are your argumentative spine. Keep the document open in your working context while drafting.
 
-3. **Read SKILL.md's Step 9 (draft conventions).** The dispatcher's drafting rules (citation placement, length discipline, visual-device encouragement, filler bans) apply to the layercake draft the same way they apply to a single-pass draft.
+3. **Read your modality file now.** Open `.claude/skills/hyperresearch/SKILL-<modality>.md` and apply its substance rules. Pay particular attention to the modality's insight-generation rules — these are the rules that push you from reporting evidence to interpreting it.
 
-4. **Write the draft to `research/notes/final_report.md`.** Structure:
+4. **Read SKILL.md's Step 9 (draft conventions).** The dispatcher's drafting rules (citation placement, length discipline, visual-device encouragement, filler bans) apply to the layercake draft the same way they apply to a single-pass draft.
+
+5. **Structure the draft around the decomposition.** When the prompt named 5 entities in a list, the draft should typically have 5 sections or subsections in that order. When the prompt asked for a mind map, include a mind map. When the prompt named sub-questions A/B/C, answer them in that order. Your own analytical framing belongs in the synthesis section at the end — NOT as the body's structural spine. This single rule is the highest-leverage insight-following move available.
+
+6. **Write the draft to `research/notes/final_report.md`.** Structure:
    - Opening paragraphs that state the thesis / framing. Your thesis must commit to a position — not "this report surveys X" but "X is true (or X is false, or X is the right frame) because..." — grounded in the cross-locus comparisons you identified.
-   - Body sections as the modality + prompt demand. **Each body section that touches a tension named in `comparisons.md` must engage that tension explicitly** — by name, with a paragraph that commits to a reading of the disagreement, not just reports both sides.
+   - Body sections mirroring the decomposition's structural cues. **Each body section that touches a tension named in `comparisons.md` must engage that tension explicitly** — by name, with a paragraph that commits to a reading of the disagreement, not just reports both sides.
    - Closing section per the modality rule. Where the modality demands a reasoned position (synthesize, compare, forecast), that position must visibly incorporate the strongest cross-locus tensions — not average them out into hedged prose.
    - Sources list — numbered `[N]` entries matching the inline `[N]` citations
 
-5. **Insight-generation rules (applied to every body section):**
+7. **Insight-generation rules (applied to every body section):**
    - **Commit, don't hedge.** Sentences like "some argue X while others argue Y" are allowed as setup but MUST be followed by "the evidence weighs toward X because Z" or an equivalent committed reading. Pure "on the one hand / on the other hand" prose is low-insight reporting.
-   - **Interpret, don't just cite.** For every 2–3 citations, there should be at least one interpretive beat — a sentence or clause that draws a conclusion the sources themselves didn't draw. The RACE judge rewards interpretive density; descriptive citation stacks suppress the insight score.
+   - **Interpret, don't just cite.** For every 2–3 citations, there should be at least one interpretive beat — a sentence or clause that draws a conclusion the sources themselves didn't draw. Interpretive density drives the insight dimension; descriptive citation stacks suppress it.
    - **Privilege committed investigator positions.** Each `## Committed position` section from a depth investigator is a claim the draft can cite directly ("our reading of the FRMCS evidence is that..." — then [N]). These are your strongest argumentative levers — use them, don't soften them into "the literature suggests...".
 
-6. **Include inline citations.** Every load-bearing claim gets `[N]`. The `[N]` numbering is deterministic: first cited source is `[1]`, next new source is `[2]`, and so on. The Sources list at the end matches this numbering.
+8. **Include inline citations.** Every load-bearing claim gets `[N]`. The `[N]` numbering is deterministic: first cited source is `[1]`, next new source is `[2]`, and so on. The Sources list at the end matches this numbering.
 
-7. **Honor wrapper contracts.** If `research/wrapper_contract.json` specifies a required terminal section (e.g., `## Opinionated Synthesis`), include it. If it specifies forbidden body sections, do not use them.
+9. **Honor wrapper contracts.** If `research/wrapper_contract.json` specifies a required terminal section (e.g., `## Opinionated Synthesis`), include it. If it specifies forbidden body sections, do not use them.
 
-8. **Hygiene.** The final report MUST NOT contain:
-   - YAML frontmatter
-   - Any scaffold-only section (the polish auditor strips these if they leak, but prevention is cheaper)
-   - The user prompt verbatim
-   - Literal "User asked:" or similar prompt-echo preambles
-   - `research/comparisons.md` content verbatim — comparisons.md is planning, not body content
+10. **Hygiene.** The final report MUST NOT contain:
+    - YAML frontmatter
+    - Any scaffold-only section (the polish auditor strips these if they leak, but prevention is cheaper)
+    - The user prompt verbatim
+    - Literal "User asked:" or similar prompt-echo preambles
+    - `research/comparisons.md` content verbatim — comparisons.md is planning, not body content
+    - `research/prompt-decomposition.json` content verbatim — decomposition is planning, not body content
 
-9. **Write-once.** You write this draft once. After this point, the draft is only modified by Edit hunks from the patcher and polish auditor. Do NOT re-draft.
+11. **Write-once.** You write this draft once. After this point, the draft is only modified by Edit hunks from the patcher and polish auditor. Do NOT re-draft.
 
 ---
 
-## Layer 5 — Adversarial critique (parallel, 3 critics)
+## Layer 5 — Adversarial critique (parallel, 4 critics)
 
-**Goal:** three independent findings lists against the single draft, each from a different adversarial angle.
+**Goal:** four independent findings lists against the single draft, each from a different adversarial angle. Each critic has its own role — they complement, not duplicate.
 
-1. **Spawn 3 critics in parallel.** In ONE message, invoke:
-   - `hyperresearch-dialectic-critic` → `research/critic-findings-dialectic.json`
-   - `hyperresearch-depth-critic` → `research/critic-findings-depth.json`
-   - `hyperresearch-width-critic` → `research/critic-findings-width.json`
+1. **Spawn 4 critics in parallel.** In ONE message, invoke:
+   - `hyperresearch-dialectic-critic` → `research/critic-findings-dialectic.json` (counter-evidence the draft missed or straw-manned)
+   - `hyperresearch-depth-critic` → `research/critic-findings-depth.json` (shallow spots where interim notes could fill substance)
+   - `hyperresearch-width-critic` → `research/critic-findings-width.json` (corpus clusters the draft ignores despite evidence)
+   - `hyperresearch-instruction-critic` → `research/critic-findings-instruction.json` (atomic items from `research/prompt-decomposition.json` that the draft missed, under-covered, reordered, or reformatted)
 
 2. **Pass each critic:**
-   - `research_query` — canonical, verbatim
+   - `research_query` — canonical, verbatim (GOSPEL — same text every critic sees)
    - `draft_path` — `research/notes/final_report.md`
-   - `output_path` — one of the three paths above
+   - `output_path` — one of the four paths above
    - `vault_tag` — `<vault_tag>`
+   - For `instruction-critic` additionally: `decomposition_path` = `research/prompt-decomposition.json`
 
-3. **Wait for all three.** If one fails, you can proceed with two findings files, but log the absence to the run log — the patch pass is less robust with missing critic coverage.
+3. **Wait for all four.** If one fails, you can proceed with three findings files, but log the absence to the run log — the patch pass is less robust with missing critic coverage. Do NOT skip the instruction-critic specifically — it's the only critic measuring prompt adherence, which is the dimension with the widest variance.
 
 4. **Do not read the findings yourself and apply them.** The patcher reads the findings. Your job is to hand them to the patcher.
 

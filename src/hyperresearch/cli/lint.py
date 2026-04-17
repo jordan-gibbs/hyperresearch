@@ -25,6 +25,7 @@ RULES = {
     "provenance": "Source notes with no --suggested-by breadcrumb chain (data-flow chain broken)",
     "locus-coverage": "Loci identified in Layer 2 missing their interim-report notes (depth investigator skipped)",
     "patch-surgery": "Critical critic findings skipped by the patcher (Layer 6 regeneration guard tripped)",
+    "instruction-coverage": "Atomic items from prompt-decomposition missing from the final report (draft drifted from user's ask)",
     "orphaned-raw-files": "Files in research/raw/ with no matching note (disk leak from old note rm)",
     "singleton-tags": "Tags used by only one note",
     "broken-links": "Wiki-links that don't resolve",
@@ -272,6 +273,15 @@ def lint(
                     ("patch log", "patch-surgery"),
                     ("critical finding skipped", "patch-surgery"),
                     ("regeneration", "patch-surgery"),
+
+                    # instruction-coverage (decomposition items in final report)
+                    ("instruction-coverage", "instruction-coverage"),
+                    ("instruction coverage", "instruction-coverage"),
+                    ("instruction_coverage", "instruction-coverage"),
+                    ("prompt decomposition", "instruction-coverage"),
+                    ("prompt-decomposition", "instruction-coverage"),
+                    ("atomic item", "instruction-coverage"),
+                    ("atomic items", "instruction-coverage"),
 
                     # provenance (bouncing reading loop + --suggested-by chain)
                     ("provenance", "provenance"),
@@ -964,6 +974,96 @@ def lint(
                         "> research/patch-log.json` before spawning the patcher."
                     ),
                 })
+
+    if "instruction-coverage" in rules_to_run:
+        # Layer 0.5 produces `research/prompt-decomposition.json` — a structured
+        # breakdown of the atomic items the user's prompt named (sub-questions,
+        # entities, required formats, etc.). The final_report.md is expected to
+        # cover every atomic item. This rule does a lightweight text-presence
+        # check: for each named entity or sub-question in the decomposition,
+        # verify the final report mentions it.
+        #
+        # This is a shallow check — surface presence, not structural mirroring.
+        # The instruction-critic agent (Layer 5) does the deeper structural
+        # audit. This lint rule is the final post-patch gate that catches
+        # items the critic flagged but the patcher couldn't apply.
+        decomp_path = vault.root / "research" / "prompt-decomposition.json"
+        final_report = vault.root / "research" / "notes" / "final_report.md"
+        if decomp_path.exists() and final_report.exists():
+            try:
+                decomp = json.loads(decomp_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as exc:
+                issues.append({
+                    "rule": "instruction-coverage",
+                    "severity": "error",
+                    "note_id": "<vault>",
+                    "message": (
+                        f"research/prompt-decomposition.json exists but is "
+                        f"not valid JSON: {exc}. Layer 0.5 output corrupted."
+                    ),
+                })
+                decomp = None
+
+            if isinstance(decomp, dict):
+                try:
+                    report_text = final_report.read_text(encoding="utf-8")
+                except OSError:
+                    report_text = ""
+                report_lower = report_text.lower()
+
+                missing_entities: list[str] = []
+                entities = decomp.get("entities", []) or []
+                for ent in entities:
+                    if not isinstance(ent, dict):
+                        continue
+                    name = ent.get("name") or ""
+                    if name and name.lower() not in report_lower:
+                        missing_entities.append(name)
+
+                if missing_entities:
+                    severity = "error" if len(missing_entities) >= 3 else "warning"
+                    preview = ", ".join(missing_entities[:8])
+                    if len(missing_entities) > 8:
+                        preview += f", ... (+{len(missing_entities) - 8} more)"
+                    issues.append({
+                        "rule": "instruction-coverage",
+                        "severity": severity,
+                        "note_id": "<vault>",
+                        "message": (
+                            f"{len(missing_entities)} atomic entity/entities "
+                            f"from prompt-decomposition.json are missing from "
+                            f"the final report: {preview}. The draft drifted "
+                            "from the user's explicit ask. Re-spawn the "
+                            "instruction-critic with the missing items "
+                            "flagged, or hand-craft Edits to restore them."
+                        ),
+                    })
+
+                # Required formats are a more structural check — we can't
+                # reliably grep for "is this a mind map" — but if the format
+                # name is literally missing from the prose, that's a signal.
+                missing_formats: list[str] = []
+                for fmt in (decomp.get("required_formats", []) or []):
+                    if not isinstance(fmt, str):
+                        continue
+                    # Pull the content-word from the format spec (e.g., "mind
+                    # map of causal structure" → "mind map")
+                    head = fmt.split(" of ")[0].strip().lower()
+                    if head and head not in report_lower:
+                        missing_formats.append(fmt)
+                if missing_formats:
+                    issues.append({
+                        "rule": "instruction-coverage",
+                        "severity": "warning",
+                        "note_id": "<vault>",
+                        "message": (
+                            f"Required format(s) from prompt-decomposition not "
+                            f"visibly present in draft: {', '.join(missing_formats[:5])}. "
+                            "This may be a false positive if the format is "
+                            "rendered without the spec word in the prose — "
+                            "review manually."
+                        ),
+                    })
 
     if "orphaned-raw-files" in rules_to_run:
         # Walk research/raw/ and flag files whose stem doesn't match any note

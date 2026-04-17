@@ -13,6 +13,10 @@ This release replaces the three-parallel-drafts-plus-merger ensemble design with
 - **`NoteType.INTERIM`** — new first-class note type for depth-investigator outputs. Persisted in the vault with `type: interim` and tagged `locus-<name>` for indexability. Added to the SQLite CHECK constraint via migration v7.
 - **`locus-coverage` lint rule** — reads `research/loci.json` (Layer 2 output) and verifies every identified locus has a corresponding interim-report note. Missing interims flag as errors.
 - **`patch-surgery` lint rule** — reads `research/patch-log.json` (Layer 6 output) and surfaces any critical finding the patcher skipped. The 500-char "patch too large" regeneration guard is also surfaced at warning severity.
+- **`instruction-coverage` lint rule** — reads `research/prompt-decomposition.json` and verifies every atomic item (entity, required format) appears in the final report. Catches drafts that drifted from the user's explicit ask.
+- **Layer 0.5 — prompt decomposition** — new orchestrator step before Layer 1 produces `research/prompt-decomposition.json`, a structured breakdown of the atomic items the user's prompt named (sub-questions, entities, required formats, required sections, time horizons, scope conditions). This becomes a first-class contract that flows through Layer 4 drafting and Layer 5 instruction-critique.
+- **`hyperresearch-instruction-critic`** — fourth adversarial critic (Opus, `[Bash, Read]` only). Reads the Layer 4 draft against the prompt-decomposition and emits findings for missing / under-covered / mis-ordered / mis-formatted atomic items. Spawned in parallel with dialectic / depth / width critics in Layer 5.
+- **Pipeline-awareness contract** — every subagent now receives the verbatim research_query AND an explicit pipeline-position statement in its Task prompt. The skill file documents the three-piece spawn contract (research_query / pipeline position / inputs) and provides a copy-paste template so the orchestrator applies it consistently to every Task call.
 - **Schema v7 migration** — safely rebuilds the `notes` table with `'interim'` added to the type CHECK constraint on existing vaults.
 
 ### Removed
@@ -21,7 +25,7 @@ This release replaces the three-parallel-drafts-plus-merger ensemble design with
 - **Retired subagents** — `hyperresearch-analyst`, `hyperresearch-auditor`, `hyperresearch-rewriter`, `hyperresearch-subrun`, `hyperresearch-merger` are no longer installed. On reinstall, any vault that had them gets them pruned automatically by `_prune_retired_agents()`.
 - **`analyst-coverage` lint rule** — superseded by `locus-coverage` (extracts were the ensemble era's per-source deep-read artifact; interim notes are the layercake equivalent scoped per locus).
 
-### New subagent roster (8 agents)
+### New subagent roster (9 agents)
 
 | Agent | Model | Tools | Role |
 |---|---|---|---|
@@ -31,6 +35,7 @@ This release replaces the three-parallel-drafts-plus-merger ensemble design with
 | `hyperresearch-dialectic-critic` | Opus | Bash, Read | Finds counter-evidence gaps |
 | `hyperresearch-depth-critic` | Opus | Bash, Read | Finds shallow spots |
 | `hyperresearch-width-critic` | Opus | Bash, Read | Finds topical coverage gaps |
+| `hyperresearch-instruction-critic` | Opus | Bash, Read | Finds atomic items the draft missed from prompt-decomposition |
 | `hyperresearch-patcher` | Sonnet | **Read, Edit** | Applies critic findings as Edit hunks |
 | `hyperresearch-polish-auditor` | Sonnet | **Read, Edit** | Cuts filler + strips hygiene leaks |
 

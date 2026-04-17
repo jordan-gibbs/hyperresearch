@@ -9,6 +9,7 @@ from hyperresearch.core.hooks import (
     _install_depth_critic_agent,
     _install_depth_investigator_agent,
     _install_dialectic_critic_agent,
+    _install_instruction_critic_agent,
     _install_layercake_skill,
     _install_loci_analyst_agent,
     _install_patcher_agent,
@@ -172,6 +173,26 @@ def test_install_width_critic_agent(tmp_vault):
     assert result is not None
 
 
+def test_install_instruction_critic_agent(tmp_vault):
+    """Instruction-critic specifically targets the instruction-following
+    dimension by checking the draft against prompt-decomposition atomic
+    items. Read-only tool lock — it produces findings, never patches."""
+    result = _install_instruction_critic_agent(tmp_vault.root, "hyperresearch")
+    agent_path = (
+        tmp_vault.root / ".claude" / "agents" / "hyperresearch-instruction-critic.md"
+    )
+    assert agent_path.exists()
+    body = agent_path.read_text(encoding="utf-8")
+    assert "model: opus" in body
+    assert "tools: Bash, Read" in body
+    # The critic explicitly consumes the decomposition artifact
+    assert "prompt-decomposition.json" in body
+    assert "atomic_item" in body
+    # Failure modes it tracks
+    assert "missing|under-covered|wrong-order|wrong-format" in body
+    assert result is not None
+
+
 def test_install_patcher_agent_is_edit_only(tmp_vault):
     """The patcher MUST be tool-locked to Read + Edit only — no Write, no
     Bash. This is the load-bearing invariant that enforces PATCH-NOT-REGEN."""
@@ -286,6 +307,7 @@ def test_install_hooks_registers_full_layercake_roster(tmp_vault):
         "hyperresearch-dialectic-critic.md",
         "hyperresearch-depth-critic.md",
         "hyperresearch-width-critic.md",
+        "hyperresearch-instruction-critic.md",
         "hyperresearch-patcher.md",
         "hyperresearch-polish-auditor.md",
     }
