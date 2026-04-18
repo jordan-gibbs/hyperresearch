@@ -26,6 +26,7 @@ RULES = {
     "locus-coverage": "Loci identified in Layer 2 missing their interim-report notes (depth investigator skipped)",
     "patch-surgery": "Critical critic findings skipped by the patcher (Layer 6 regeneration guard tripped)",
     "instruction-coverage": "Atomic items from prompt-decomposition missing from the final report (draft drifted from user's ask)",
+    "extract-coverage": "Single-pass /research runs with fetched sources but no paired extract notes (analyst skipped)",
     "orphaned-raw-files": "Files in research/raw/ with no matching note (disk leak from old note rm)",
     "singleton-tags": "Tags used by only one note",
     "broken-links": "Wiki-links that don't resolve",
@@ -265,6 +266,16 @@ def lint(
                     ("missing interim", "locus-coverage"),
                     ("interim note", "locus-coverage"),
                     ("depth investigator", "locus-coverage"),
+
+                    # extract-coverage (single-pass extract:source ratio)
+                    ("extract-coverage", "extract-coverage"),
+                    ("extract coverage", "extract-coverage"),
+                    ("extract_coverage", "extract-coverage"),
+                    ("extract ratio", "extract-coverage"),
+                    ("extract notes", "extract-coverage"),
+                    ("fetch:extract", "extract-coverage"),
+                    ("analyst skipped", "extract-coverage"),
+                    ("no extract", "extract-coverage"),
 
                     # patch-surgery (patcher didn't apply critical findings)
                     ("patch-surgery", "patch-surgery"),
@@ -858,6 +869,109 @@ def lint(
                         "Delete the weaker copies manually."
                     ),
                 })
+
+    if "extract-coverage" in rules_to_run:
+        # Single-pass /research runs use the "bouncing reading loop": fetch a
+        # seed, analyst reads it and proposes next URLs, main agent fetches
+        # those, loop. Each fetched source should have a paired extract note
+        # (tagged `extract`) with ≥150 words of real content. This rule
+        # enforces that discipline — it catches flat-batch fetchers who never
+        # spawned an analyst, AND it catches stub-padding attacks where the
+        # agent mints hollow extract notes to pass numerical coverage.
+        #
+        # Layercake runs use a different artifact shape (interim notes per
+        # locus, checked by `locus-coverage`). Skip this rule when
+        # `research/loci.json` exists — that signals a layercake run.
+        is_layercake_run = (vault.root / "research" / "loci.json").exists()
+        if not is_layercake_run:
+            extract_min_words = 150
+
+            source_count_row = conn.execute(
+                "SELECT COUNT(*) as c FROM notes n "
+                "WHERE n.source IS NOT NULL "
+                "AND n.id NOT LIKE '\\_%' ESCAPE '\\' "
+                "AND n.type NOT IN ('index','raw','moc') "
+                "AND n.id NOT IN (SELECT note_id FROM tags WHERE tag = 'extract') "
+                "AND n.id NOT IN (SELECT note_id FROM tags WHERE tag = 'scaffold') "
+                "AND n.id NOT IN (SELECT note_id FROM tags WHERE tag = 'comparison') "
+                "AND n.id NOT IN (SELECT note_id FROM tags WHERE tag = 'dud')"
+            ).fetchone()
+            source_count = source_count_row["c"] if source_count_row else 0
+
+            # REAL extracts: tagged `extract`, body ≥150 words, with parent
+            # pointing at a real source note (chain of custody). Stubs and
+            # unlinked real-looking extracts don't satisfy.
+            extract_count_row = conn.execute(
+                "SELECT COUNT(DISTINCT n.id) as c FROM notes n "
+                "JOIN tags t ON t.note_id = n.id "
+                "WHERE t.tag = 'extract' "
+                "AND n.word_count >= ? "
+                "AND n.parent IS NOT NULL AND n.parent != '' "
+                "AND n.parent IN (SELECT id FROM notes WHERE source IS NOT NULL) "
+                "AND n.id NOT IN (SELECT note_id FROM tags WHERE tag = 'dud')",
+                (extract_min_words,),
+            ).fetchone()
+            extract_count = extract_count_row["c"] if extract_count_row else 0
+
+            # Count stubs separately so the lint message stays honest — a
+            # vault with 13 real + 45 stub extracts should show that, not
+            # silently collapse to "13 extracts".
+            stub_count_row = conn.execute(
+                "SELECT COUNT(DISTINCT n.id) as c FROM notes n "
+                "JOIN tags t ON t.note_id = n.id "
+                "WHERE t.tag = 'extract' AND n.word_count < ? "
+                "AND n.id NOT IN (SELECT note_id FROM tags WHERE tag = 'dud')",
+                (extract_min_words,),
+            ).fetchone()
+            stub_count = stub_count_row["c"] if stub_count_row else 0
+
+            # Real extracts with no valid parent — broken chain of custody.
+            unlinked_real_row = conn.execute(
+                "SELECT COUNT(DISTINCT n.id) as c FROM notes n "
+                "JOIN tags t ON t.note_id = n.id "
+                "WHERE t.tag = 'extract' "
+                "AND n.word_count >= ? "
+                "AND (n.parent IS NULL OR n.parent = '' "
+                "     OR n.parent NOT IN (SELECT id FROM notes WHERE source IS NOT NULL)) "
+                "AND n.id NOT IN (SELECT note_id FROM tags WHERE tag = 'dud')",
+                (extract_min_words,),
+            ).fetchone()
+            unlinked_real = unlinked_real_row["c"] if unlinked_real_row else 0
+
+            # Require 1/3 coverage (error floor at 1/4). Even a 2-source
+            # session needs at least 1 extract — the analyst is mandatory
+            # on single-pass runs, not optional.
+            if source_count >= 1:
+                required_extracts = max(1, source_count // 3)
+                error_floor = max(1, source_count // 4)
+                if extract_count < required_extracts:
+                    ratio = extract_count / source_count if source_count else 0
+                    notes_parts = []
+                    if stub_count:
+                        notes_parts.append(
+                            f"{stub_count} stub notes under {extract_min_words} words, not counted"
+                        )
+                    if unlinked_real:
+                        notes_parts.append(
+                            f"{unlinked_real} unlinked real extracts missing a valid parent source-id, not counted"
+                        )
+                    stub_note = f" (plus {'; '.join(notes_parts)})" if notes_parts else ""
+                    issues.append({
+                        "rule": "extract-coverage",
+                        "severity": "error" if extract_count < error_floor else "warning",
+                        "note_id": "<vault>",
+                        "message": (
+                            f"Vault has {source_count} fetched source notes but only {extract_count} "
+                            f"real source-linked extract notes{stub_note} "
+                            f"({ratio:.0%} coverage, need ≥{required_extracts}). "
+                            f"The analyst was skipped on most sources or the source->extract chain "
+                            f"of custody is broken. Spawn an analyst subagent on the unanalyzed "
+                            f"sources during curation. Target: at least 1 extract "
+                            f"(≥{extract_min_words} words, with `parent=<source-note-id>`) per 3 "
+                            f"sources (floor of 1 for any corpus size). Minting stub notes to "
+                            f"pass this gate is lint-gaming and will not satisfy."
+                        ),
+                    })
 
     if "patch-surgery" in rules_to_run:
         # Layer 6 writes research/patch-log.json. The log records applied,

@@ -119,7 +119,7 @@ When the auditor runs in conformance mode on a collect draft, it applies these c
 
 (4) **Provenance chain.** Run `$HPR lint --rule provenance -j`. FAIL if any `--suggested-by` issues.
 
-(5) **Locus coverage.** Run `$HPR lint --rule locus-coverage -j`. FAIL if the extract:source ratio is below 30%.
+(5) **Extract coverage.** Run `$HPR lint --rule extract-coverage -j`. FAIL if the extract:source ratio is below 30%.
 
 (6) **Opening scope + significance threshold.** Read the opening. Does it state what set is being enumerated, how boundaries were defined, and what significance threshold was applied? FAIL if any of the three is missing.
 

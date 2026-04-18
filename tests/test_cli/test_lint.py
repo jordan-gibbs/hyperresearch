@@ -1313,3 +1313,101 @@ def test_instruction_coverage_noop_when_no_decomposition(tmp_vault):
         if i.get("rule") == "instruction-coverage"
     ]
     assert issues == []
+
+
+# ---------------------------------------------------------------------------
+# extract-coverage — single-pass /research runs must have analyst-extract
+# notes per source. Skips on layercake runs (loci.json present).
+# ---------------------------------------------------------------------------
+
+
+def test_extract_coverage_passes_with_healthy_ratio(tmp_vault):
+    """9 sources + 3 real extracts (≥150 words, parent points to source) =
+    33% coverage = passes the 1/3 gate."""
+    for i in range(9):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    for i in range(3):
+        _write_extract(
+            tmp_vault,
+            f"extract-{i}",
+            word_count_target=200,
+            parent=f"source-{i}",
+        )
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="extract-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "extract-coverage"
+    ]
+    assert issues == []
+
+
+def test_extract_coverage_flags_missing_extracts(tmp_vault):
+    """9 sources + 0 extracts = 0% coverage = error."""
+    for i in range(9):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="extract-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "extract-coverage"
+    ]
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "error"
+    assert "9 fetched source notes" in issues[0]["message"]
+    assert "0 real" in issues[0]["message"]
+
+
+def test_extract_coverage_rejects_stubs(tmp_vault):
+    """9 sources + 20 stub extracts (<150 words) = 0 real extracts, all
+    stubs counted separately. Lint-gaming defense."""
+    for i in range(9):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    for i in range(20):
+        _write_extract(
+            tmp_vault,
+            f"stub-{i}",
+            word_count_target=70,
+            parent=f"source-{i % 9}",
+        )
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="extract-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "extract-coverage"
+    ]
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "error"
+    assert "20 stub notes" in issues[0]["message"]
+
+
+def test_extract_coverage_skips_on_layercake_runs(tmp_vault):
+    """Layercake runs produce loci.json. This rule is single-pass only —
+    it should stay silent on layercake vaults, where locus-coverage takes
+    over for quality gating."""
+    for i in range(9):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    # No extracts — would normally fire — but...
+    _write_loci_json(tmp_vault, [
+        {"name": "alpha", "one_line": "Q1"},
+    ])
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="extract-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "extract-coverage"
+    ]
+    # Silent on layercake — locus-coverage handles this mode
+    assert issues == []
