@@ -941,22 +941,6 @@ def test_patch_surgery_flags_critical_skip(tmp_vault):
     assert "dialectic" in issues[0]["message"]
 
 
-def test_patch_surgery_flags_regeneration_attempt(tmp_vault):
-    """The 500-char 'patch too large' guard catches critics trying to
-    regenerate under the patch-only rule. Surfaces as a warning."""
-    _write_patch_log(tmp_vault, skipped=[
-        {"finding_id": 3, "severity": "major", "critic": "width",
-         "reason": "patch too large (+612 chars)"},
-    ])
-    _, out = _run_lint(tmp_vault, rule="patch-surgery")
-    import json
-    data = json.loads(out)
-    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "patch-surgery"]
-    # Should see the "patch too large" warning (severity = warning, not error,
-    # because the finding was major not critical)
-    assert any(i.get("severity") == "warning" and "too large" in i["message"] for i in issues)
-
-
 def test_patch_surgery_noop_when_no_patch_log(tmp_vault):
     """Single-pass /research runs produce no patch-log.json. Rule stays silent."""
     _, out = _run_lint(tmp_vault, rule="patch-surgery")
@@ -1045,8 +1029,10 @@ def test_workflow_passes_with_comparisons_md(tmp_vault):
     assert issues == []
 
 
-def test_workflow_skips_comparisons_gate_when_single_locus(tmp_vault):
-    """1 locus → nothing to compare → comparisons.md legitimately absent."""
+def test_workflow_requires_comparisons_even_on_single_locus(tmp_vault):
+    """Layer 3.5 is always-on: single-locus runs still produce a
+    comparisons.md distilling that locus's committed position. Missing
+    comparisons.md when loci >= 1 is now an error."""
     from hyperresearch.core.note import write_note
     write_note(
         tmp_vault.notes_dir,
@@ -1071,7 +1057,9 @@ def test_workflow_skips_comparisons_gate_when_single_locus(tmp_vault):
         i for i in data.get("data", {}).get("issues", [])
         if i.get("rule") == "workflow" and "comparisons.md" in i["message"]
     ]
-    assert issues == []
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "error"
+    assert "always-on" in issues[0]["message"]
 
 
 # ---------------------------------------------------------------------------

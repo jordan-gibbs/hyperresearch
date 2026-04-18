@@ -164,7 +164,7 @@ If the entities have dramatically different maturity (A has 10 years of producti
 
 (9) **Provenance chain.** Run `$HPR lint --rule provenance -j`. FAIL if any issues.
 
-(10) **Analyst coverage.** Run `$HPR lint --rule analyst-coverage -j`. FAIL if below 30%.
+(10) **Locus coverage.** Run `$HPR lint --rule locus-coverage -j`. FAIL if below 30%.
 
 (11) **Mechanism-before-method per entity.** Sample 3 entity sections. Does each open with mechanism (what it is, how it works) before method (how to use it)? FAIL if sections jump straight to usage without the underlying model.
 

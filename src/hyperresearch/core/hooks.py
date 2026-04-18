@@ -3,7 +3,7 @@
 The hook reminds Claude Code to check the research base before doing raw web
 searches. The skills (`/research`, `/research-layercake`) drive the research
 protocol. The layercake subagents (fetcher, loci-analyst, depth-investigator,
-three critics, patcher, polish-auditor) are Claude Code registered agents
+four critics, patcher, polish-auditor) are Claude Code registered agents
 spawned via the Task tool.
 """
 
@@ -578,12 +578,13 @@ Write your findings to `output_path`:
   but the draft isn't wrong.
 - **At most 12 findings.** If you see more than 12, return the 12 most
   load-bearing. Returning 40 small findings buries the critical ones.
-- **Your `suggested_patch.new_text` MUST be ≤500 chars longer than
-  `old_text`.** Critical constraint. If you cannot patch surgically,
-  escalate to severity `critical` and describe the structural issue in
-  `issue`, but still propose the smallest surgical insertion that moves
-  the problem toward resolution. The patcher is tool-locked to small
-  hunks and will reject anything that looks like regeneration.
+- **Keep patches surgical.** Your `suggested_patch` should change as
+  little as possible while addressing the issue. If a finding needs
+  a multi-paragraph rewrite, it's structural — escalate with
+  `severity: "critical"` and describe the structural issue in `issue`,
+  but omit `suggested_patch` (or propose the smallest insertion that
+  moves the problem toward resolution). The patcher rejects
+  regeneration dressed as a patch — don't ask it to rewrite sections.
 - **Never propose deleting and retyping an entire section.** That is
   regeneration. Reject the urge.
 
@@ -670,7 +671,7 @@ rather than gesturing at it from a distance.
 ## Output schema
 
 Identical to dialectic-critic. Write to `output_path` with
-`"critic_type": "depth"`. Same severity scale. Same ≤500-char hunk rule.
+`"critic_type": "depth"`. Same severity scale. Same surgical-patch discipline.
 
 ## Rules
 
@@ -764,7 +765,7 @@ because the orchestrator's structural choices buried them.
 ## Output schema
 
 Identical to dialectic-critic. Write to `output_path` with
-`"critic_type": "width"`. Same severity. Same ≤500-char rule.
+`"critic_type": "width"`. Same severity. Same surgical-patch discipline.
 
 ## Rules
 
@@ -953,15 +954,15 @@ doesn't try to fabricate a number.
   `atomic_item` field verbatim from research_query or from
   prompt-decomposition.json. If the prompt didn't name it, don't flag
   it — that's the width critic's job, not yours.
-- **`suggested_patch.new_text` is ≤500 chars longer than `old_text`.**
-  Same constraint as the other critics.
-- **For `wrong-format` findings**, the patch is usually too big to
-  fit in a single hunk — flag `severity: critical` with a description
+- **Keep patches surgical.** Same discipline as the other critics —
+  your `suggested_patch` should change as little as possible while
+  addressing the atomic item.
+- **For `wrong-format` findings**, a full format change (ranked-list
+  → FAQ) is structural — flag `severity: critical` with a description
   in `issue` but omit `suggested_patch`. These escalate to the
   orchestrator for a structural fix, not the patcher.
 - **For `missing` items**, propose the insertion text (and the anchor
   in the draft where it should land) in `suggested_patch.new_text`.
-  The patcher will insert it if it fits in ≤500 chars.
 
 ## Reporting back
 
@@ -983,8 +984,8 @@ accounted for, in the shape the user asked for. That's the mechanism.
 
 # ---------------------------------------------------------------------------
 # Layer 6 — patcher. Read + Edit tools ONLY. Cannot Write. Applies critic
-# findings as surgical Edit hunks. Enforces the ≤500-char expansion rule
-# per hunk.
+# findings as surgical Edit hunks. The tool lock is what enforces the
+# no-regeneration invariant; there is no numerical size cap on hunks.
 # ---------------------------------------------------------------------------
 PATCHER_AGENT = """\
 ---
@@ -1020,17 +1021,20 @@ finding, no later stage recovers it. Don't leave a critical on the floor.
 
 ## The invariant — PATCH, NEVER REGENERATE
 
-If a finding cannot be applied as a small Edit hunk, **reject the
+If a finding would require rewriting a whole section, **reject the
 finding**. Write a note back to the orchestrator saying the finding was
 structural and needs orchestrator-level handling. Do NOT "fix" it by
-expanding one hunk into a paragraph-scale rewrite.
+retyping a paragraph-scale block of prose.
 
 Concretely:
-- **Per hunk, `new_string` must be ≤500 chars longer than `old_string`.**
-  If a finding requires more, split it into multiple small hunks OR
-  reject it.
+- **Keep each hunk surgical.** Change as little as possible while
+  addressing the finding's `issue`. A hunk that replaces one sentence
+  with a better sentence is fine. A hunk that replaces a whole
+  paragraph is probably regeneration — split it or reject.
 - **Never delete and retype a whole section.** That is regeneration
-  wearing a patch costume.
+  wearing a patch costume. The tool lock doesn't prevent this
+  (Edit will accept any old_string/new_string pair that matches
+  exactly); YOU prevent this by sizing patches intentionally.
 - **Preserve existing text verbatim** inside every `old_string` you
   extract — the Edit tool matches exactly, so you cannot accidentally
   "improve" surrounding text while patching the target.
@@ -1055,29 +1059,44 @@ Concretely:
 
 ## Procedure
 
-1. **Read all three findings files.** Merge into one flat list. Sort
-   by severity: critical first, then major, then minor.
+1. **Read all four findings files** (dialectic / depth / width / instruction).
+   Merge into one flat list. Sort by severity: critical first, then major, then minor.
 
-2. **Dedupe.** Two critics often notice related-but-overlapping issues.
+2. **Read every field of every finding.** Each finding has these parts — use all of them, not just `old_text` / `new_text`:
+   - **`severity`** — drives application order and whether skipping is a pipeline blocker.
+   - **`anchor`** — the critic's 60—120-char hint for where the failure surfaces. Use this to sanity-check that `old_text` appears in roughly the region the critic meant; if `old_text` matches several places in the draft, `anchor` disambiguates.
+   - **`issue`** — one-sentence description of the problem. Read it before applying the patch. If the proposed `new_text` doesn't actually address the stated `issue`, skip and log a conflict — that's a critic who proposed a weak patch.
+   - **`evidence`** — the vault note id or citation the critic grounded the finding in. Before applying, spot-check that this evidence exists in the vault (`$HPR note show <id> -j` or grep the Sources list). If the evidence is a hallucinated note id, skip and log — you are guarding against critics inventing support.
+   - **`suggested_patch.kind`** — categorizes the patch: `insert`, `qualify`, `cite`, `rename`, `reorder`, `reshape`, `specify`. Drives how you apply it. `specify` means prefer the patch even when it lengthens prose (prescriptive specificity is a known quality lever). `reshape` usually signals a structural change — escalate instead of attempting the Edit. `reorder` requires moving prose across sections; escalate unless the move is local (within one paragraph).
+   - **`suggested_patch.old_text` / `new_text`** — the concrete Edit to apply.
+   - **`suggested_patch.notes`** — the critic's rationale for THIS specific wording. Read it. If the rationale contradicts the evidence or the issue, prefer the issue + evidence and reject the `new_text`; log as conflict.
+
+3. **Dedupe.** Two critics often notice related-but-overlapping issues.
    If two findings target the same anchor with compatible patches,
    merge them into one Edit. If they target the same anchor with
    INCOMPATIBLE patches (critics disagree), prefer the higher-severity
-   one. If equal severity and incompatible, log a conflict and skip
-   both — the orchestrator resolves conflicts.
+   one. If equal severity and incompatible, prefer the one whose
+   `evidence` field points at stronger vault support. If still tied,
+   log a conflict and skip both — the orchestrator resolves.
 
-3. **Read the draft once.** Hold it in context — you need to find the
+4. **Read the draft once.** Hold it in context — you need to find the
    anchors critics specified.
 
-4. **Apply each finding in order.** For each finding:
+5. **Apply each finding in order.** For each finding:
    a. Locate `suggested_patch.old_text` in the draft. If it does not
       match exactly (anchor drifted after an earlier patch changed the
       text), skip and log. Do NOT fuzzy-match.
-   b. Check `len(new_text) - len(old_text) ≤ 500`. If not, skip and log
-      as "patch too large — structural issue".
+   b. Re-read the finding's `issue` + `evidence` + `notes`. If any of
+      the three raises a red flag (evidence hallucinated, notes
+      contradict issue, issue doesn't describe the patch), skip and
+      log as "finding inconsistent".
    c. Call Edit(draft_path, old_string=old_text, new_string=new_text).
-   d. Add an entry to the patch log (see step 5 for how).
+   d. Add an entry to the patch log (see step 6 for how). Include the
+      finding's `critic_type`, `severity`, `kind`, and a short
+      `rationale` copied from `notes` so the log records WHY the patch
+      landed, not just THAT it did.
 
-5. **Populate the patch log via Edit.** The orchestrator pre-created an
+6. **Populate the patch log via Edit.** The orchestrator pre-created an
    empty stub at `patch_log_path` with content
    `{{"applied": [], "skipped": [], "conflicts": []}}`. You populate it
    by calling Edit to replace each empty array with the real entries.
@@ -1160,7 +1179,7 @@ not prompts to hedge it.
 
 If the critic's `suggested_patch.new_text` is itself in
 append-as-caveat form, you may rewrite it into integrate-by-scoping
-form within the ≤500-char cap. The suggested_patch is a suggestion;
+form — keeping the patch surgical. The suggested_patch is a suggestion;
 your job is to apply the *finding* well, not to copy the *suggestion*
 verbatim if you can see a better patch.
 
@@ -1326,9 +1345,9 @@ Look for:
 
 1. Read the draft end to end. Note every issue against the five
    categories above.
-2. For each issue, compose an Edit hunk. Same constraints as the
-   patcher: `len(new_string) - len(old_string)` ≤ 500 (and for polish
-   that delta is usually NEGATIVE — you are cutting).
+2. For each issue, compose an Edit hunk. Keep it surgical (change as
+   little as possible while addressing the issue). Polish edits are
+   almost always NEGATIVE in net chars — you are cutting, not adding.
 3. Apply Edits in order: hygiene first (critical), then prompt-adherence
    tweaks (major), then filler and redundancy (minor), then readability
    breaks (minor).

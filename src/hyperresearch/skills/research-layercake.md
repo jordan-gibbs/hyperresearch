@@ -17,7 +17,7 @@ This is the orchestrator. You are running it as Opus. The pipeline spawns specia
 
 **Two canonical rules:**
 
-1. **PATCH, NEVER REGENERATE.** After the first draft is written (Layer 4), the draft is only ever modified by Edit hunks produced by the patcher (Layer 6) and the polish auditor (Layer 7). Both subagents are tool-locked to `[Read, Edit]`. Neither can Write a new draft. If a critic's finding cannot fit into a ≤500-char Edit hunk, it escalates to you as a structural issue — not a rewrite.
+1. **PATCH, NEVER REGENERATE.** After the first draft is written (Layer 4), the draft is only ever modified by Edit hunks produced by the patcher (Layer 6) and the polish auditor (Layer 7). Both subagents are tool-locked to `[Read, Edit]`. Neither can Write a new draft. If a critic's finding would require rewriting a whole section, it escalates to you as a structural issue — not a rewrite. Keep hunks surgical: change as little as possible while addressing the issue.
 
 2. **ARGUE, DON'T JUST REPORT.** The layercake pipeline is engineered to push the final report toward argumentative density. Loci analysts must flag at least one dialectical locus (where sources disagree). Depth investigators must commit to a position at the end of every interim note — not just summarize. Layer 3.5 forces you to reconcile those positions in `comparisons.md` before drafting. Layer 4 requires every body section that touches a cross-locus tension to engage it explicitly. A descriptive "survey" draft is a pipeline failure, not a neutral output.
 
@@ -164,6 +164,7 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
    - Dedupe on `name` (exact match) or near-match (same core question, different phrasing). When in doubt, prefer the entry with stronger `corpus_evidence`.
    - If the deduped list exceeds 6, drop the weakest entries — rank by how load-bearing the rationale is for the canonical research query.
    - The deduped, clamped list is authoritative. Write it to `research/loci.json`.
+   - **Persist both analysts' `skip_loci` arrays** in the same file — union them under a top-level `skip_loci` key. These justifications matter downstream: the `locus-coverage` lint rule can cross-reference them when an interim note is "missing" to distinguish real investigator failure from legitimate skip. Schema: `{"loci": [...deduped-clamped...], "skip_loci": [...union from both analysts...]}`.
 
 4. **Decide investigator count.** You spawn ONE depth-investigator per locus, capped at 6. If only 1 locus passes dedupe, spawn 1. The cap is a cost control — depth investigators can each fetch up to 10 new sources, and 6 × 10 = 60 new sources on top of the width corpus is already a lot.
 
@@ -194,7 +195,7 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
 
 **Why this step exists:** the depth investigators each committed to a position on their own locus. Some of those positions will disagree with each other, some will reinforce each other, some will partially complicate each other. The draft must engage those cross-locus dynamics explicitly — not summarize each locus in isolation. Writing `comparisons.md` forces you (the orchestrator) to see the loci in cross-section before you open the draft.
 
-**Skip when:** only 1 locus passed Layer 3 (nothing to compare). In that case, jump to Layer 4 and note in the run log that comparisons.md was skipped.
+**This step is always-on.** Even single-locus runs produce `comparisons.md` — with that locus's committed position as the lone argumentative anchor the draft must engage. The document is different (one position distilled vs. 3–5 tensions reconciled) but the discipline of writing it down BEFORE drafting is the same, and the lint rules expect the file to exist whenever Layer 2 wrote `research/loci.json`.
 
 ### Procedure
 
@@ -313,7 +314,7 @@ echo '{"applied": [], "skipped": [], "conflicts": []}' > research/patch-log.json
    - `findings_paths` — list of the four critic JSONs (dialectic / depth / width / instruction)
    - `patch_log_path` — `research/patch-log.json` (already stubbed above)
 
-3. **The patcher is tool-locked to `[Read, Edit]`.** It physically cannot Write. It can only call Edit with old_string/new_string pairs, each bounded by the ≤500-char expansion rule. Its job is to: (a) apply each finding's patch as an Edit on the draft file, and (b) populate the pre-stubbed patch log via Edit on `research/patch-log.json`.
+3. **The patcher is tool-locked to `[Read, Edit]`.** It physically cannot Write. It can only call Edit with old_string/new_string pairs, and its prompt requires each hunk to stay surgical. Its job is to: (a) apply each finding's patch as an Edit on the draft file, and (b) populate the pre-stubbed patch log via Edit on `research/patch-log.json`.
 
 4. **Read the patch log when it returns.** Check:
    - Did the patcher apply all `critical` findings? If any critical was SKIPPED, that's a pipeline blocker — resolve it yourself before Layer 7. Options: (a) reject the finding as invalid after re-reading the draft, (b) escalate to the user, (c) hand-craft an Edit to address it.
@@ -321,7 +322,7 @@ echo '{"applied": [], "skipped": [], "conflicts": []}' > research/patch-log.json
    - Did the patcher log a "patch too large" skip? That means a critic proposed regeneration in patch clothing. If the finding was critical, re-spawn the critic with a tighter suggestion, or address it yourself with multiple small hunks.
    - **Is the patch log still the empty stub `{"applied":[],"skipped":[],"conflicts":[]}`?** If yes, the patcher failed to log — its Task result will contain the real log inline. Read the Task result, parse out the JSON, and write it to `research/patch-log.json` yourself via Bash so downstream lint rules see it.
 
-5. **Do not apply the patches yourself.** You MUST spawn the patcher subagent. Do NOT call Edit directly on `research/notes/final_report.md` in Layer 6 — the patcher has the tool-lock invariants (500-char cap, old-text exact match, conflict resolution) baked into its prompt. Bypassing it defeats the entire adversarial-patch architecture. If the patcher returns an empty result or appears to have failed, re-spawn it — don't fall back to doing it yourself.
+5. **Do not apply the patches yourself.** You MUST spawn the patcher subagent. Do NOT call Edit directly on `research/notes/final_report.md` in Layer 6 — the patcher has the tool-lock invariants (surgical-hunk discipline, old-text exact match, conflict resolution, integrate-don't-caveat rule) baked into its prompt. Bypassing it defeats the entire adversarial-patch architecture. If the patcher returns an empty result or appears to have failed, re-spawn it — don't fall back to doing it yourself.
 
 6. **Do not re-spawn the patcher on the same findings** unless you've modified the findings. The patcher's second run on identical input is a waste.
 
@@ -418,7 +419,7 @@ If any rule returns `error` severity issues, address them before declaring the r
 - **Both loci analysts fail** → stop the pipeline, tell the user the corpus was insufficient
 - **>50% depth investigators fail** → stop, reassess loci quality with the user
 - **Interim note missing `## Committed position`** → re-spawn that investigator. Uncommitted interim notes are the root cause of descriptive drafts.
-- **Only 1 locus** → skip Layer 3.5, log to run log, proceed straight to Layer 4 with a note that cross-locus reconciliation was unnecessary
+- **Only 1 locus** → Layer 3.5 still runs; `comparisons.md` distills that locus's committed position as the lone argumentative anchor for the draft. Don't skip the file.
 - **Critic disagreement unresolvable by patcher** → you pick a side (higher severity wins); log to the run log
 - **Critical finding cannot be patched** → do not ship; address it (hand-craft Edit, or re-spawn targeted critic with tighter suggestion, or reject the finding with reason)
 - **Polish escalation on structural mismatch** → hand-craft the Edits yourself; do not expand polish auditor's scope

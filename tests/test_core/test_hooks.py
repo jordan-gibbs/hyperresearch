@@ -147,7 +147,11 @@ def test_install_dialectic_critic_agent(tmp_vault):
     # (they produce JSON findings, they don't mutate the draft)
     assert "tools: Bash, Read" in body
     assert "suggested_patch" in body
-    assert "500" in body  # the hunk size constraint
+    # Surgical-patch discipline (no arbitrary size cap since the 500-char
+    # rule was dropped — the tool lock on the patcher enforces regeneration
+    # prevention, and critic prompts now teach surgical-patch discipline
+    # without a numerical threshold).
+    assert "surgical" in body.lower()
     assert result is not None
 
 
@@ -201,12 +205,14 @@ def test_install_patcher_agent_is_edit_only(tmp_vault):
     assert agent_path.exists()
     body = agent_path.read_text(encoding="utf-8")
     assert "model: sonnet" in body
-    # Tool lock: must be exactly "Read, Edit" — not Write, not Bash
+    # Tool lock: must be exactly "Read, Edit" — not Write, not Bash. The
+    # tool lock is what enforces the no-regeneration invariant; there is
+    # no arbitrary numerical size cap on hunks.
     assert "tools: Read, Edit" in body
     assert "tools: Bash" not in body
     assert "Write" not in body.split("tools:")[1].split("\n")[0]
-    assert "500" in body  # hunk size rule
     assert "regenerat" in body.lower()  # the invariant spelled out
+    assert "surgical" in body.lower()
     # Integrate-don't-caveat rule lifts insight score by preventing
     # hedge-appending patches that dilute committed claims.
     assert "Integrate, don't caveat" in body

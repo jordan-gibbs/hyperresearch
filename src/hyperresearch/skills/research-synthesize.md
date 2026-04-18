@@ -212,7 +212,7 @@ Sections build on each other. Section 2's claim depends on section 1's setup; se
 
 (8) **Provenance chain.** Run `$HPR lint --rule provenance -j`. FAIL if any issues.
 
-(9) **Analyst coverage.** Run `$HPR lint --rule analyst-coverage -j`. FAIL if below 30%.
+(9) **Locus coverage.** Run `$HPR lint --rule locus-coverage -j`. FAIL if below 30%.
 
 (10) **Tier weighting.** Are substantive claims anchored in `ground_truth` or `institutional` sources? Are load-bearing claims ever supported only by `commentary`? FAIL if any load-bearing claim rests solely on derivative commentary.
 

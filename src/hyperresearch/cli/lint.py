@@ -902,27 +902,6 @@ def lint(
                     ),
                 })
 
-            # Also check for "patch too large" skips — the regeneration guard
-            # fired, which means a critic tried to produce a rewrite hidden as
-            # a patch. Worth surfacing even at lower severity.
-            too_large = [
-                e for e in skipped
-                if isinstance(e, dict) and "too large" in str(e.get("reason", "")).lower()
-            ]
-            if too_large:
-                issues.append({
-                    "rule": "patch-surgery",
-                    "severity": "warning",
-                    "note_id": "<vault>",
-                    "message": (
-                        f"{len(too_large)} finding(s) rejected as 'patch too large' by the "
-                        "patcher's 500-char expansion guard. These were critics trying to "
-                        "regenerate paragraphs under the patch-only rule. Consider whether "
-                        "the findings represent real structural issues (fix with hand-crafted "
-                        "multi-hunk Edits) or over-eager critics (re-run with tighter prompts)."
-                    ),
-                })
-
             # "Empty log" detector — distinguishes "patcher ran, log lost" from
             # "patcher ran, applied nothing legitimately".
             #
@@ -1179,7 +1158,7 @@ def lint(
                 comparisons_exists = (
                     vault.root / "research" / "comparisons.md"
                 ).exists()
-                if locus_count >= 2 and not comparisons_exists:
+                if locus_count >= 1 and not comparisons_exists:
                     issues.append({
                         "rule": "workflow",
                         "severity": "error",
@@ -1187,11 +1166,11 @@ def lint(
                         "message": (
                             f"research/loci.json has {locus_count} loci but "
                             "research/comparisons.md is missing. Layer 3.5 "
-                            "(cross-locus reconciliation) was skipped. This is "
-                            "the layer that generates argumentative density — "
-                            "drafts written without it report locus-by-locus "
-                            "instead of engaging cross-locus tensions, which "
-                            "suppresses the insight score. Spawn the "
+                            "(cross-locus reconciliation) was skipped. Layer "
+                            "3.5 is always-on now — it writes the argumentative "
+                            "spine the draft will engage, and single-locus "
+                            "runs produce a comparisons.md with that locus's "
+                            "committed position as the lone anchor. Spawn the "
                             "orchestrator to produce comparisons.md before the "
                             "next draft."
                         ),

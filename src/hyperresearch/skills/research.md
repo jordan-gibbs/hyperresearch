@@ -423,7 +423,7 @@ For each batch of 1-5 draft source notes (semantically grouped):
 
 Spawn 3–4 batches in parallel (Sonnet, cheap). Each analyst reads its 1-5 sources sequentially, persists one extract note per source (`--add-tag extract --parent <source-id>` per extract), and returns a list of extract note IDs + a consolidated Findings summary + unioned next_targets + coverage status per source.
 
-Collect every analyst's next_targets into TodoWrite. After each batch, fetch the top next_targets WITH `--suggested-by` so the loop iterates. **The fetch:extract ratio after curation should be at least 1:1** — every fetched source has a paired extract note with at least 150 words of real content. The `analyst-coverage` lint rule catches both misses AND stubs at Checkpoint 2 (extracts under 150 words do NOT count — minting stubs will not satisfy the gate).
+Collect every analyst's next_targets into TodoWrite. After each batch, fetch the top next_targets WITH `--suggested-by` so the loop iterates. **The fetch:extract ratio after curation should be at least 1:1** — every fetched source has a paired extract note with at least 150 words of real content. The `locus-coverage` lint rule catches both misses AND stubs at Checkpoint 2 (extracts under 150 words do NOT count — minting stubs will not satisfy the gate).
 
 ### Step B: Set metadata from the analyst's findings
 
@@ -446,7 +446,7 @@ $HPR note update <source-id> \
 ```bash
 $HPR lint --rule uncurated -j         # zero uncurated
 $HPR lint --rule provenance -j        # zero provenance issues (--suggested-by chain exists)
-$HPR lint --rule analyst-coverage -j  # zero analyst-coverage issues
+$HPR lint --rule locus-coverage -j  # zero locus-coverage issues
 $HPR link --auto -j
 $HPR graph hubs -j
 ```
@@ -903,14 +903,14 @@ for dom, count in domains.most_common(10):
 ```bash
 $HPR lint --rule uncurated -j
 $HPR lint --rule provenance -j
-$HPR lint --rule analyst-coverage -j
+$HPR lint --rule locus-coverage -j
 $HPR note list --all -j | python -c "import sys,json; from collections import Counter; notes=json.load(sys.stdin)['data']; t=Counter(n.get('tier') for n in notes if n.get('status')!='draft'); ct=Counter(n.get('content_type') for n in notes if n.get('status')!='draft'); print(f'tiers: {dict(t)}'); print(f'content_types: {dict(ct)}')"
 ```
 
 **Pass conditions:**
 - [ ] Zero `uncurated` issues
 - [ ] Zero `provenance` **errors** — the rule itself computes the non-seed ratio and errors when under 30% on a corpus >10, so if this lint returns zero errors the guided loop fired adequately. Read its output carefully; its message tells you `non_seeds / total` directly.
-- [ ] Zero `analyst-coverage` issues (at least 33% of fetched sources have a paired extract note)
+- [ ] Zero `locus-coverage` issues (at least 33% of fetched sources have a paired extract note)
 - [ ] Tier and content_type distributions are nuanced (not one dominant value)
 - [ ] At least two tiers represented
 - [ ] At least three content_types represented
@@ -930,7 +930,7 @@ $HPR note list --tag extract -j | python -c "import sys,json; d=json.load(sys.st
 $HPR lint --rule scaffold-prompt -j
 $HPR lint --rule uncurated -j
 $HPR lint --rule provenance -j
-$HPR lint --rule analyst-coverage -j
+$HPR lint --rule locus-coverage -j
 $HPR lint --rule workflow -j
 ```
 
@@ -939,7 +939,7 @@ $HPR lint --rule workflow -j
 - [ ] Zero `scaffold-prompt` issues — the scaffold body MUST contain the verbatim user prompt as its first section. This is machine-checked; the gospel rule is non-negotiable.
 - [ ] Comparison note count ≥ 1
 - [ ] Extract note count ≥ 30% of fetched source count
-- [ ] Zero `uncurated`, `provenance`, `analyst-coverage`, `workflow` issues
+- [ ] Zero `uncurated`, `provenance`, `locus-coverage`, `workflow` issues
 
 **On failure:** you CANNOT write the draft. Return to the step that produces the missing artifact. If `scaffold-prompt` failed, return to Step 7 and re-write the scaffold with the user's verbatim prompt as its first section — do not fudge it.
 
