@@ -93,7 +93,22 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
    - **Required sections** — "include X section", "end with Y", "begin with Z"
    - **Time horizons** — "through 2027", "next 12 months", "historical through 2010-present"
    - **Scope conditions** — "for non-academic contexts", "under SIL-4 constraints"
-3. Write `research/prompt-decomposition.json`:
+3. **Produce `required_section_headings`.** This is the single highest-leverage field. It is an ordered array of literal H2 heading strings the draft MUST emit in order. Population rule:
+   - If the prompt contains enumerated asks (regex `\b\d[.\)]` such as "1)", "1." or leading phrase "List X, Y, Z" / "cover the following:"), produce one entry per enumerated item, in prompt order, with the prompt's verbatim noun-phrase as the heading slug.
+   - If the prompt names N entities in a list and asks to "discuss", "analyze", "describe", or "evaluate" each, produce one heading per entity.
+   - Otherwise, leave the array **empty**. Narrative prompts ("Write a paper about X", "How did Y happen?") do not force structure — the drafter picks its own spine.
+
+   Example (prompt: "Your report should: 1) List major manufacturers... 2) Include images... 3) Analyze primary use cases... 4) Investigate market penetration across North America, Japan/Korea, Southeast Asia, South America"):
+   ```json
+   "required_section_headings": [
+     "## 1. Major Manufacturers, Device Models, and Configurations",
+     "## 2. Images of Representative Devices",
+     "## 3. Primary Use Cases and Deployment Scenarios",
+     "## 4. Regional Market Analysis"
+   ]
+   ```
+
+4. Write `research/prompt-decomposition.json`:
 
 ```json
 {
@@ -112,14 +127,20 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
   "required_sections": [
     "## Opinionated Synthesis (if wrapper_contract demands it)"
   ],
+  "required_section_headings": [
+    "## 1. Major Manufacturers, Device Models, and Configurations",
+    "## 2. Images of Representative Devices",
+    "## 3. Primary Use Cases and Deployment Scenarios",
+    "## 4. Regional Market Analysis"
+  ],
   "time_horizons": ["2010-present", "12-month forward"],
   "scope_conditions": ["urban rail specifically, not mainline"]
 }
 ```
 
-4. Every atomic item you put here becomes a draft requirement in Layer 4 and a critic-verifiable check in Layer 5. If you leave an atomic item out of the decomposition, the instruction-critic won't catch it. Be thorough — inflation (including items the prompt didn't actually name) is worse than omission, because the critic will then demand content the user didn't ask for.
+5. Every atomic item you put here becomes a draft requirement in Layer 4 and a critic-verifiable check in Layer 5. If you leave an atomic item out of the decomposition, the instruction-critic won't catch it. **Omit nothing the prompt names explicitly. List every numbered ask, every named entity, every format cue as a separate atomic item, even if they feel redundant.** The critic catches false-positive atomic items cheaply; it cannot catch false-negatives.
 
-5. **Do NOT include wrapper-contract requirements here** — those live in `research/wrapper_contract.json` separately. The decomposition is ONLY about what the user's actual prompt named.
+6. **Do NOT include wrapper-contract requirements here** — those live in `research/wrapper_contract.json` separately. The decomposition is ONLY about what the user's actual prompt named.
 
 **Exit criterion:** `research/prompt-decomposition.json` exists, is valid JSON, and every atomic item in it can be pointed at a specific passage of the research_query.
 
@@ -243,6 +264,8 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
 
 5. **Structure the draft around the decomposition.** When the prompt named 5 entities in a list, the draft should typically have 5 sections or subsections in that order. When the prompt asked for a mind map, include a mind map. When the prompt named sub-questions A/B/C, answer them in that order. Your own analytical framing belongs in the synthesis section at the end — NOT as the body's structural spine. This single rule is the highest-leverage insight-following move available.
 
+   **HARD GATE on `required_section_headings`.** If `research/prompt-decomposition.json` has a non-empty `required_section_headings` array, the draft's ordered top-level H2 list MUST equal that array element-wise before the body proceeds to the Opinionated Synthesis (or any terminal section). Every heading string from `required_section_headings` appears in order as a literal H2. Your own analytical framing (cross-tension narratives, methodological caveats, etc.) goes INSIDE those sections or inside the terminal Synthesis — NEVER as an additional top-level H2 that sits between or before the required headings. If `required_section_headings` is empty, this gate does not apply and you pick the spine.
+
 6. **Write the draft to `research/notes/final_report.md`.** Structure:
    - Opening paragraphs that state the thesis / framing. Your thesis must commit to a position — not "this report surveys X" but "X is true (or X is false, or X is the right frame) because..." — grounded in the cross-locus comparisons you identified.
    - Body sections mirroring the decomposition's structural cues. **Each body section that touches a tension named in `comparisons.md` must engage that tension explicitly** — by name, with a paragraph that commits to a reading of the disagreement, not just reports both sides.
@@ -268,6 +291,16 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
     - Literal "User asked:" or similar prompt-echo preambles
     - `research/comparisons.md` content verbatim — comparisons.md is planning, not body content
     - `research/prompt-decomposition.json` content verbatim — decomposition is planning, not body content
+
+10a. **Vocabulary prohibitions.** The following pipeline-internal terms are SCAFFOLDING. Never write them into reader-facing prose. Audits of past runs found them leaking into the body text of 13 of 15 final reports, and graders mark those reports down on readability and instruction-following. The polish auditor strips these as a backstop, but preventing the leak at draft time is cheaper than rewriting afterward.
+
+    **Forbidden in body prose:** `Locus <N>`, `Tension <N>`, `comparisons.md` / `research/comparisons.md`, `committed reading`, `committed position` (as self-reference), `cross-locus`, `width corpus`, `depth investigation`, `layercake` / "layercake final report", `per the scaffold` / `from the scaffold`, bare `loci` when referring to pipeline taxonomy, `[[interim-report-*]]` wikilinks, `[I\\d+]` citation format.
+
+    **When you need to reference a cross-locus tension captured in `comparisons.md`:** name the substantive dynamic the tension describes. Not "Tension 2" but "the isolation-versus-competition question." Not "Locus 3's verdict" but "the 500K-threshold evidence commits:". The reader does not know about loci, tensions, or comparisons.md — do not teach them the pipeline's internal vocabulary just to cite it.
+
+    **When you cite an interim note:** use the `[N]` numeric citation that corresponds to it in the Sources list. The internal note id (`interim-report-*`) is never reader-facing.
+
+    **"Loci" as a domain word** — if your topic is one where "locus" is a legitimate domain term (molecular biology, law, neuroscience), the ban applies only to pipeline-taxonomy usage. A sentence like "the coding locus lies within exon 3" is fine; "three loci converged on the same finding" is a leak.
 
 11. **Write-once.** You write this draft once. After this point, the draft is only modified by Edit hunks from the patcher and polish auditor. Do NOT re-draft.
 
@@ -300,11 +333,30 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
 
 **Goal:** apply critic findings to the draft as surgical Edit hunks. Zero regeneration.
 
-1. **Pre-create the patch log stub.** The patcher is tool-locked to `[Read, Edit]` — it cannot Write. Edit can only modify files that already exist. So you (the orchestrator) MUST write an empty stub first, which the patcher will then Edit to populate:
+0. **A/B-test skip gate.** Before spawning the patcher, check whether `research/skip-patcher.txt` exists. If it does, the bench harness has disabled Layer 6 for an A/B experiment (the `--no-patcher` flag was passed). In that case, skip steps 1-6 entirely. Instead, do the minimum bookkeeping:
 
 ```bash
-echo '{"applied": [], "skipped": [], "conflicts": []}' > research/patch-log.json
+# Count findings across all four critic JSON files
+total=$(jq -s '[.[] | .findings | length] | add' \
+  research/critic-findings-dialectic.json \
+  research/critic-findings-depth.json \
+  research/critic-findings-width.json \
+  research/critic-findings-instruction.json 2>/dev/null)
+# Write a skip-log so downstream analysis can compare A/B runs fairly
+cat > research/patch-log.json <<EOF
+{"total_findings": ${total:-0}, "applied": [], "skipped": [{"reason": "patcher-disabled-for-ab-test"}], "conflicts": [], "orchestrator_escalated": []}
+EOF
 ```
+
+Then proceed directly to Layer 7 (polish auditor). Do NOT spawn the patcher. The A/B test only has signal if the patcher is actually bypassed; do not "help" by applying findings yourself.
+
+1. **Pre-create the patch log stub.** The patcher is tool-locked to `[Read, Edit]` — it cannot Write. Edit can only modify files that already exist. So you (the orchestrator) MUST write the canonical stub first, which the patcher will then Edit to populate:
+
+```bash
+echo '{"total_findings": 0, "applied": [], "skipped": [], "conflicts": [], "orchestrator_escalated": []}' > research/patch-log.json
+```
+
+   The schema above is canonical. The patcher's only job on this file is to Edit the existing keys — `total_findings` becomes an integer, the four arrays get populated. **The patcher MUST NOT invent alternate schemas** like `{orchestrator_structural_fixes, patcher_hunks}` or counts-only variants. Downstream tooling assumes the canonical shape.
 
    If you skip this step the patcher will silently have nowhere to write its log, will inline the log in its response instead, and you may mis-capture or drop the data entirely. This has historically been the single most common Layer 6 failure mode — do not skip it.
 
@@ -320,7 +372,14 @@ echo '{"applied": [], "skipped": [], "conflicts": []}' > research/patch-log.json
    - Did the patcher apply all `critical` findings? If any critical was SKIPPED, that's a pipeline blocker — resolve it yourself before Layer 7. Options: (a) reject the finding as invalid after re-reading the draft, (b) escalate to the user, (c) hand-craft an Edit to address it.
    - Did any findings CONFLICT? Look at the conflict log — if two critics disagreed and the patcher picked one, consider whether the discarded one was actually more important.
    - Did the patcher log a "patch too large" skip? That means a critic proposed regeneration in patch clothing. If the finding was critical, re-spawn the critic with a tighter suggestion, or address it yourself with multiple small hunks.
-   - **Is the patch log still the empty stub `{"applied":[],"skipped":[],"conflicts":[]}`?** If yes, the patcher failed to log — its Task result will contain the real log inline. Read the Task result, parse out the JSON, and write it to `research/patch-log.json` yourself via Bash so downstream lint rules see it.
+   - **Is the patch log still the empty stub `{"total_findings":0,"applied":[],"skipped":[],"conflicts":[],"orchestrator_escalated":[]}`?** If yes, the patcher failed to log — its Task result will contain the real log inline. Read the Task result, parse out the JSON, and write it to `research/patch-log.json` yourself via Bash so downstream lint rules see it.
+
+4a. **Handle `orchestrator_escalated` findings (structural restructures).** The patcher populates this array with findings where `requires_orchestrator_restructure: true` — most commonly, structural-mirror-check findings from the instruction critic (wrong H2 order / missing required heading / extra H2). The patcher's tool-lock cannot safely move / rename H2 sections, so YOU (the orchestrator) handle them here, before Layer 7:
+   - For each entry, read the `issue` field to understand which H2 in the draft needs to move, be added, or be renamed.
+   - Apply the restructure via hand-written Edit calls on `research/notes/final_report.md`. You have Write and Edit access — the tool lock only applies to the patcher and polish auditor subagents, not to you.
+   - Preserve the body content within each H2 section — you are moving / renaming / inserting headings, not regenerating prose. If a new heading is added and its body needs fresh content, write a short evidence-grounded paragraph for it, citing notes from the width corpus or relevant interim notes.
+   - Log what you changed in a new `research/orchestrator-restructure-log.md` file (plain markdown, one bullet per change) so downstream lint rules can see this step happened.
+   - Never regenerate a whole section or the whole draft. The "patch not regenerate" invariant still binds you — you have broader tools but not broader license.
 
 5. **Do not apply the patches yourself.** You MUST spawn the patcher subagent. Do NOT call Edit directly on `research/notes/final_report.md` in Layer 6 — the patcher has the tool-lock invariants (surgical-hunk discipline, old-text exact match, conflict resolution, integrate-don't-caveat rule) baked into its prompt. Bypassing it defeats the entire adversarial-patch architecture. If the patcher returns an empty result or appears to have failed, re-spawn it — don't fall back to doing it yourself.
 
@@ -358,6 +417,21 @@ echo '{"applied": [], "escalations": []}' > research/polish-log.json
 ---
 
 ## After Layer 7: audit findings + lint gate
+
+0. **Required-artifacts integrity check.** Before declaring the run complete, verify every expected pipeline artifact exists. Run:
+
+```bash
+for f in research/critic-findings-dialectic.json \
+         research/critic-findings-depth.json \
+         research/critic-findings-width.json \
+         research/critic-findings-instruction.json \
+         research/patch-log.json \
+         research/polish-log.json; do
+  test -f "$f" || echo "MISSING: $f"
+done
+```
+
+   If any artifact is missing, the responsible layer failed silently. Re-spawn the responsible agent ONCE with the missing output path as its explicit required output. If it fails a second time, write a minimal stub (`{"findings":[]}` for critic files, canonical empty-log schema for patch-log.json / polish-log.json) and log the failure in the run log before proceeding — never let a pipeline step leave a missing artifact.
 
 1. **Record the run.** Append to `research/audit_findings.json`:
 ```json
@@ -409,6 +483,8 @@ If any rule returns `error` severity issues, address them before declaring the r
 8. **Canonical research query is gospel everywhere.** Every subagent you spawn gets the canonical research query as an explicit input. Do not let wrapper instructions leak into their task prompts.
 
 9. **Hygiene rules apply to the final report only.** The scaffold, the loci JSONs, the interim notes, `comparisons.md`, the patch log — these are workspace artifacts and can look however they need to look. The `final_report.md` is the single artifact subject to frontmatter-strip, scaffold-strip, filler-strip rules.
+
+10. **Orchestrator scratch files live under `research/tmp/`.** Any test JSON you build while debugging a critic output, any Python assembly script, any `.pkl` / `.txt` / `build_*.py` helper — these go in `research/tmp/` or `<run_dir>/tmp/`. Never emit scratch files directly under `research/`. The top-level `research/` namespace is reserved for the canonical pipeline artifacts listed in the integrity check above.
 
 ---
 

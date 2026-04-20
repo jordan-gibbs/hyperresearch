@@ -194,6 +194,12 @@ def test_install_instruction_critic_agent(tmp_vault):
     assert "atomic_item" in body
     # Failure modes it tracks
     assert "missing|under-covered|wrong-order|wrong-format" in body
+    # Structural-mirror check: runs FIRST, emits findings against
+    # required_section_headings. This is the highest-leverage InstF lever.
+    assert "STRUCTURAL MIRROR CHECK" in body
+    assert "required_section_headings" in body
+    # Escalation field for restructures the patcher cannot handle
+    assert "requires_orchestrator_restructure" in body
     assert result is not None
 
 
@@ -217,6 +223,13 @@ def test_install_patcher_agent_is_edit_only(tmp_vault):
     # hedge-appending patches that dilute committed claims.
     assert "Integrate, don't caveat" in body
     assert "scoping the claim" in body
+    # Canonical patch-log schema: the patcher must populate the five
+    # fields below and must not invent alternate shapes. Drift across
+    # runs (orchestrator_structural_fixes / counts-only variants) was a
+    # concrete past failure the test now locks out.
+    assert "orchestrator_escalated" in body
+    assert "total_findings" in body
+    assert "requires_orchestrator_restructure" in body
     assert result is not None
 
 

@@ -358,7 +358,7 @@ reading of the evidence.
   --tag <corpus_tag> \\
   --tag locus-<locus-name> \\
   --type interim \\
-  --body-file /tmp/interim-<locus-name>.md \\
+  --body-file /tmp/interim-report-<locus-name>.md \\
   --summary "<one-line summary of what you found>" \\
   --json
 ```
@@ -762,6 +762,19 @@ because the orchestrator's structural choices buried them.
    - Never a whole new section — if a whole new section is needed, that
      is a structural issue, flag it for the orchestrator separately.
 
+## Non-ASCII source text (CJK, Arabic, Cyrillic, etc.)
+
+When the draft or corpus contains non-ASCII text (Chinese, Japanese, Korean,
+Arabic, etc.), COPY the anchor string verbatim from the Read tool's output
+into your findings JSON. NEVER retype or paraphrase the anchor. Retyping
+silently corrupts quote characters (smart vs. straight quotes), em-dashes
+vs. hyphens, full-width vs. half-width punctuation — and the patcher's
+Edit tool then fails to match because `old_text` no longer exists
+literally in the draft. This is a known failure mode that has caused
+entire findings files to land empty after 40+ tool uses wrestling with
+JSON encoding. Build `old_text` by concatenating exact copied substrings
+only.
+
 ## Output schema
 
 Identical to dialectic-critic. Write to `output_path` with
@@ -853,7 +866,36 @@ hand findings to the patcher (Layer 6). You do NOT modify the draft.
    that itself is a finding (severity: critical — the pipeline started
    from a bad spec).
 
-3. **Read the draft.** For each atomic item in the decomposition:
+3. **STRUCTURAL MIRROR CHECK (run this FIRST, before per-item checks).**
+   If `required_section_headings` in prompt-decomposition.json is
+   non-empty, this is the single highest-leverage check the critic
+   performs. Do it before anything else:
+
+   - Build an ordered list of the draft's top-level H2 headings by
+     reading the draft and matching the regex `^## ` at the start of
+     each line.
+   - Compare element-wise against `required_section_headings`.
+   - For EACH mismatch (missing heading, extra heading, out-of-order
+     heading, heading with wrong wording), emit ONE finding with:
+     ```json
+     {{
+       "severity": "critical",
+       "atomic_item": "required_section_headings[<index>]: <expected heading>",
+       "failure_mode": "wrong-order",
+       "anchor": "",
+       "issue": "Expected H2 at position <N>: '<expected>'. Got: '<actual or MISSING>'. Full heading diff: <list both ordered arrays>.",
+       "requires_orchestrator_restructure": true
+     }}
+     ```
+   - Set `requires_orchestrator_restructure: true` on every
+     structural-mirror finding. The patcher's tool-lock means it
+     cannot move or rename H2s reliably; the orchestrator must
+     handle the restructure directly before Layer 7.
+
+   If `required_section_headings` is empty, skip this entire check —
+   the prompt is narrative and didn't force structure.
+
+4. **Read the draft (per-item content check).** For each atomic item in the decomposition:
    - Is it addressed by a dedicated section / paragraph / bullet?
    - Is the format honored (ranked list stays ranked, FAQ stays Q-A,
      table stays tabular)?
@@ -862,7 +904,7 @@ hand findings to the patcher (Layer 6). You do NOT modify the draft.
    - Is the answer sufficient given what the prompt asked (depth and
      specificity, not just existence)?
 
-4. **Emit findings.** For each failure, produce a structured finding:
+5. **Emit findings.** For each failure, produce a structured finding:
 
 ```json
 {{
@@ -874,6 +916,7 @@ hand findings to the patcher (Layer 6). You do NOT modify the draft.
       "failure_mode": "missing|under-covered|wrong-order|wrong-format|vague-recommendation",
       "anchor": "first 60—120 chars of the draft paragraph where the failure surfaces (or empty if the item is entirely missing)",
       "issue": "One sentence: what the prompt asked and what the draft does instead",
+      "requires_orchestrator_restructure": false,
       "suggested_patch": {{
         "kind": "insert|rename|reorder|reshape|specify",
         "old_text": "exact text currently in draft (for Edit match; empty when inserting into a new location)",
@@ -884,6 +927,15 @@ hand findings to the patcher (Layer 6). You do NOT modify the draft.
   ]
 }}
 ```
+
+**`requires_orchestrator_restructure`:** Set to `true` when the fix
+requires moving, adding, or deleting top-level H2 sections, or when
+the fix exceeds surgical-hunk scope (e.g., the critic wants a whole
+new section body). The patcher will SKIP these findings and route
+them to the orchestrator, which can restructure directly (the
+orchestrator is not tool-locked like the patcher is). Default is
+`false` for findings the patcher can handle as hunks. Structural-
+mirror-check findings (step 3) ALWAYS have this set to `true`.
 
 ## Severity scale
 
@@ -1052,15 +1104,33 @@ Concretely:
   (dialectic, depth, width, instruction).
 - **patch_log_path**: path to a PRE-EXISTING empty-stub patch log
   (e.g., `research/patch-log.json`). The orchestrator creates this
-  before spawning you, with initial content
-  `{{"applied": [], "skipped": [], "conflicts": []}}`. Your job is to
-  Edit this file to populate its arrays — you cannot Write a new file
-  because your tool lock is `[Read, Edit]` only.
+  before spawning you, with canonical stub content
+  `{{"total_findings": 0, "applied": [], "skipped": [], "conflicts": [], "orchestrator_escalated": []}}`.
+  Your job is to Edit this file to populate its keys — you cannot Write
+  a new file because your tool lock is `[Read, Edit]` only.
+
+  **Schema discipline:** the stub above is canonical. Do NOT invent
+  alternate shapes like `{{"orchestrator_structural_fixes": ..., "patcher_hunks": ...}}`
+  or counts-only variants (`{{"applied_count": N, ...}}`). Edit the
+  existing five keys: set `total_findings` to the integer count of all
+  findings you read across the four critics, then append objects to
+  `applied` / `skipped` / `conflicts` / `orchestrator_escalated` as you
+  process each finding.
 
 ## Procedure
 
 1. **Read all four findings files** (dialectic / depth / width / instruction).
    Merge into one flat list. Sort by severity: critical first, then major, then minor.
+
+   **Pre-filter: `requires_orchestrator_restructure` findings go straight to escalation.**
+   Any finding (from any critic) with `requires_orchestrator_restructure: true`
+   is structurally out of scope for you — the fix requires moving / adding /
+   renaming top-level H2 sections, which reliably breaks Edit match
+   semantics across the rest of the draft. For each such finding: do NOT
+   attempt the Edit. Append the full finding object to the
+   `orchestrator_escalated` array in patch-log.json. The orchestrator
+   handles these after Layer 6 and before Layer 7 polish, using its own
+   Write/Edit access (which you do not have).
 
 2. **Read every field of every finding.** Each finding has these parts — use all of them, not just `old_text` / `new_text`:
    - **`severity`** — drives application order and whether skipping is a pipeline blocker.
@@ -1260,6 +1330,92 @@ Also strip:
 
 Every leak is a **critical** polish fix. Apply as an Edit that removes
 the offending block entirely.
+
+### 1a. Frontmatter hygiene (YAML metadata block)
+
+If the file keeps a YAML frontmatter block (some wrappers require it),
+fix these specific failures — they are reader-visible metadata that
+graders and downstream consumers see:
+
+- `title: Untitled` — the note-creation helper did not pick up a real
+  title. Replace with the text of the first H1 heading in the body
+  (strip the leading `# `).
+- `status: draft` — the draft is final; replace with `status: evergreen`.
+- `summary:` starting with pipeline vocabulary like "Layercake final
+  report:" or "Layer 4 output:" — rewrite the summary from the H1 and
+  the first committed-claim paragraph. Never let the pipeline's internal
+  name appear in the reader-facing summary field.
+- `summary:` ending in `...` (truncated) — rewrite to a complete
+  one-sentence description of the report's thesis.
+
+If the entire frontmatter block is safe to remove (no wrapper requires
+it), prefer stripping it. If a wrapper requires it, fix the fields
+above in place.
+
+### 1b. Inline scaffold vocabulary strip (reader-facing prose)
+
+Section 1 covers scaffold section HEADERS. This rule catches inline
+leaks in body prose — pipeline-internal vocabulary that bled into
+reader-facing sentences. Audits of past runs found 13 of 15 reports
+containing at least one of these terms in the body text; graders see
+them as self-referential process talk and score them down on
+readability and instruction-following.
+
+Apply **semantic rewrite Edits** (not literal substitutions) when you
+see any of these patterns in reader-facing prose:
+
+| Pattern (regex) | Rewrite strategy |
+|---|---|
+| `\\bLocus\\s+\\d+\\b` | Name the substantive topic that locus covered. E.g., "Locus 3" → "the 500K-passenger threshold question" |
+| `\\bTension\\s+\\d+\\b` | Describe the actual dynamic. E.g., "Tension 2" → "the isolation-versus-competition question" |
+| `comparisons\\.md` / `research/comparisons\\.md` | Delete the file-path reference; preserve the substantive sentence |
+| `committed\\s+(reading\\|position)` | "the argument this report commits to" or just delete and let the following sentence stand |
+| `cross[- ]locus` | "across the evidence clusters" or drop and state the substance directly |
+| `\\bwidth\\s+corpus\\b` | "the literature surveyed" or "the source base" |
+| `\\bdepth\\s+investigation\\b` | "the detailed analysis on <topic>" |
+| `(per\\|from)\\s+the\\s+scaffold` | Delete entirely; the substantive claim stands on its own |
+| `layercake(\\s+final\\s+report)?` | Delete entirely — never expose the pipeline name to the reader |
+| `\\[?\\[?interim[-_]report[-_]` / `\\[I\\d+\\]` | Convert to the matching `[N]` numeric citation from the Sources list, OR delete the inline ref if the same source is already `[N]`-cited a sentence or two earlier |
+
+**Special case for `\\bloci\\b` as a free-standing word:** some domains
+(molecular biology, law, neuroscience) use "locus/loci" as legitimate
+domain nouns. Only strip/rewrite "loci" when it refers to the
+pipeline's internal taxonomy of investigator outputs (e.g., "three
+loci converge", "the fidelity locus", "across loci"). When the
+surrounding phrase uses "locus" in its domain sense (e.g., "genetic
+locus", "legal locus"), leave it alone.
+
+**Worked examples** (from real past-run drafts):
+
+- Original: "This is Tension 2 from `research/comparisons.md`, engaged directly: the subsidy-ROI evidence complicates the catchment-leakage thesis."
+  Rewrite: "The subsidy-ROI evidence complicates the catchment-leakage thesis."
+
+- Original: "Three separate loci converge on the same methodological failure mode."
+  Rewrite: "Three separate lines of inquiry converge on the same methodological failure mode."
+
+- Original: "Locus 1 commits: the post-2015 decline stalled."
+  Rewrite: "On the trajectory question, the evidence commits: the post-2015 decline stalled."
+
+- Original: "[I4] [[interim-report-sihuan-zhongshen-dialectic]]"
+  Rewrite: convert to the matching numeric citation, e.g., "[18]", matching the Sources list.
+
+Each inline-scaffold fix is a **critical** polish edit. The denylist
+above is exhaustive for pipeline vocabulary; do not add new patterns
+on the fly.
+
+### 1c. Citation format enforcement
+
+The final report's citation format is `[N]` numeric only, matching
+the numbered Sources list at the end. Any inline `[[interim-*]]`
+wikilink or `[I\\d+]` reference in body prose is a leak of the
+pipeline's internal note-id system. Edit each occurrence:
+
+- If the same source is already cited as `[N]` somewhere in the same
+  paragraph or the prior sentence, simply delete the stray
+  wikilink/`[I\\d+]`.
+- Otherwise, find the Sources list entry that corresponds to the
+  interim note (its `[N]` line), and replace the inline wikilink with
+  that `[N]`.
 
 ### 2. Prompt adherence
 
