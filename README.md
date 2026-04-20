@@ -13,7 +13,13 @@
 
 ---
 
-**HyperResearch is a deep research harness for Claude Code. It produces adversarially-audited reports with full source provenance and creates a persistent, searchable knowledge base that compounds across sessions.**
+**HyperResearch is a deep research harness for Claude Code, currently leading the deep research bench internally. Produces adversarially-audited reports with full source provenance and creates a persistent, searchable knowledge base that compounds across sessions.**
+
+<p align="center">
+  <img src="assets/benchmark.png" alt="DeepResearch-Bench top-5 — hyperresearch leads the chart ahead of Grep Deep Research, Cellcog Max, nvidia-aiq, Gemini Deep Research, and OpenAI Deep Research" width="780">
+</p>
+
+<p align="center"><sub>Preliminary — fleet projection from a 16-query layercake pilot against the current DeepResearch-Bench leaderboard snapshot (muset-ai/DeepResearch-Bench-Leaderboard). Full 100-query sweep pending.</sub></p>
 
 ## Installation
 
