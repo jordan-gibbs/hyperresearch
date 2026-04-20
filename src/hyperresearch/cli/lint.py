@@ -834,9 +834,10 @@ def lint(
                     ),
                 })
 
-            # Duplicate interim notes on the same locus — observed in Q4 where
-            # the same locus had 3 interim notes. Inflates source count and
-            # confuses Layer 5 critics. Warn when any locus has >1 interim.
+            # Duplicate interim notes on the same locus — a past failure
+            # mode where one locus accumulated 3 interim notes. Inflates
+            # source count and confuses Layer 5 critics. Warn when any
+            # locus has >1 interim.
             duplicate_loci: list[tuple[str, int]] = []
             for locus in loci_list:
                 if not isinstance(locus, dict):

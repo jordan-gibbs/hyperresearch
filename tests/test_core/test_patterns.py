@@ -22,7 +22,8 @@ def test_anchors_and_paths_rejected():
 
 
 def test_pure_numeric_citation_footnotes_rejected():
-    # The Q91 bug: Wikipedia footnotes rendered as [[100]]
+    # Past bug: Wikipedia footnotes rendered as [[100]] and got mistaken
+    # for wiki-link targets.
     assert not is_valid_wiki_link_target("100")
     assert not is_valid_wiki_link_target("1")
     assert not is_valid_wiki_link_target("999")
@@ -63,8 +64,8 @@ def test_cite_prefixes_are_case_insensitive():
 
 
 def test_space_separated_footnote_names_rejected():
-    """HTML footnote rendering: <sup>Note 1</sup> → [[Note 1]]. The Q91
-    ensemble run produced stubs for these because the filter missed them."""
+    """HTML footnote rendering: <sup>Note 1</sup> → [[Note 1]]. Past
+    runs produced stubs for these because the filter missed them."""
     assert not is_valid_wiki_link_target("Note 1")
     assert not is_valid_wiki_link_target("Note 2")
     assert not is_valid_wiki_link_target("Footnote 12")

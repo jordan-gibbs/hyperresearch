@@ -805,10 +805,10 @@ signal that the orchestrator's Layer 4 dropped a whole evidence chain).
 
 # ---------------------------------------------------------------------------
 # Layer 5 — instruction critic. Checks draft against prompt-decomposition.
-# Targets the RACE InstF dimension specifically — the one dimension stuck
-# at the 50.0 "tied with reference" floor on most queries, where we can
-# demonstrably score ≥75 (Q4) when the draft structurally mirrors the
-# prompt's requested shape.
+# Targets the instruction-following dimension — reports score much higher
+# when the draft structurally mirrors the prompt's named/numbered shape,
+# and the other critics don't catch structural mismatches because they
+# focus on substance (counter-evidence, depth, coverage).
 # ---------------------------------------------------------------------------
 INSTRUCTION_CRITIC_AGENT = """\
 ---

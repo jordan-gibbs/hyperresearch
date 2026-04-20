@@ -683,9 +683,9 @@ def test_audit_gate_catches_self_certification_on_provenance(tmp_vault):
     marked `fixed_at`, but the provenance rule still returns errors, the
     audit-gate must emit a SELF-CERTIFICATION VIOLATION error.
 
-    This is exactly the Q62 failure mode — the agent marked the C1
-    provenance finding as fixed with a justification string, but the
-    vault's actual breadcrumb graph was still broken.
+    This is a past self-certification failure mode — the agent marked
+    the C1 provenance finding as fixed with a justification string, but
+    the vault's actual breadcrumb graph was still broken.
     """
     # Build a vault where provenance is genuinely broken (12 sources, none
     # with breadcrumbs — classic flat batch).
@@ -1119,8 +1119,8 @@ def test_provenance_still_fires_coverage_check_on_non_layercake_runs(tmp_vault):
 
 
 def test_locus_coverage_flags_duplicate_interim_notes(tmp_vault):
-    """Q4 hit this: the technical-support-resistance locus had 3 interim
-    notes instead of 1. Inflates source count and confuses critics."""
+    """Past failure mode: a single locus accumulated 3 interim notes
+    instead of 1. Inflates source count and confuses critics."""
     _write_loci_json(tmp_vault, [
         {"name": "alpha", "one_line": "Q1"},
     ])

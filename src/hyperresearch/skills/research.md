@@ -661,8 +661,8 @@ Conflict resolution:
 - **Primary wins on structure.** Section shape, entity-vs-thematic sequencing, comparison-matrix presence, scaffold skeleton — all determined by the primary modality.
 - **Secondary wins on substance within sections.** Per-paragraph density rules, tension requirements, interpretation/enumeration discipline — these layer on top of the primary's structure.
 
-Example (Q91-style: `primary=collect`, `secondary=synthesize`):
-- Collect (primary) forces per-character coverage across every entity category in the prompt. The structure is entity-based.
+Example (`primary=collect`, `secondary=synthesize` — e.g., a prompt like "for each X in category C, describe Y and Z, then interpret what the pattern means"):
+- Collect (primary) forces per-entity coverage across every category in the prompt. The structure is entity-based.
 - Synthesize (secondary) forces every paragraph to fuse fact with interpretive claim AND at least two body sections to put sources in tension.
 - The draft has entity-named sections (primary structure) where every paragraph inside makes an interpretive claim about what that entity means (secondary substance).
 

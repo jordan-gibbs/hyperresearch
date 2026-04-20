@@ -333,7 +333,7 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
 
 **Goal:** apply critic findings to the draft as surgical Edit hunks. Zero regeneration.
 
-0. **A/B-test skip gate.** Before spawning the patcher, check whether `research/skip-patcher.txt` exists. If it does, the bench harness has disabled Layer 6 for an A/B experiment (the `--no-patcher` flag was passed). In that case, skip steps 1-6 entirely. Instead, do the minimum bookkeeping:
+0. **Skip gate (optional — for advanced users).** Before spawning the patcher, check whether `research/skip-patcher.txt` exists. If it does, the invoker has requested that Layer 6 be bypassed for this run. In that case, skip steps 1–6 entirely and record a minimal log:
 
 ```bash
 # Count findings across all four critic JSON files
@@ -342,13 +342,12 @@ total=$(jq -s '[.[] | .findings | length] | add' \
   research/critic-findings-depth.json \
   research/critic-findings-width.json \
   research/critic-findings-instruction.json 2>/dev/null)
-# Write a skip-log so downstream analysis can compare A/B runs fairly
 cat > research/patch-log.json <<EOF
-{"total_findings": ${total:-0}, "applied": [], "skipped": [{"reason": "patcher-disabled-for-ab-test"}], "conflicts": [], "orchestrator_escalated": []}
+{"total_findings": ${total:-0}, "applied": [], "skipped": [{"reason": "patcher-skipped-by-invoker"}], "conflicts": [], "orchestrator_escalated": []}
 EOF
 ```
 
-Then proceed directly to Layer 7 (polish auditor). Do NOT spawn the patcher. The A/B test only has signal if the patcher is actually bypassed; do not "help" by applying findings yourself.
+Then proceed directly to Layer 7 (polish auditor). Do NOT spawn the patcher and do NOT attempt to apply findings yourself — the skip flag is respected as-is. Most runs should not use this gate; it exists for users who want to compare draft quality with and without surgical patching.
 
 1. **Pre-create the patch log stub.** The patcher is tool-locked to `[Read, Edit]` — it cannot Write. Edit can only modify files that already exist. So you (the orchestrator) MUST write the canonical stub first, which the patcher will then Edit to populate:
 
