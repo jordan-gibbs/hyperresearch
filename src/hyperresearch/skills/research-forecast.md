@@ -154,7 +154,7 @@ The draft must include — in the body or in the synthesis — a statement of wh
 
 (9) **Provenance chain.** Run `$HPR lint --rule provenance -j`. FAIL if any issues.
 
-(10) **Analyst coverage.** Run `$HPR lint --rule analyst-coverage -j`. FAIL if below 30%.
+(10) **Extract coverage.** Run `$HPR lint --rule extract-coverage -j`. FAIL if below 30%.
 
 (11) **Opening frames the decision + forces.** Does the opening state what is being forecast, why it is uncertain, and what 3–5 forces will determine the outcome? FAIL if the opening is a history lesson or a definition.
 

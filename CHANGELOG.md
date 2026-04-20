@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.7.0] - 2026-04-17
+
+### Architecture — `/research-ensemble` retired, `/research-layercake` introduced
+
+This release replaces the three-parallel-drafts-plus-merger ensemble design with a seven-phase layered pipeline. Width is discovered first, depth loci are derived from the width corpus (not pre-assigned framings), one draft is written from the combined evidence, three adversarial critics run in parallel against it, and the draft is then modified ONLY by surgical Edit hunks — never regenerated.
+
+### New
+
+- **7-phase layercake pipeline** — (1) width sweep via parallel fetchers, (2) two parallel loci-analysts identify 1–8 depth loci from the corpus, (3) one depth-investigator per locus writes an `interim-<locus>.md` note, (4) orchestrator writes ONE draft, (5) dialectic / depth / width critics return structured findings JSONs, (6) the patcher applies findings as Edit hunks, (7) the polish auditor cuts filler and strips hygiene leaks via more Edit hunks. Protocol lives at `.claude/skills/research-layercake/SKILL.md`.
+- **Tool-locked patcher + polish auditor** — both agents register with tools `[Read, Edit]` ONLY. They physically cannot Write. Every hunk is capped at 500 chars of net expansion — any critic that proposes a larger patch escalates to the orchestrator instead of triggering a rewrite. This is the load-bearing invariant that enforces PATCH-NOT-REGEN at the tool level, not the prompt level.
+- **`NoteType.INTERIM`** — new first-class note type for depth-investigator outputs. Persisted in the vault with `type: interim` and tagged `locus-<name>` for indexability. Added to the SQLite CHECK constraint via migration v7.
+- **`locus-coverage` lint rule** — reads `research/loci.json` (Layer 2 output) and verifies every identified locus has a corresponding interim-report note. Missing interims flag as errors.
+- **`patch-surgery` lint rule** — reads `research/patch-log.json` (Layer 6 output) and surfaces any critical finding the patcher skipped. The 500-char "patch too large" regeneration guard is also surfaced at warning severity.
+- **`instruction-coverage` lint rule** — reads `research/prompt-decomposition.json` and verifies every atomic item (entity, required format) appears in the final report. Catches drafts that drifted from the user's explicit ask.
+- **Layer 0.5 — prompt decomposition** — new orchestrator step before Layer 1 produces `research/prompt-decomposition.json`, a structured breakdown of the atomic items the user's prompt named (sub-questions, entities, required formats, required sections, time horizons, scope conditions). This becomes a first-class contract that flows through Layer 4 drafting and Layer 5 instruction-critique.
+- **`hyperresearch-instruction-critic`** — fourth adversarial critic (Opus, `[Bash, Read]` only). Reads the Layer 4 draft against the prompt-decomposition and emits findings for missing / under-covered / mis-ordered / mis-formatted atomic items. Spawned in parallel with dialectic / depth / width critics in Layer 5.
+- **Pipeline-awareness contract** — every subagent now receives the verbatim research_query AND an explicit pipeline-position statement in its Task prompt. The skill file documents the three-piece spawn contract (research_query / pipeline position / inputs) and provides a copy-paste template so the orchestrator applies it consistently to every Task call.
+- **Schema v7 migration** — safely rebuilds the `notes` table with `'interim'` added to the type CHECK constraint on existing vaults.
+
+### Removed
+
+- **`/research-ensemble` skill** — the three-parallel-sub-run ensemble protocol is gone. The slash command no longer registers.
+- **Retired subagents** — `hyperresearch-analyst`, `hyperresearch-auditor`, `hyperresearch-rewriter`, `hyperresearch-subrun`, `hyperresearch-merger` are no longer installed. On reinstall, any vault that had them gets them pruned automatically by `_prune_retired_agents()`.
+- **`analyst-coverage` lint rule** — superseded by `locus-coverage` (extracts were the ensemble era's per-source deep-read artifact; interim notes are the layercake equivalent scoped per locus).
+
+### New subagent roster (9 agents)
+
+| Agent | Model | Tools | Role |
+|---|---|---|---|
+| `hyperresearch-fetcher` | Haiku | Bash, Read | URL → vault note (unchanged) |
+| `hyperresearch-loci-analyst` | Sonnet | Bash, Read, Write | Returns 1–8 depth loci from width corpus |
+| `hyperresearch-depth-investigator` | Sonnet | Bash, Read, Write, Task | Investigates one locus, writes one interim note |
+| `hyperresearch-dialectic-critic` | Opus | Bash, Read | Finds counter-evidence gaps |
+| `hyperresearch-depth-critic` | Opus | Bash, Read | Finds shallow spots |
+| `hyperresearch-width-critic` | Opus | Bash, Read | Finds topical coverage gaps |
+| `hyperresearch-instruction-critic` | Opus | Bash, Read | Finds atomic items the draft missed from prompt-decomposition |
+| `hyperresearch-patcher` | Sonnet | **Read, Edit** | Applies critic findings as Edit hunks |
+| `hyperresearch-polish-auditor` | Sonnet | **Read, Edit** | Cuts filler + strips hygiene leaks |
+
+### Breaking changes
+
+- Scripts calling `hyperresearch install` on a pre-v0.7 vault will get the old agent files pruned. Pre-existing `research/audit_findings.json` and extract notes stay in the vault (no user data is deleted) but the protocol no longer references them.
+- `analyst-coverage` in `hyperresearch lint --rule ...` is gone — use `locus-coverage` and `patch-surgery`.
+- The `benchmark-report` lint rule is renamed to `wrapper-report`. The rule's logic is unchanged — it fires whenever `research/prompt.txt` or `research/wrapper_contract.json` is present and enforces the wrapper's contract on the final report. The rename reflects what the rule actually does (wrapper-contract enforcement) rather than the specific harness context where it was first used.
+
 ## [0.4.0] - 2026-04-13
 
 ### New

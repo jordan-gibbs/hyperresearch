@@ -13,7 +13,9 @@ The research protocol has ONE process spine (this file) and FOUR modality files 
 
 **There are no numeric targets in this protocol.** No word counts, no H2 counts, no words-per-section floors. A draft is as long as the substance demands and as short as the structure allows. The user's own scope cues (if any) are the only length guidance that applies.
 
-**The user's verbatim prompt is the only gospel in this session.** It gets copied into the scaffold at Step 7 and every subsequent step re-reads it. Whenever you are unsure what to do, re-read the prompt. Whenever the draft feels like it's drifting, re-read the prompt. The auditor at Step 11 grades the draft against the verbatim prompt — not against any abstract notion of quality.
+**The canonical research query is gospel in this session.** In a normal interactive run, that is the user's verbatim prompt. In wrapped runs (an invoking harness, higher-level orchestrators, etc.), a file at `research/prompt.txt` overrides the wrapper text and becomes the canonical research query for the scaffold and every downstream `research_query` parameter. It gets copied into the scaffold at Step 7 and every subsequent step re-reads it. Whenever you are unsure what to do, re-read the canonical query. Whenever the draft feels like it's drifting, re-read the canonical query. The auditor at Step 11 grades the draft against the canonical query — not against any abstract notion of quality.
+
+**Wrapper requirements are a SECOND contract, not part of the query.** The invoking environment may separately require a save path, citation format, or terminal section shape (for example a harness-required `## Opinionated Synthesis` block). Record those requirements separately in the scaffold and obey them. Do NOT paste wrapper instructions into the `## User Prompt (VERBATIM — gospel)` section — that section is reserved for the canonical research query only.
 
 ---
 
@@ -50,21 +52,51 @@ If the vault already has >10 relevant notes: tell the user, summarize what's the
 
 ---
 
-## Step 1: Classify + commit the verbatim prompt
+## Step 1: Classify + commit the canonical research query
 
-State your classification in writing BEFORE doing anything else. Copy the user's prompt verbatim into your working memory. This is the format you MUST output:
+State your classification in writing BEFORE doing anything else.
+
+First resolve the canonical research query and the wrapper contract:
+
+- If `research/prompt.txt` exists, read it and use its contents EXACTLY as the canonical research query.
+- Otherwise, use the user's verbatim prompt as the canonical research query.
+- Separately extract any wrapper requirements from the current session instructions: required save path, required citation format, required closing block, harness-specific structure, or other packaging constraints. These are binding, but they are NOT part of the canonical query.
+
+Then copy the canonical research query into your working memory. This is the format you MUST output:
 
 ```markdown
+## Canonical research query source
+<research/prompt.txt | live user prompt>
+
 ## User Prompt (VERBATIM — gospel)
 > [paste the entire user message here, character-for-character. Do not
 > paraphrase. Do not summarize. Do not reformat. This text is the only
 > authoritative source for what the output should contain and look like.]
+
+## Session wrapper requirements
+- **Required artifact path:** <path or "none">
+- **Required citation contract:** <e.g. "[N] bracket citations only" or "none">
+- **Required terminal section(s):** <e.g. "must end with ## Opinionated Synthesis ..." or "none">
+- **Other wrapper constraints:** <anything else binding, or "none">
 
 ## Primary activity
 <collect | synthesize | compare | forecast>
 
 ## Secondary flavor (optional)
 <collect | synthesize | compare | forecast | none>
+
+## Output mode
+<description_only | description_with_takeaway | opinion_demanded>
+
+Pick by reading the prompt's request verbs:
+
+- **description_only** — the user asked for information, explanation, or enumeration. They want to understand something, not to hear your view on it. Typical verbs: "explain", "describe", "list", "provide", "detail", "elaborate", "tell me about", "summarize", "walk me through", "what is X", "how does X work", "for each X give Y".
+- **description_with_takeaway** — the user asked for description but also surfaced an angle of significance or meaning. They want the facts AND a short statement of what the facts amount to. Typical cues: "what does this mean", "why does this matter", "implications", "significance", "the big picture", "what's the upshot", "context".
+- **opinion_demanded** — the user asked for a committed position, argument, recommendation, or prediction. They want you to pick a side with reasoning. Typical verbs: "which is best", "should I / we", "recommend", "predict", "defend", "evaluate", "argue", "make the case", "pick", "is X true", "what's your take".
+
+When ambiguous between two, pick the less-committal option. `description_with_takeaway` is the safe middle default; only promote to `opinion_demanded` when the prompt is explicit about wanting your view.
+
+This field gates how much synthesis the draft produces at Step 12 (see that step for the scaling rule). It does NOT change what the body covers — the body always delivers what the prompt asked for, across whatever activity and secondary flavor you picked. Output mode only controls the synthesis tail unless the session wrapper explicitly requires a specific terminal section shape.
 
 ## One-sentence justification
 <why this primary activity matches what the output needs to DO>
@@ -106,10 +138,11 @@ When two activities seem equally applicable:
 
 ## Prompt fidelity — the gospel rule
 
-**Re-read the user's verbatim prompt at every checkpoint.** The prompt is inside the scaffold (Step 7). Every checkpoint re-opens the scaffold. Every time you re-open the scaffold, re-read the prompt first. Every structural decision must trace back to the prompt or a modality default that the prompt is silent on.
+**Re-read the canonical research query at every checkpoint.** The query is inside the scaffold (Step 7). Every checkpoint re-opens the scaffold. Every time you re-open the scaffold, re-read the query first, then re-read the scaffold's `## Session wrapper requirements` section. Every structural decision must trace back to the canonical query, the wrapper contract, or a modality default that both are silent on.
 
-- If the prompt specifies structure / format / entities / fields / ordering / scope: **the user's request is authoritative**. Modality defaults yield.
-- If the prompt is silent on any of those: **the modality default applies** to what the prompt left open.
+- If the canonical query specifies structure / format / entities / fields / ordering / scope: **the user's request is authoritative**. Modality defaults yield.
+- If the session wrapper specifies save path / citation contract / terminal section shape: **the wrapper is authoritative for packaging**. It does not change the substance the user asked for, but it does control how the deliverable must be surfaced.
+- If both the query and wrapper are silent on any point: **the modality default applies** to what they left open.
 - The modality file is authoritative for SUBSTANCE (interpretation density, proportionate depth, probability language, mechanism clarity). Substance rules hold regardless of shape.
 
 **Never negotiate the user's contract.** If the user asked for 108 entities and 4 fields each, you owe 108 × 4 data points. You do NOT get to substitute "representative examples + thematic commentary". You do NOT get to silently downgrade "each" to "the most important". If the user's contract seems impossible to satisfy within a reasonable draft, surface that tension to the user and ask — do not paper over it by producing less than what was asked.
@@ -265,6 +298,19 @@ $HPR note edit <new-id> ...            # tries to graft a breadcrumb after the f
 
 Backfilling is supported (the fetch CLI is idempotent on re-call with `--suggested-by`), but the resulting provenance graph has disconnected components — the new note's breadcrumb points at the suggester, but if the suggester was itself a seed, the chain looks artificial. The rooted-tree provenance lint flags this and the audit-gate blocks save until you connect the islands.
 
+**Seed fetches — omit `--suggested-by` entirely.** The very first fetches you do have no upstream suggester. Do NOT invent a placeholder string like `seed-discovery`, `initial-seed`, `run-a-seed`, `run-b-seed`, `run-c-seed`, or any other synthetic value for `--suggested-by`. Placeholder strings are hallucinated note IDs; they are not real notes in the vault, and the provenance lint (which does a real lookup against `hyperresearch note show <id>`) will report every breadcrumb pointing at them as broken. For seed fetches, OMIT the flag:
+
+```bash
+# CORRECT — no --suggested-by on a seed fetch
+$HPR fetch "<seed-url>" --tag <topic> -j
+
+# WRONG — fake placeholder breadcrumb that the provenance lint rejects
+$HPR fetch "<seed-url>" --suggested-by seed-discovery -j       # invented id
+$HPR fetch "<seed-url>" --suggested-by run-a-seed -j           # invented id
+```
+
+The provenance lint tolerates missing breadcrumbs on seed fetches (a note with no breadcrumb is simply treated as a seed root of its own). It rejects breadcrumbs pointing at note IDs that do not resolve. An invented placeholder is strictly worse than no breadcrumb at all — it declares a chain that does not exist.
+
 **Phase 2 — Guided reading iterations.** For each batch of fresh notes, spawn the **`hyperresearch-analyst`** agent (Sonnet, registered at `.claude/agents/hyperresearch-analyst.md`) with `mode=guided`. The analyst accepts a LIST of 1-5 source note IDs per spawn and produces one extract note per source:
 
 ```
@@ -377,7 +423,7 @@ For each batch of 1-5 draft source notes (semantically grouped):
 
 Spawn 3–4 batches in parallel (Sonnet, cheap). Each analyst reads its 1-5 sources sequentially, persists one extract note per source (`--add-tag extract --parent <source-id>` per extract), and returns a list of extract note IDs + a consolidated Findings summary + unioned next_targets + coverage status per source.
 
-Collect every analyst's next_targets into TodoWrite. After each batch, fetch the top next_targets WITH `--suggested-by` so the loop iterates. **The fetch:extract ratio after curation should be at least 1:1** — every fetched source has a paired extract note with at least 150 words of real content. The `analyst-coverage` lint rule catches both misses AND stubs at Checkpoint 2 (extracts under 150 words do NOT count — minting stubs will not satisfy the gate).
+Collect every analyst's next_targets into TodoWrite. After each batch, fetch the top next_targets WITH `--suggested-by` so the loop iterates. **The fetch:extract ratio after curation should be at least 1:1** — every fetched source has a paired extract note with at least 150 words of real content. The `extract-coverage` lint rule catches both misses AND stubs at Checkpoint 2 (extracts under 150 words do NOT count — minting stubs will not satisfy the gate).
 
 ### Step B: Set metadata from the analyst's findings
 
@@ -400,7 +446,7 @@ $HPR note update <source-id> \
 ```bash
 $HPR lint --rule uncurated -j         # zero uncurated
 $HPR lint --rule provenance -j        # zero provenance issues (--suggested-by chain exists)
-$HPR lint --rule analyst-coverage -j  # zero analyst-coverage issues
+$HPR lint --rule extract-coverage -j  # zero extract-coverage issues
 $HPR link --auto -j
 $HPR graph hubs -j
 ```
@@ -409,19 +455,25 @@ If any lint returns issues, curation is NOT done. Go back, run more analyst call
 
 ---
 
-## Step 7: Build the scaffold — with the verbatim user prompt as the first section
+## Step 7: Build the scaffold — with the canonical research query as the first section
 
-**Required artifact:** a note tagged `scaffold` whose FIRST section is the user's verbatim prompt.
-**Verification:** `$HPR note list --tag scaffold -j` must return ≥1 entry after this step AND the body of that note must contain the verbatim user prompt.
+**Required artifact:** a note tagged `scaffold` whose FIRST section is the canonical research query.
+**Verification:** `$HPR note list --tag scaffold -j` must return ≥1 entry after this step AND the body of that note must contain the canonical research query.
 **On failure:** the draft has no anchor. Return to Step 7 and write the scaffold.
 
 Using the **Write tool**, create `research/scaffold.md` with this exact structure:
 
 ```markdown
 ## User Prompt (VERBATIM — gospel)
-> [the user's entire message, copied character-for-character from the prompt.
+> [the canonical research query, copied character-for-character from the prompt source.
 > This is the authoritative source. Every subsequent step re-reads this
 > section. Do not paraphrase. Do not truncate. Do not reformat.]
+
+## Session wrapper requirements
+- **Required artifact path:** <path or "none">
+- **Required citation contract:** <e.g. "[N] bracket citations only" or "none">
+- **Required terminal section(s):** <e.g. "must end with ## Opinionated Synthesis ..." or "none">
+- **Other wrapper constraints:** <anything else binding, or "none">
 
 ## What the user explicitly asked for
 - **Explicit deliverables:** <list — or "none">
@@ -435,7 +487,8 @@ Using the **Write tool**, create `research/scaffold.md` with this exact structur
 ## Primary activity and secondary flavor
 - **Primary:** <collect | synthesize | compare | forecast>
 - **Secondary (optional):** <or "none">
-- **Why:** <one sentence>
+- **Output mode:** <description_only | description_with_takeaway | opinion_demanded>
+- **Why:** <one sentence covering the activity choice AND the output mode choice>
 
 ## Core tension
 <what makes this question non-trivial — the paradox, disagreement, tradeoff,
@@ -510,7 +563,7 @@ $HPR note new "Scaffold: <topic>" --tag scaffold --status draft \
 
 ## Step 8: Cross-source comparisons
 
-**Required artifact:** a note tagged `comparison` containing 3–5 explicit source-vs-source disagreements with your position on each.
+**Required artifact:** a note tagged `comparison` containing 3–5 explicit source-vs-source disagreements with your position on each. If the prompt asks to refine, optimize, evaluate, or compare anything (or if `compare` is the primary or secondary modality), this note must ALSO declare the evaluation dimensions the draft will use.
 **Verification:** `$HPR note list --tag comparison -j` must return ≥1 entry after this step.
 **On failure:** the thesis / recommendation / forecast has no stress test. "I did it in my head" is not acceptable.
 
@@ -519,6 +572,16 @@ Find 3–5 places where sources disagree. Read both at Level 3+ before comparing
 Using the **Write tool**, create `research/comparisons.md`:
 
 ```markdown
+## Declared comparison / evaluation dimensions (required when the prompt asks to refine / optimize / evaluate / compare, or compare is primary/secondary)
+- **Dimension 1:** <name> — <why this dimension matters for the user's decision>
+- **Dimension 2:** <name> — <why it matters>
+- **Dimension 3:** <name> — <why it matters>
+
+## Matrix candidate (same condition as above)
+| Prompt-named item / option | Dimension 1 | Dimension 2 | Dimension 3 | Evidence to cite later |
+|---|---|---|---|---|
+| <item A> | <score / characterization> | <...> | <...> | <source ids / URLs> |
+
 ## Disagreement 1: <what axis are they disagreeing about>
 - Source A ([URL]): <claim/reading> because <reasoning/evidence>
 - Source B ([URL]): <different claim> because <different reasoning>
@@ -537,7 +600,7 @@ $HPR note new "Comparisons: <topic>" --tag comparison --status draft \
 
 ## Step 9: Write the draft
 
-**Before writing anything:** re-open `research/scaffold.md`. Re-read the verbatim user prompt. Re-read the "What the user explicitly asked for" extraction. Re-read the coverage checklist. This is mandatory — every draft session must begin with re-encountering the prompt.
+**Before writing anything:** re-open `research/scaffold.md`. Re-read the canonical research query. Re-read the scaffold's `## Session wrapper requirements`. Re-read the "What the user explicitly asked for" extraction. Re-read the coverage checklist. This is mandatory — every draft session must begin with re-encountering both the user's ask and the wrapper contract.
 
 Then read your modality file's substance rules. The modality file tells you HOW to write: interpretation density (synthesize), enumerative completeness (collect), proportionate depth + recommendation (compare), probability language + time horizon (forecast).
 
@@ -546,22 +609,45 @@ Then read your modality file's substance rules. The modality file tells you HOW 
 ### Shared writing constraints (apply to every activity)
 
 - **The opening must establish the core tension.** What makes this question non-trivial? What paradox, disagreement, tradeoff, or open problem is the draft earning its way through? If the user requested a specific opening shape (definitions, executive summary, narrative hook), honor that shape — then make it do tension-framing work.
+- **Optimization / evaluation prompts declare dimensions early.** If the prompt asks to refine, optimize, evaluate, or compare anything, or if `compare` is your primary or secondary modality, the opening must name the evaluation dimensions before the body starts. Reuse the same dimensions from `research/comparisons.md`; do not silently invent new ones mid-draft.
 - **Every body section must earn its analytical beat.** A section that just describes facts without making an interpretive / comparative / forward move is a catalog entry, not a research contribution. Each section ends with a so-what, a comparison, a tension, or a forward beat.
+- **Prompt-named sections carry the real work.** When the prompt names components, entities, or options explicitly, each dedicated section must answer the question for that item directly. For refinement / optimization asks, that means the section covers: current state, the main bottlenecks or failure modes, the best-supported optimization levers, and the evidence or metrics that justify those recommendations. Cross-cutting support sections can help, but they must feed back into the prompt-named sections rather than replacing them.
 - **Sources in tension at least twice in the body.** Find two places where your sources disagree and walk the reader through the disagreement, naming both positions and explaining which is more defensible. Synthesis alone does not make up for this — the body itself must engage dissent.
-- **Cite aggressively. Every factual claim, every number, every attributed position, every direct or paraphrased quote gets an inline citation.** Use parenthetical URLs like `([Author Year](url))` or `([short source name](url))`. **The same source can and should be cited multiple times** across different sections whenever it anchors a different claim — treat each citation as an independent audit point, not a one-per-source rationing. A 5,000-word deep-research draft should carry **40-80 inline citations** (density of 8-16 per 1000 words); anything under 5 per 1000 reads as under-sourced to both human reviewers and automated judges. Shallow citation is the single most common failure mode in structured research writing.
-- **Exhaustive sub-topic coverage — one H2 per atomic scaffold item.** Open your scaffold's "Prompt decomposition" section and count the atomic items. Your draft has at least that many dedicated H2 or H3 sections, each titled to map obviously to one atomic item. Collapsed sections (titling "Differences & Connections" as one H2 when the prompt named BOTH as atomic asks) are the single most common instruction-following failure mode — the RACE judge rewards visible structural separation. If two atomic items genuinely overlap, still give each its own heading with a cross-reference ("see also §X") rather than silent merging. Every prompt-named subtopic should itself carry ≥3 inline citations.
+- **Cite aggressively. Every factual claim, every number, every attributed position, every direct or paraphrased quote gets an inline citation.** Use `[N]` bracket citations only (see the "Clean `[N]` bracket citations ONLY" rule below for the exact format). **The same source can and should be cited multiple times** across different sections whenever it anchors a different claim — treat each citation as an independent audit point, not a one-per-source rationing. A 5,000-word deep-research draft should carry **40-80 inline citations** (density of 8-16 per 1000 words); anything under 5 per 1000 reads as under-sourced to both human reviewers and automated judges. Shallow citation is the single most common failure mode in structured research writing.
+- **Exhaustive sub-topic coverage — one H2 per atomic scaffold item.** Open your scaffold's "Prompt decomposition" section and count the atomic items. Your draft has at least that many dedicated H2 or H3 sections, each titled to map obviously to one atomic item. Collapsed sections (titling "Differences & Connections" as one H2 when the prompt named BOTH as atomic asks) are the single most common instruction-following failure mode — visible structural separation is what a reader (human or automated) looks for first to verify the prompt was answered. If two atomic items genuinely overlap, still give each its own heading with a cross-reference ("see also §X") rather than silent merging. Every prompt-named subtopic should itself carry ≥3 inline citations.
 - **Tier weighting.** Anchor substantive claims in `ground_truth` sources. Use `institutional` for positioning. Use `practitioner` for reality checks. Use `commentary` only to characterize reception, never to establish a load-bearing claim. Still cite commentary when quoting reception.
-- **Length serves substance, not the reverse.** There is no fixed length target. BUT deep-research drafts typically run 5,000-12,000 words because exhaustive sub-topic coverage plus dense citation plus source-vs-source tension cannot fit in 2,000 words. If you find yourself at 3,000 words on a complex prompt, you are probably collapsing sections or under-citing — reconsider both.
+- **Length discipline — the draft is as long as substance demands, as short as structure allows.** Deep-research drafts typically run 5,000-9,000 words. If you are at 3,000 on a complex prompt you are probably collapsing sections or under-citing; if you are over 10,000 you are probably padding. There are three common padding sources to cut (detailed in a single rule below) — non-requested sections, verbose prose, and filler words. Apply them before shipping.
 
 - **Pick numbers over hedges.** When the prompt asks a quantitative question ("how much", "how many", "to what extent", "by when"), pin down a specific figure or a tight range and cite the source. A concrete number with a citation beats an abstract characterization every time. If the evidence genuinely disagrees, state the range and name the sources on each side. Don't dodge into "this varies" or "it depends" when the user asked for a number.
 
-- **Inline citations as bracketed references AND a final Sources section.** In addition to inline parenthetical URLs, number every unique source `[1]`, `[2]`, `[3]` the first time it appears, reuse the same number on later citations, and include a `## Sources` section at the end of the draft listing `[N] Short title — URL` for every reference. This dual format (parenthetical inline + numbered footnote style + end Sources list) gives both human readers and automated reviewers a traceable audit path. Do NOT invent alternative citation formats (no unicode bracket pairs, no `†`, no author-year-only). Numbered plus final Sources list is the standard here.
+- **Clean `[N]` bracket citations ONLY — no inline URLs in the body.** Number every unique source `[1]`, `[2]`, `[3]` the first time it appears, reuse the same number on later citations, and include a `## Sources` section at the end of the draft listing `[N] Short title -- URL` for every reference. The body text must contain ONLY `[N]` bracket markers — do NOT embed inline Markdown URL links like `([Author](https://...))` alongside bracket numbers. The pattern `([Author Year](url)) [1]` is double-citing: it injects URL noise into every paragraph and kills readability. The `## Sources` section already carries full attribution (author, title, URL) for each `[N]` — that is where the URL lives, not inline. Do NOT invent alternative citation formats (no unicode bracket pairs, no `dagger`, no author-year-only, no inline Markdown links). `[N]` bracket plus final Sources list is the only format.
 
 - **`[N]` → Sources entry is 1-to-1 and bidirectional.** Every `[N]` inline in your draft MUST correspond to exactly one entry in the `## Sources` section. Every entry in `## Sources` MUST have at least one matching inline `[N]` in the body. Do not list a source you did not cite. Do not cite a source you did not list. When you finish writing, do a reconciliation pass: grep your own draft for every `[N]` marker, cross-check against the Sources list, and DELETE any Sources entry that has zero inline citations. A fabricated Sources list (ghost references) is worse than a short one — it signals to reviewers that you padded the bibliography without using the content. The ensemble merger will halt with a CRITICAL if it finds broken references post-fusion; catch them in your own sub-run before shipping.
 
 - **Never re-search a query you already ran in this session, and never paste a URL into a search engine.** Keep a running list of search queries you've already made, and avoid repeating them verbatim — if a query returned shallow results, rephrase meaningfully before retrying. URLs go to `$HPR fetch`, not `WebSearch`. Loop-burn from redundant search is a real failure mode.
 
 - **If you cannot cite it, cut it.** Every sentence that makes a factual claim must trace back to a source in the vault — either one you fetched this session or one the analyst surfaced from a source. Sentences that paraphrase the user's question, stall with throat-clearing ("it is important to note that..."), or summarize what you're about to say next are padding. They inflate word count without adding substance and they dilute citation density, which the auditor grades. Cut them. The only path to a longer draft is more evidence, not more words about the evidence. If a section feels thin, fetch another source — do not pad with generic prose.
+
+- **Cut padding at three scales — sections, sentences, and words.** This is the unified conciseness rule that the length-discipline rule above points at. Apply all three passes before shipping:
+
+  **(1) Non-requested sections.** The scaffold's "What the user explicitly asked for" lists the user's deliverables. Anything else — introduction beyond 1-2 paragraphs, background/primer sections, cross-cutting syntheses, dataset/infrastructure overviews, adversarial/limitations sections, the Step 12 tail — is optional scaffolding the user did NOT request. Before including any such section, apply this test: does it (a) make a requested section easier to understand, (b) contain a finding that does not fit inside any requested section, or (c) satisfy a modality substance rule (compare's matrix, forecast's precedent, collect's closing)? If none, cut it. Bonus sections that duplicate content already delivered inside requested sections are the worst offender — e.g., a long Opinionated Synthesis that restates recommendations already made per-entity in the body. When the user's ask is scoped ("refine these 4 components", "answer questions A / B / C / D", "describe these entities"), the analytical moves (refinements, opinions, comparisons, recommendations) belong INSIDE the requested sections, not in a separate tail. Support sections (datasets, limitations, integration, cross-cutting analysis) stay subordinate — they sharpen requested sections, they do not become the primary body. A draft where 40%+ of words are non-requested reads as padded to any reviewer.
+
+  **(2) Verbose prose inside kept sections.** Every sentence earns its place or gets cut.
+    - Cut meta-commentary: "It is worth noting that...", "As we will see in the next section...", "The following discussion will examine..." are throat-clearing — the next sentence already says what's coming.
+    - Cut qualifier pileups: "Extremely significantly important" is one adjective too far. Pick the strongest word and drop the rest.
+    - Cut section recaps: do not open a section with "In the previous section, we established X; in this section, we turn to Y." Just start Y.
+    - Cut parenthetical asides that restate the main clause: "The magnetic compass (which detects Earth's magnetic field) works by..." → "The magnetic compass works by..."
+    - Favor short declarative sentences over long clausal chains. A 30-word sentence with three subordinate clauses is usually two 15-word sentences waiting to be separated.
+
+  **(3) Filler words at the sentence level.** Do not summarize what you are about to say next; just say it. Do not paraphrase the user's question back at them. If you cannot cite a claim, cut the claim rather than hedging it.
+
+- **Use visual devices when content has structure worth showing.** Prose is not always the right medium. When the content would benefit from a visual layout, use one — don't force it into paragraphs. Specifically:
+  - **Comparison matrix (markdown table)** when you have ≥3 entities evaluated across ≥3 dimensions, or ≥2 entities across ≥5 dimensions. The table makes cross-entity differences legible at a glance in a way prose cannot.
+  - **ASCII sequence diagram / pipeline box** when explaining a multi-step mechanism, protocol flow, or state machine. For example: `Client → [Request] → Agent → [Tool Call] → Server → [Response]` — a single line of ASCII carries more clarity than three prose sentences.
+  - **ASCII hierarchy / tree** when showing categorical nesting (type hierarchies, org structures, file layouts, taxonomies). Indented tree notation (`├── ...`) is immediately readable.
+  - **Inline enumerated list with bolded lead** when presenting parallel items that share structure ("**Option A**: short description. **Option B**: short description.") — clearer than a paragraph that buries the items in prose.
+  - **Timeline / horizon block** for forecasts or historical arcs — dates/milestones in a vertical layout rather than prose narrative.
+  Do NOT force visuals where the content is genuinely argumentative or narrative prose — a 5-paragraph thesis defense should not become a table. But when you catch yourself writing a paragraph like "Entity A does X, Entity B does Y, Entity C does Z — and for each the tradeoffs are different on dimensions P, Q, R", stop writing prose and make a table. Visual layouts materially improve readability on structured content; a draft that consistently reaches for prose where a table or diagram is the honest medium reads as cluttered even when each sentence is fine in isolation.
 
 ### Activity-specific substance rules
 
@@ -575,8 +661,8 @@ Conflict resolution:
 - **Primary wins on structure.** Section shape, entity-vs-thematic sequencing, comparison-matrix presence, scaffold skeleton — all determined by the primary modality.
 - **Secondary wins on substance within sections.** Per-paragraph density rules, tension requirements, interpretation/enumeration discipline — these layer on top of the primary's structure.
 
-Example (Q91-style: `primary=collect`, `secondary=synthesize`):
-- Collect (primary) forces per-character coverage across every entity category in the prompt. The structure is entity-based.
+Example (`primary=collect`, `secondary=synthesize` — e.g., a prompt like "for each X in category C, describe Y and Z, then interpret what the pattern means"):
+- Collect (primary) forces per-entity coverage across every category in the prompt. The structure is entity-based.
 - Synthesize (secondary) forces every paragraph to fuse fact with interpretive claim AND at least two body sections to put sources in tension.
 - The draft has entity-named sections (primary structure) where every paragraph inside makes an interpretive claim about what that entity means (secondary substance).
 
@@ -668,9 +754,35 @@ The auditor reads your modality file's "Conformance checks" section, applies eac
 
 ---
 
-## Step 12: Opinionated synthesis
+## Step 12: Opinionated synthesis (scaled by output_mode, unless wrapper-required)
 
-Append this to the end of the draft:
+The synthesis tail is scaled by the `output_mode` you committed to at Step 1. Re-read your scaffold's output_mode field AND its `## Session wrapper requirements` before writing this step — together they control whether the synthesis section is full, minimal, or omitted.
+
+**Wrapper override rule.** If the session wrapper explicitly requires a terminal section shape, that requirement overrides the default omission logic below. Example: if the wrapper says the report MUST end with `## Opinionated Synthesis` and specific subsections, you MUST include exactly that block even when `output_mode` would otherwise be `description_only`. The canonical query still governs substance; the wrapper governs packaging.
+
+**Why this is conditional, not always-on.** A user who asked "explain X" did not ask for your reasoned position on X. Appending a thesis to a pure description is padding — it inflates the draft with content the reader did not request and dilutes the instruction-following quality of the output. Conversely, a user who asked "which is best" or "should we" explicitly wants your committed take, and a draft that ends without one has failed them. The three modes below route each prompt to the right amount of synthesis for what the user actually asked.
+
+### If `output_mode == description_only`
+
+**Skip Step 12 entirely UNLESS the wrapper requires a terminal section.** If there is no wrapper-required tail, the draft ends at whatever closing the modality specifies in its own Step 9 substance rules (collect's set-pattern closing, compare's matrix + dimension discussion, synthesize's argument conclusion, forecast's horizon summary). Do NOT append "Opinionated Synthesis", "My Reasoned Position", "Thematic Threads", or any variant unless the wrapper explicitly asked for them. The draft's final content section before `## Sources` is the modality's body closing.
+
+The body already delivers the full answer. Anything more is scope creep.
+
+### If `output_mode == description_with_takeaway`
+
+Append ONE short section — the takeaway the user hinted they wanted, and nothing more:
+
+```markdown
+## Takeaway
+
+<One tight paragraph — 100 to 200 words — naming the single most important thing a reader should leave with, and why it follows from the body. If the modality supports it, one sentence of "open questions" at the end is allowed but not required. No thesis commitment, no recommendation, no forecast unless the body already made one.>
+```
+
+This is a landing pad, not an argument. It summarizes what the corpus amounts to without promoting description into advocacy.
+
+### If `output_mode == opinion_demanded`
+
+Append the full opinionated synthesis block — the user explicitly asked for a committed view:
 
 ```markdown
 ## Opinionated Synthesis
@@ -698,6 +810,10 @@ change your position>
 <one tight paragraph: the single most important thing a reader should
 take away — and why>
 ```
+
+### Record which branch you took
+
+In the draft's scaffold (or a comment at the top of the draft), note which `output_mode` branch you used at Step 12 and whether a wrapper override applied. The auditor's conformance check reads this to verify the synthesis tail matches the classification plus any explicit wrapper contract.
 
 ---
 
@@ -787,14 +903,14 @@ for dom, count in domains.most_common(10):
 ```bash
 $HPR lint --rule uncurated -j
 $HPR lint --rule provenance -j
-$HPR lint --rule analyst-coverage -j
+$HPR lint --rule extract-coverage -j
 $HPR note list --all -j | python -c "import sys,json; from collections import Counter; notes=json.load(sys.stdin)['data']; t=Counter(n.get('tier') for n in notes if n.get('status')!='draft'); ct=Counter(n.get('content_type') for n in notes if n.get('status')!='draft'); print(f'tiers: {dict(t)}'); print(f'content_types: {dict(ct)}')"
 ```
 
 **Pass conditions:**
 - [ ] Zero `uncurated` issues
 - [ ] Zero `provenance` **errors** — the rule itself computes the non-seed ratio and errors when under 30% on a corpus >10, so if this lint returns zero errors the guided loop fired adequately. Read its output carefully; its message tells you `non_seeds / total` directly.
-- [ ] Zero `analyst-coverage` issues (at least 33% of fetched sources have a paired extract note)
+- [ ] Zero `extract-coverage` issues (at least 33% of fetched sources have a paired extract note)
 - [ ] Tier and content_type distributions are nuanced (not one dominant value)
 - [ ] At least two tiers represented
 - [ ] At least three content_types represented
@@ -814,7 +930,7 @@ $HPR note list --tag extract -j | python -c "import sys,json; d=json.load(sys.st
 $HPR lint --rule scaffold-prompt -j
 $HPR lint --rule uncurated -j
 $HPR lint --rule provenance -j
-$HPR lint --rule analyst-coverage -j
+$HPR lint --rule extract-coverage -j
 $HPR lint --rule workflow -j
 ```
 
@@ -823,7 +939,7 @@ $HPR lint --rule workflow -j
 - [ ] Zero `scaffold-prompt` issues — the scaffold body MUST contain the verbatim user prompt as its first section. This is machine-checked; the gospel rule is non-negotiable.
 - [ ] Comparison note count ≥ 1
 - [ ] Extract note count ≥ 30% of fetched source count
-- [ ] Zero `uncurated`, `provenance`, `analyst-coverage`, `workflow` issues
+- [ ] Zero `uncurated`, `provenance`, `extract-coverage`, `workflow` issues
 
 **On failure:** you CANNOT write the draft. Return to the step that produces the missing artifact. If `scaffold-prompt` failed, return to Step 7 and re-write the scaffold with the user's verbatim prompt as its first section — do not fudge it.
 

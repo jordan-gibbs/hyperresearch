@@ -98,6 +98,30 @@ def test_scaffold_prompt_warns_when_quote_too_short(tmp_vault):
     assert scaffold_issues[0]["severity"] == "warning"
 
 
+def test_scaffold_prompt_fails_when_canonical_prompt_mismatch(tmp_vault):
+    (tmp_vault.root / "research" / "prompt.txt").write_text(
+        "Exact wrapped prompt text.\nSecond line.",
+        encoding="utf-8",
+    )
+    _write_scaffold(
+        tmp_vault,
+        body=(
+            "## User Prompt (VERBATIM — gospel)\n"
+            "> Exact wrapped prompt text.\n"
+            "> Second line with drift.\n\n"
+            "## What the user explicitly asked for\n"
+            "- thing\n"
+        ),
+    )
+    _, out = _run_lint(tmp_vault, rule="scaffold-prompt")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "scaffold-prompt"]
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "error"
+    assert "research/prompt.txt" in issues[0]["message"]
+
+
 def test_scaffold_prompt_no_scaffold_notes_is_noop(tmp_vault):
     # A vault with no scaffold-tagged notes should produce no issues for this rule.
     code, out = _run_lint(tmp_vault, rule="scaffold-prompt")
@@ -107,6 +131,174 @@ def test_scaffold_prompt_no_scaffold_notes_is_noop(tmp_vault):
     issues = data.get("data", {}).get("issues", [])
     scaffold_issues = [i for i in issues if i.get("rule") == "scaffold-prompt"]
     assert scaffold_issues == []
+
+
+def _write_wrapper_contract(vault, **fields):
+    """Persist a research/wrapper_contract.json at the vault root."""
+    import json
+    (vault.root / "research" / "wrapper_contract.json").write_text(
+        json.dumps(fields), encoding="utf-8",
+    )
+
+
+def test_wrapper_report_requires_terminal_sections_from_wrapper_contract(tmp_vault):
+    """When wrapper_contract.json declares required_terminal_sections, the
+    wrapper-report rule must fail if any are missing from the final report."""
+    (tmp_vault.root / "research" / "prompt.txt").write_text(
+        "Exact wrapped prompt text.",
+        encoding="utf-8",
+    )
+    _write_wrapper_contract(
+        tmp_vault,
+        required_terminal_sections=[
+            "## Opinionated Synthesis",
+            "### Concluding Thoughts",
+        ],
+    )
+    (tmp_vault.root / "research" / "notes" / "final_report.md").write_text(
+        "# Report\n\n## Body\nSome body content.\n",
+        encoding="utf-8",
+    )
+
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "error"
+    assert "required_terminal_sections" in issues[0]["message"]
+    assert "Opinionated Synthesis" in issues[0]["message"]
+    assert "Concluding Thoughts" in issues[0]["message"]
+
+
+def test_wrapper_report_passes_when_required_sections_present(tmp_vault):
+    """Wrapper contract + report with all declared sections => no issues."""
+    (tmp_vault.root / "research" / "prompt.txt").write_text(
+        "Exact wrapped prompt text.",
+        encoding="utf-8",
+    )
+    _write_wrapper_contract(
+        tmp_vault,
+        required_terminal_sections=[
+            "## Opinionated Synthesis",
+            "### Concluding Thoughts",
+        ],
+    )
+    (tmp_vault.root / "research" / "notes" / "final_report.md").write_text(
+        (
+            "# Report\n\n"
+            "## Body\nSome body content.\n\n"
+            "## Opinionated Synthesis\n\n"
+            "### Concluding Thoughts\nE\n"
+        ),
+        encoding="utf-8",
+    )
+
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
+    assert issues == []
+
+
+def test_wrapper_report_without_contract_only_checks_hygiene(tmp_vault):
+    """With prompt.txt but no wrapper_contract.json, the rule should NOT
+    flag missing terminal sections (since nothing was declared required).
+    Scaffold-leak hygiene is still enforced."""
+    (tmp_vault.root / "research" / "prompt.txt").write_text(
+        "Exact wrapped prompt text.",
+        encoding="utf-8",
+    )
+    (tmp_vault.root / "research" / "notes" / "final_report.md").write_text(
+        "# Report\n\n## Body\nSome content, no synthesis tail.\n",
+        encoding="utf-8",
+    )
+
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
+    assert issues == []
+
+
+def test_wrapper_report_forbids_scaffold_leaks_without_contract(tmp_vault):
+    """Scaffold-leak hygiene runs regardless of whether wrapper_contract.json
+    declares forbidden_body_sections — the canonical base list from
+    SCAFFOLD_ONLY_SECTION_HEADERS is always forbidden."""
+    (tmp_vault.root / "research" / "prompt.txt").write_text(
+        "Exact wrapped prompt text.",
+        encoding="utf-8",
+    )
+    (tmp_vault.root / "research" / "notes" / "final_report.md").write_text(
+        (
+            "# Report\n\n"
+            "## User Prompt (VERBATIM — gospel)\n"
+            "> Exact wrapped prompt text.\n\n"
+            "## Body\nContent.\n"
+        ),
+        encoding="utf-8",
+    )
+
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "error"
+    assert "leaking scaffold-only sections" in issues[0]["message"]
+    assert "User Prompt (VERBATIM" in issues[0]["message"]
+
+
+def test_wrapper_report_honors_wrapper_extra_forbidden_sections(tmp_vault):
+    """A wrapper can declare ADDITIONAL forbidden body sections on top of the
+    canonical base list."""
+    _write_wrapper_contract(
+        tmp_vault,
+        forbidden_body_sections=["## Internal-only scratch"],
+    )
+    (tmp_vault.root / "research" / "notes" / "final_report.md").write_text(
+        (
+            "# Report\n\n"
+            "## Body\nContent.\n\n"
+            "## Internal-only scratch\nLeaked note.\n"
+        ),
+        encoding="utf-8",
+    )
+
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
+    assert len(issues) == 1
+    assert "Internal-only scratch" in issues[0]["message"]
+
+
+def test_wrapper_report_inactive_without_signals(tmp_vault):
+    """No prompt.txt, no wrapper_contract.json => rule is inactive, no issues."""
+    (tmp_vault.root / "research" / "notes" / "final_report.md").write_text(
+        "# Report\n\n## Body\nRegular /research output.\n",
+        encoding="utf-8",
+    )
+
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
+    assert issues == []
+
+
+def test_wrapper_report_unreadable_contract_surfaces_error(tmp_vault):
+    """Malformed wrapper_contract.json produces an error rather than silently
+    disabling the rule."""
+    (tmp_vault.root / "research" / "wrapper_contract.json").write_text(
+        "{not valid json",
+        encoding="utf-8",
+    )
+    _, out = _run_lint(tmp_vault, rule="wrapper-report")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "wrapper-report"]
+    assert any("wrapper_contract.json" in i["message"] for i in issues)
 
 
 def _write_source(vault, title: str, note_id: str, body: str = "Source content."):
@@ -121,18 +313,48 @@ def _write_source(vault, title: str, note_id: str, body: str = "Source content."
     )
 
 
-def _write_extract(vault, note_id: str, word_count_target: int, run_tag: str | None = None):
-    """Write an extract note with a body of roughly `word_count_target` words."""
+def _write_extract(
+    vault,
+    note_id: str,
+    word_count_target: int,
+    run_tag: str | None = None,
+    parent: str | None = None,
+    dud: bool = False,
+):
+    """Write an extract note with a body of roughly `word_count_target` words.
+
+    When `dud=True`, the extract is tagged `dud` — marking it as an honest
+    "source had no extractable content" placeholder. The analyst-coverage
+    lint excludes dud notes from both its numerator and denominator.
+    """
     body = "word " * word_count_target
     tags = ["extract"]
     if run_tag:
         tags.append(run_tag)
+    if dud:
+        tags.append("dud")
     write_note(
         vault.notes_dir,
         f"Extract {note_id}",
         body=body,
         note_id=note_id,
         tags=tags,
+        parent=parent,
+    )
+
+
+def _write_dud_source(vault, title: str, note_id: str, body: str = "Dud source content."):
+    """Write a source note that is also tagged `dud` — simulating a fetch
+    that returned something but the body is genuinely unextractable."""
+    write_note(
+        vault.notes_dir,
+        title,
+        body=body,
+        note_id=note_id,
+        source=f"https://example.com/{note_id}",
+        tier="institutional",
+        content_type="article",
+        tags=["dud"],
     )
 
 
@@ -461,9 +683,9 @@ def test_audit_gate_catches_self_certification_on_provenance(tmp_vault):
     marked `fixed_at`, but the provenance rule still returns errors, the
     audit-gate must emit a SELF-CERTIFICATION VIOLATION error.
 
-    This is exactly the Q62 failure mode — the agent marked the C1
-    provenance finding as fixed with a justification string, but the
-    vault's actual breadcrumb graph was still broken.
+    This is a past self-certification failure mode — the agent marked
+    the C1 provenance finding as fixed with a justification string, but
+    the vault's actual breadcrumb graph was still broken.
     """
     # Build a vault where provenance is genuinely broken (12 sources, none
     # with breadcrumbs — classic flat batch).
@@ -587,61 +809,605 @@ def test_orphaned_raw_files_ignores_matched_raw(tmp_vault):
     assert issues == []
 
 
-def test_analyst_coverage_counts_real_extracts(tmp_vault):
-    """A vault with enough real extracts (>= 150 words) passes the gate."""
-    for i in range(9):
-        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
-    # 3 real extracts (>=150 words each) — 3/9 sources = 33% meets 1/3 floor
-    for i in range(3):
-        _write_extract(tmp_vault, f"extract-{i}", word_count_target=200, run_tag="run-a")
+
+# ---------------------------------------------------------------------------
+# locus-coverage (layercake Layer 3 — every locus must have an interim note)
+# ---------------------------------------------------------------------------
+
+
+def _write_loci_json(vault, loci: list[dict]) -> None:
+    """Write research/loci.json so the locus-coverage rule has something to read."""
+    import json
+    research_dir = vault.root / "research"
+    research_dir.mkdir(parents=True, exist_ok=True)
+    (research_dir / "loci.json").write_text(
+        json.dumps({"loci": loci}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _write_interim(vault, locus_name: str, note_id: str | None = None) -> None:
+    """Write an interim-report note for a given locus. Mimics the Layer 3
+    depth-investigator output shape: type=interim, tag=locus-<name>."""
+    from hyperresearch.core.note import write_note
+    nid = note_id or f"interim-{locus_name}"
+    write_note(
+        vault.notes_dir,
+        f"Interim report {locus_name}",
+        body="Interim synthesis for locus.",
+        note_id=nid,
+        tags=["interim", f"locus-{locus_name}"],
+        note_type="interim",
+    )
+
+
+def test_locus_coverage_passes_when_every_locus_has_interim(tmp_vault):
+    _write_loci_json(tmp_vault, [
+        {"name": "alpha", "one_line": "Q1"},
+        {"name": "beta",  "one_line": "Q2"},
+    ])
+    _write_interim(tmp_vault, "alpha")
+    _write_interim(tmp_vault, "beta")
     tmp_vault.auto_sync()
 
-    _, out = _run_lint(tmp_vault, rule="analyst-coverage")
+    _, out = _run_lint(tmp_vault, rule="locus-coverage")
     import json
     data = json.loads(out)
-    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "analyst-coverage"]
-    assert issues == [], f"expected no issues, got: {issues}"
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "locus-coverage"]
+    assert issues == []
 
 
-def test_analyst_coverage_rejects_stub_extracts(tmp_vault):
-    """Lint-gaming defense: 45 stub extracts (<150 words) do NOT satisfy the gate.
-    This is the Q91 ensemble failure mode — orchestrator minted hollow extract
-    notes to pass analyst-coverage numerically."""
-    for i in range(9):
-        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
-    # 45 STUB extracts at ~70 words each — would pass old count-based rule.
-    for i in range(45):
-        _write_extract(tmp_vault, f"stub-extract-{i}", word_count_target=70)
+def test_locus_coverage_flags_missing_interim(tmp_vault):
+    _write_loci_json(tmp_vault, [
+        {"name": "alpha", "one_line": "Q1"},
+        {"name": "beta",  "one_line": "Q2"},
+        {"name": "gamma", "one_line": "Q3"},
+    ])
+    # Only alpha got investigated; beta and gamma are orphans
+    _write_interim(tmp_vault, "alpha")
     tmp_vault.auto_sync()
 
-    _, out = _run_lint(tmp_vault, rule="analyst-coverage")
+    _, out = _run_lint(tmp_vault, rule="locus-coverage")
     import json
     data = json.loads(out)
-    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "analyst-coverage"]
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "locus-coverage"]
     assert len(issues) == 1
     msg = issues[0]["message"]
-    # Error message must expose the stub count honestly so the agent sees the
-    # lint-gaming attempt for what it is.
-    assert "45 stub notes" in msg
-    assert "lint-gaming" in msg
-    # Zero REAL extracts → 0% coverage → error severity
+    assert "2 of 3" in msg
+    assert "beta" in msg
+    assert "gamma" in msg
+    # 2 missing -> error severity (threshold at 2)
     assert issues[0]["severity"] == "error"
 
 
-def test_analyst_coverage_mixed_real_and_stub(tmp_vault):
-    """Real extracts count toward the gate; stubs are reported but ignored."""
-    for i in range(12):
-        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
-    # 4 real extracts (>=150 words) — 4/12 = 33%, passes ceil(12/3)=4 threshold
-    for i in range(4):
-        _write_extract(tmp_vault, f"real-extract-{i}", word_count_target=300, run_tag="run-a")
-    # Plus 10 stubs that should not pad the count
-    for i in range(10):
-        _write_extract(tmp_vault, f"stub-extract-{i}", word_count_target=70)
-    tmp_vault.auto_sync()
-
-    _, out = _run_lint(tmp_vault, rule="analyst-coverage")
+def test_locus_coverage_noop_when_no_loci_json(tmp_vault):
+    """A vault from a single-pass /research run has no loci.json; the rule
+    must stay silent in that case, not misfire."""
+    _, out = _run_lint(tmp_vault, rule="locus-coverage")
     import json
     data = json.loads(out)
-    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "analyst-coverage"]
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "locus-coverage"]
+    assert issues == []
+
+
+# ---------------------------------------------------------------------------
+# patch-surgery (layercake Layer 6 — patcher must not skip critical findings)
+# ---------------------------------------------------------------------------
+
+
+def _write_patch_log(vault, applied=None, skipped=None, conflicts=None) -> None:
+    import json
+    research_dir = vault.root / "research"
+    research_dir.mkdir(parents=True, exist_ok=True)
+    (research_dir / "patch-log.json").write_text(
+        json.dumps({
+            "applied": applied or [],
+            "skipped": skipped or [],
+            "conflicts": conflicts or [],
+        }, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def test_patch_surgery_passes_with_clean_log(tmp_vault):
+    _write_patch_log(tmp_vault, applied=[
+        {"finding_id": 0, "severity": "critical", "critic": "dialectic", "chars_added": 87},
+        {"finding_id": 1, "severity": "major",    "critic": "depth",     "chars_added": 54},
+    ])
+    _, out = _run_lint(tmp_vault, rule="patch-surgery")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "patch-surgery"]
+    assert issues == []
+
+
+def test_patch_surgery_flags_critical_skip(tmp_vault):
+    _write_patch_log(tmp_vault,
+        applied=[
+            {"finding_id": 0, "severity": "major", "critic": "depth", "chars_added": 50},
+        ],
+        skipped=[
+            {"finding_id": 1, "severity": "critical", "critic": "dialectic",
+             "reason": "anchor drifted"},
+        ],
+    )
+    _, out = _run_lint(tmp_vault, rule="patch-surgery")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "patch-surgery"]
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "error"
+    assert "1 critical" in issues[0]["message"]
+    assert "dialectic" in issues[0]["message"]
+
+
+def test_patch_surgery_noop_when_no_patch_log(tmp_vault):
+    """Single-pass /research runs produce no patch-log.json. Rule stays silent."""
+    _, out = _run_lint(tmp_vault, rule="patch-surgery")
+    import json
+    data = json.loads(out)
+    issues = [i for i in data.get("data", {}).get("issues", []) if i.get("rule") == "patch-surgery"]
+    assert issues == []
+
+
+# ---------------------------------------------------------------------------
+# workflow — comparisons.md gate for layercake runs with 2+ loci
+# ---------------------------------------------------------------------------
+
+
+def test_workflow_flags_missing_comparisons_when_multiple_loci(tmp_vault):
+    """2+ loci without research/comparisons.md is a Layer 3.5 skip — the
+    insight-killing failure mode the cross-locus reconciliation step was
+    added to prevent."""
+    from hyperresearch.core.note import write_note
+    # Layercake final-report signal
+    write_note(
+        tmp_vault.notes_dir,
+        "final_report",
+        body="Some draft content.",
+        note_id="final_report",
+        tags=["synthesis"],
+    )
+    # Scaffold artifact so the scaffold check passes
+    (tmp_vault.root / "research" / "scaffold.md").write_text(
+        "scaffold\n", encoding="utf-8"
+    )
+    # 2 loci, 2 interim notes — but NO comparisons.md
+    _write_loci_json(tmp_vault, [
+        {"name": "alpha", "one_line": "Q1"},
+        {"name": "beta",  "one_line": "Q2"},
+    ])
+    _write_interim(tmp_vault, "alpha")
+    _write_interim(tmp_vault, "beta")
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="workflow")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "workflow"
+    ]
+    comparisons_issues = [i for i in issues if "comparisons.md" in i["message"]]
+    assert len(comparisons_issues) == 1
+    assert comparisons_issues[0]["severity"] == "error"
+    assert "2 loci" in comparisons_issues[0]["message"]
+    assert "Layer 3.5" in comparisons_issues[0]["message"]
+
+
+def test_workflow_passes_with_comparisons_md(tmp_vault):
+    """With comparisons.md present alongside 2+ loci, workflow rule stays silent."""
+    from hyperresearch.core.note import write_note
+    write_note(
+        tmp_vault.notes_dir,
+        "final_report",
+        body="Draft.",
+        note_id="final_report",
+        tags=["synthesis"],
+    )
+    (tmp_vault.root / "research" / "scaffold.md").write_text(
+        "scaffold\n", encoding="utf-8"
+    )
+    (tmp_vault.root / "research" / "comparisons.md").write_text(
+        "# Cross-locus comparisons\n\n## Tension 1\n...", encoding="utf-8"
+    )
+    _write_loci_json(tmp_vault, [
+        {"name": "alpha", "one_line": "Q1"},
+        {"name": "beta",  "one_line": "Q2"},
+    ])
+    _write_interim(tmp_vault, "alpha")
+    _write_interim(tmp_vault, "beta")
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="workflow")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "workflow" and "comparisons.md" in i["message"]
+    ]
+    assert issues == []
+
+
+def test_workflow_requires_comparisons_even_on_single_locus(tmp_vault):
+    """Layer 3.5 is always-on: single-locus runs still produce a
+    comparisons.md distilling that locus's committed position. Missing
+    comparisons.md when loci >= 1 is now an error."""
+    from hyperresearch.core.note import write_note
+    write_note(
+        tmp_vault.notes_dir,
+        "final_report",
+        body="Draft.",
+        note_id="final_report",
+        tags=["synthesis"],
+    )
+    (tmp_vault.root / "research" / "scaffold.md").write_text(
+        "scaffold\n", encoding="utf-8"
+    )
+    _write_loci_json(tmp_vault, [
+        {"name": "alpha", "one_line": "Q1"},
+    ])
+    _write_interim(tmp_vault, "alpha")
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="workflow")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "workflow" and "comparisons.md" in i["message"]
+    ]
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "error"
+    assert "always-on" in issues[0]["message"]
+
+
+# ---------------------------------------------------------------------------
+# provenance — layercake-aware: skip breadcrumb coverage ratio checks when
+# research/loci.json exists (layercake's fetch pattern is not bouncing-loop)
+# ---------------------------------------------------------------------------
+
+
+def test_provenance_skips_coverage_ratio_on_layercake_runs(tmp_vault):
+    """A layercake run with many flat-seed fetches should NOT fail provenance's
+    coverage-ratio check. Structural invariants (seeds exist, no dangling) still
+    enforced."""
+    # 15 source notes, ALL seeds (no --suggested-by breadcrumbs) — would be
+    # an instant failure under the old ensemble provenance rule.
+    for i in range(15):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    # Add the layercake marker
+    _write_loci_json(tmp_vault, [
+        {"name": "alpha", "one_line": "Q"},
+        {"name": "beta",  "one_line": "Q"},
+    ])
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="provenance")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "provenance" and i.get("severity") in ("error", "warning")
+    ]
+    # No ratio-based errors on layercake runs
+    assert issues == [], f"expected no coverage issues on layercake, got: {issues}"
+
+
+def test_provenance_still_fires_coverage_check_on_non_layercake_runs(tmp_vault):
+    """Ensemble / single-pass runs (no loci.json) should still get the
+    bouncing-loop coverage check — nothing about this fix changes that."""
+    for i in range(15):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    # NO loci.json → non-layercake run
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="provenance")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "provenance"
+    ]
+    # Old behavior: zero breadcrumbs on >5 sources = error
+    assert any(i["severity"] == "error" for i in issues)
+
+
+# ---------------------------------------------------------------------------
+# locus-coverage — flag duplicate interim notes on the same locus
+# ---------------------------------------------------------------------------
+
+
+def test_locus_coverage_flags_duplicate_interim_notes(tmp_vault):
+    """Past failure mode: a single locus accumulated 3 interim notes
+    instead of 1. Inflates source count and confuses critics."""
+    _write_loci_json(tmp_vault, [
+        {"name": "alpha", "one_line": "Q1"},
+    ])
+    _write_interim(tmp_vault, "alpha", note_id="interim-alpha-1")
+    _write_interim(tmp_vault, "alpha", note_id="interim-alpha-2")
+    _write_interim(tmp_vault, "alpha", note_id="interim-alpha-3")
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="locus-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "locus-coverage"
+    ]
+    dup_issues = [i for i in issues if "duplicate" in i["message"]]
+    assert len(dup_issues) == 1
+    assert "alpha (3)" in dup_issues[0]["message"]
+    assert dup_issues[0]["severity"] == "warning"
+
+
+# ---------------------------------------------------------------------------
+# patch-surgery — empty log vs real zero-apply distinction
+# ---------------------------------------------------------------------------
+
+
+def test_patch_surgery_flags_empty_log_with_findings_present(tmp_vault):
+    """When critics returned findings and the draft exists, but the patch
+    log is empty, the patcher's log was lost. Warn so the operator knows."""
+    import json as _json
+    # Draft exists
+    notes_dir = tmp_vault.root / "research" / "notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    (notes_dir / "final_report.md").write_text("# Report\n\nBody.", encoding="utf-8")
+    # Critic findings with 12 findings
+    research = tmp_vault.root / "research"
+    research.mkdir(parents=True, exist_ok=True)
+    (research / "critic-findings-dialectic.json").write_text(
+        _json.dumps({"findings": [{"severity": "major"} for _ in range(12)]}),
+        encoding="utf-8",
+    )
+    # Empty stub patch log
+    _write_patch_log(tmp_vault)
+
+    _, out = _run_lint(tmp_vault, rule="patch-surgery")
+    data = _json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "patch-surgery" and "log was almost certainly lost" in i["message"]
+    ]
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "warning"
+
+
+def test_patch_surgery_empty_log_without_findings_is_silent(tmp_vault):
+    """If no critic findings exist, an empty patch log is correct (nothing
+    to apply), not a warning."""
+    import json as _json
+    _write_patch_log(tmp_vault)
+
+    _, out = _run_lint(tmp_vault, rule="patch-surgery")
+    data = _json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "patch-surgery"
+    ]
+    assert issues == []
+
+
+# ---------------------------------------------------------------------------
+# instruction-coverage — atomic items from prompt-decomposition must
+# appear in the final report
+# ---------------------------------------------------------------------------
+
+
+def _write_decomposition(vault, entities=None, formats=None):
+    import json as _json
+    research = vault.root / "research"
+    research.mkdir(parents=True, exist_ok=True)
+    data = {
+        "sub_questions": [],
+        "entities": entities or [],
+        "required_formats": formats or [],
+        "required_sections": [],
+        "time_horizons": [],
+        "scope_conditions": [],
+    }
+    (research / "prompt-decomposition.json").write_text(
+        _json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _write_final_report(vault, body: str):
+    notes_dir = vault.root / "research" / "notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    (notes_dir / "final_report.md").write_text(body, encoding="utf-8")
+
+
+def test_instruction_coverage_passes_when_all_entities_present(tmp_vault):
+    _write_decomposition(tmp_vault, entities=[
+        {"name": "Alpha Method", "type": "concept"},
+        {"name": "Beta Framework", "type": "concept"},
+    ])
+    _write_final_report(tmp_vault,
+        "# Report\n\n## Alpha Method\nContent about the Alpha Method.\n\n"
+        "## Beta Framework\nContent about the Beta Framework.\n"
+    )
+    _, out = _run_lint(tmp_vault, rule="instruction-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "instruction-coverage"
+    ]
+    assert issues == []
+
+
+def test_instruction_coverage_flags_missing_entities(tmp_vault):
+    _write_decomposition(tmp_vault, entities=[
+        {"name": "Alpha Method"},
+        {"name": "Beta Framework"},
+        {"name": "Gamma Protocol"},
+    ])
+    _write_final_report(tmp_vault,
+        "# Report\n\n## Alpha Method\nContent about the Alpha Method.\n"
+    )
+    _, out = _run_lint(tmp_vault, rule="instruction-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "instruction-coverage"
+    ]
+    assert len(issues) == 1
+    assert "2 atomic entity" in issues[0]["message"]
+    assert "Beta Framework" in issues[0]["message"]
+    assert "Gamma Protocol" in issues[0]["message"]
+    # 2 missing → warning, 3+ would be error
+    assert issues[0]["severity"] == "warning"
+
+
+def test_instruction_coverage_errors_on_three_plus_missing(tmp_vault):
+    _write_decomposition(tmp_vault, entities=[
+        {"name": "Alpha"},
+        {"name": "Beta"},
+        {"name": "Gamma"},
+        {"name": "Delta"},
+    ])
+    _write_final_report(tmp_vault, "# Report\n\nOnly Alpha is here.\n")
+    _, out = _run_lint(tmp_vault, rule="instruction-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "instruction-coverage"
+    ]
+    # Beta, Gamma, Delta all missing → error severity
+    entity_issues = [i for i in issues if "atomic entity" in i["message"]]
+    assert len(entity_issues) == 1
+    assert entity_issues[0]["severity"] == "error"
+
+
+def test_instruction_coverage_flags_missing_format(tmp_vault):
+    _write_decomposition(tmp_vault,
+        entities=[{"name": "X"}],
+        formats=["mind map of causal structure", "ranked list of tradeoffs"],
+    )
+    _write_final_report(tmp_vault, "# Report\n\n## X\nPlain prose about X.\n")
+    _, out = _run_lint(tmp_vault, rule="instruction-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "instruction-coverage"
+           and "Required format" in i["message"]
+    ]
+    assert len(issues) == 1
+    assert "mind map" in issues[0]["message"]
+    assert "ranked list" in issues[0]["message"]
+
+
+def test_instruction_coverage_noop_when_no_decomposition(tmp_vault):
+    """Non-layercake runs have no decomposition file — rule stays silent."""
+    _, out = _run_lint(tmp_vault, rule="instruction-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "instruction-coverage"
+    ]
+    assert issues == []
+
+
+# ---------------------------------------------------------------------------
+# extract-coverage — single-pass /research runs must have analyst-extract
+# notes per source. Skips on layercake runs (loci.json present).
+# ---------------------------------------------------------------------------
+
+
+def test_extract_coverage_passes_with_healthy_ratio(tmp_vault):
+    """9 sources + 3 real extracts (≥150 words, parent points to source) =
+    33% coverage = passes the 1/3 gate."""
+    for i in range(9):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    for i in range(3):
+        _write_extract(
+            tmp_vault,
+            f"extract-{i}",
+            word_count_target=200,
+            parent=f"source-{i}",
+        )
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="extract-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "extract-coverage"
+    ]
+    assert issues == []
+
+
+def test_extract_coverage_flags_missing_extracts(tmp_vault):
+    """9 sources + 0 extracts = 0% coverage = error."""
+    for i in range(9):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="extract-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "extract-coverage"
+    ]
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "error"
+    assert "9 fetched source notes" in issues[0]["message"]
+    assert "0 real" in issues[0]["message"]
+
+
+def test_extract_coverage_rejects_stubs(tmp_vault):
+    """9 sources + 20 stub extracts (<150 words) = 0 real extracts, all
+    stubs counted separately. Lint-gaming defense."""
+    for i in range(9):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    for i in range(20):
+        _write_extract(
+            tmp_vault,
+            f"stub-{i}",
+            word_count_target=70,
+            parent=f"source-{i % 9}",
+        )
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="extract-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "extract-coverage"
+    ]
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "error"
+    assert "20 stub notes" in issues[0]["message"]
+
+
+def test_extract_coverage_skips_on_layercake_runs(tmp_vault):
+    """Layercake runs produce loci.json. This rule is single-pass only —
+    it should stay silent on layercake vaults, where locus-coverage takes
+    over for quality gating."""
+    for i in range(9):
+        _write_source(tmp_vault, f"Source {i}", f"source-{i}")
+    # No extracts — would normally fire — but...
+    _write_loci_json(tmp_vault, [
+        {"name": "alpha", "one_line": "Q1"},
+    ])
+    tmp_vault.auto_sync()
+
+    _, out = _run_lint(tmp_vault, rule="extract-coverage")
+    import json
+    data = json.loads(out)
+    issues = [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "extract-coverage"
+    ]
+    # Silent on layercake — locus-coverage handles this mode
     assert issues == []

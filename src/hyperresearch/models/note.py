@@ -23,6 +23,7 @@ class NoteType(StrEnum):
     RAW = "raw"
     INDEX = "index"
     MOC = "moc"
+    INTERIM = "interim"  # layercake depth-investigator output (Layer 3)
 
 
 class Tier(StrEnum):
