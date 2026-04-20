@@ -16,6 +16,7 @@ from hyperresearch.core.hooks import (
     _install_polish_auditor_agent,
     _install_research_skill,
     _install_researcher_agent,
+    _install_source_analyst_agent,
     _install_width_critic_agent,
     _prune_retired_agents,
     install_hooks,
@@ -110,6 +111,13 @@ def test_install_fetcher_agent(tmp_vault):
     assert agent_path.exists()
     body = agent_path.read_text(encoding="utf-8")
     assert "model: haiku" in body
+    # Summary policy is length-proportional — no hard one-sentence cap.
+    # Long sources should get multi-paragraph summaries, short ones stay
+    # short. The prompt must discuss both ends of that range AND flag
+    # long-source delegation to hyperresearch-source-analyst.
+    assert "proportional" in body.lower()
+    assert "hyperresearch-source-analyst" in body
+    assert "5000 words" in body
     assert result is not None
 
 
@@ -134,6 +142,35 @@ def test_install_depth_investigator_agent(tmp_vault):
     assert "Task" in body
     assert "interim" in body.lower()
     assert "10 new" in body  # the fetch budget rule
+    assert result is not None
+
+
+def test_install_source_analyst_agent(tmp_vault):
+    """The source-analyst reads ONE long source end-to-end on Sonnet's 1M
+    context window and produces a structured source-analysis note
+    backlinked to the original. Leaf subagent — no Task tool (no
+    recursive spawns)."""
+    result = _install_source_analyst_agent(tmp_vault.root, "hyperresearch")
+    agent_path = tmp_vault.root / ".claude" / "agents" / "hyperresearch-source-analyst.md"
+    assert agent_path.exists()
+    body = agent_path.read_text(encoding="utf-8")
+    assert "model: sonnet" in body
+    # Leaf subagent: no Task, cannot spawn other subagents
+    assert "tools: Bash, Read, Write" in body
+    tools_line = body.split("tools:")[1].split("\n")[0]
+    assert "Task" not in tools_line
+    # Must produce a source-analysis note (canonical NoteType value)
+    assert "source-analysis" in body
+    # Structural template sections the prompt mandates
+    assert "Thesis / Central claim" in body
+    assert "Methodology / Basis of claims" in body
+    assert "Key findings" in body
+    assert "Load-bearing citations" in body
+    assert "Relevance to research_query" in body
+    # Backlink mechanism via body breadcrumb (no custom CLI flag needed)
+    assert "Suggested by" in body
+    # Word-count threshold that decides whether the analyst is appropriate
+    assert "5000" in body
     assert result is not None
 
 
@@ -317,16 +354,17 @@ def test_prune_retired_agents_noop_on_clean_vault(tmp_vault):
 
 
 def test_install_hooks_registers_full_layercake_roster(tmp_vault):
-    """install_hooks wires the hook + both skills + all 8 layercake agents."""
+    """install_hooks wires the hook + both skills + all 10 layercake agents."""
     actions = install_hooks(tmp_vault.root, "hyperresearch")
     assert actions  # something happened
 
-    # All 8 agent files must be present
+    # All 10 agent files must be present
     agents_dir = tmp_vault.root / ".claude" / "agents"
     expected_agents = {
         "hyperresearch-fetcher.md",
         "hyperresearch-loci-analyst.md",
         "hyperresearch-depth-investigator.md",
+        "hyperresearch-source-analyst.md",
         "hyperresearch-dialectic-critic.md",
         "hyperresearch-depth-critic.md",
         "hyperresearch-width-critic.md",

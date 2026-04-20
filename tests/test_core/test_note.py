@@ -32,6 +32,29 @@ def test_write_and_read_roundtrip(tmp_vault):
     assert note.word_count > 0
 
 
+def test_write_source_analysis_note_roundtrip(tmp_vault):
+    """A source-analysis note (new v8 NoteType) round-trips through write +
+    read with its type preserved in frontmatter. Body breadcrumb
+    `*Suggested by [[source-id]]*` surfaces as an outgoing link that the
+    sync layer will store as a backlink."""
+    path = write_note(
+        tmp_vault.notes_dir,
+        "Source Analysis — Test Paper",
+        body="*Suggested by [[test-paper-source]]*\n\n## Thesis\nThe paper argues X.",
+        note_type="source-analysis",
+        tags=["source-analysis", "test-run"],
+        summary="Multi-paragraph summary.\n\nSecond paragraph with specific numbers: 42 pct.",
+    )
+    assert path.exists()
+
+    note = read_note(path, tmp_vault.root)
+    assert note.meta.type == "source-analysis"
+    assert "test-paper-source" in note.outgoing_links
+    # Multi-line summary preserved through YAML frontmatter serialization
+    assert "Multi-paragraph summary" in note.meta.summary
+    assert "42 pct" in note.meta.summary
+
+
 def test_write_avoids_collision(tmp_vault):
     p1 = write_note(tmp_vault.notes_dir, "Same Title")
     p2 = write_note(tmp_vault.notes_dir, "Same Title")

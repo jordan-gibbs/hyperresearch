@@ -239,13 +239,16 @@ A corpus without dissent is advocacy, not research. If the adversarial round ret
 The loop is a bounce between fetching and reading:
 
 ```
-fetch 3-5 seeds  →  hyperresearch-analyst reads each with goal in hand  →
-  analyst returns extract + "next_targets" (URLs, queries, names, claims to verify)  →
+fetch 3-5 seeds  →  main agent reads each (or delegates long sources
+  >5000 words to hyperresearch-source-analyst for a full analytical digest)  →
+  main agent extracts + proposes "next_targets" (URLs, queries, names, claims to verify)  →
   main agent fetches next_targets with --suggested-by flag  →
-  hyperresearch-analyst reads those  →  ...
+  main agent reads those (delegating long ones as above)  →  ...
 ```
 
-Each iteration is a research director: the analyst reads one source, proposes what to read next, and hands the decision back to the main agent. This discovers source trees you couldn't find by keyword search alone — the essay names three critics, those critics cite a 1998 monograph, the monograph references a specific passage in the primary work.
+Each iteration is a research director: the main agent reads one source (or delegates via `hyperresearch-source-analyst` when the source is long and load-bearing), extracts substance, proposes what to read next, and continues. This discovers source trees you couldn't find by keyword search alone — the essay names three critics, those critics cite a 1998 monograph, the monograph references a specific passage in the primary work.
+
+**When to delegate reading to `hyperresearch-source-analyst`:** when a source is longer than ~5000 words AND substantively matters to the research_query. The source-analyst runs on Sonnet's 1M-context window, reads the full source end-to-end, and writes a structured analytical digest as a new `type: source-analysis` note backlinked to the original. The digest is then a dense proxy you can consume without paying context cost to re-read the source.
 
 **Phase 1 — Seed fetch.** Pick the **10–15 highest-signal URLs** (more for broad enumerative queries, fewer only for very narrow single-question prompts):
 - 2–3 canonical reference entries (Wikipedia, field survey, official docs)
@@ -260,7 +263,7 @@ Spawn `hyperresearch-fetcher` on all of them **in parallel**. The fetcher is che
 
 PDF hosts on academic faculty pages, ResearchGate, SSRN, and publisher sites are notoriously flaky (403, paywall walls, junk content, login walls). When a fetch returns `error`, `JUNK_CONTENT`, `AUTH_REQUIRED`, or any non-success status, **do NOT silently move on if the source is high-priority.** A high-priority source is one that:
 
-- Is the seminal paper an analyst specifically named as a `next_target`
+- Is the seminal paper named as a `next_target` during the reading loop
 - Is the canonical source for the question (e.g., the original Maskin-Riley paper for an asymmetric-auctions query)
 - Is the only voice from a missing tier (e.g., the only practitioner perspective in a corpus of academic papers)
 
@@ -279,13 +282,13 @@ For high-priority failures, work through this fallback chain in order — stop a
 
 Document failures in the scaffold's "Where each source will land" section. The auditor will see the explicit gap and can flag whether the draft works around it correctly.
 
-**Low-priority fetch failures** (a peripheral source the analyst flagged with low confidence) — skip and move on. Don't waste five fallback attempts on a tangential source.
+**Low-priority fetch failures** (a peripheral source flagged with low confidence during the reading loop) — skip and move on. Don't waste five fallback attempts on a tangential source.
 
 #### Mandatory `--suggested-by` discipline at fetch time
 
 Every `$HPR fetch` call from Phase 2 onward MUST pass `--suggested-by <source-note-id>` AT FETCH TIME. Do NOT batch-fetch a list of next_targets first and then backfill breadcrumbs later — that produces disconnected provenance graphs that the rooted-tree lint catches as errors at Checkpoint 2.
 
-The pattern is: analyst returns `next_targets[]` with each target's `proposed_by` source id → main agent fetches each target with the corresponding `--suggested-by` flag in the same call. One subprocess per target, with the breadcrumb baked in.
+The pattern is: the reading loop identifies `next_targets[]` with each target's `proposed_by` source id → main agent fetches each target with the corresponding `--suggested-by` flag in the same call. One subprocess per target, with the breadcrumb baked in.
 
 ```bash
 # CORRECT — breadcrumb at fetch time
@@ -311,33 +314,33 @@ $HPR fetch "<seed-url>" --suggested-by run-a-seed -j           # invented id
 
 The provenance lint tolerates missing breadcrumbs on seed fetches (a note with no breadcrumb is simply treated as a seed root of its own). It rejects breadcrumbs pointing at note IDs that do not resolve. An invented placeholder is strictly worse than no breadcrumb at all — it declares a chain that does not exist.
 
-**Phase 2 — Guided reading iterations.** For each batch of fresh notes, spawn the **`hyperresearch-analyst`** agent (Sonnet, registered at `.claude/agents/hyperresearch-analyst.md`) with `mode=guided`. The analyst accepts a LIST of 1-5 source note IDs per spawn and produces one extract note per source:
+**Phase 2 — Guided reading iterations.** For each batch of fresh notes, the main agent (you) reads each source with the research goal in hand. For every source longer than ~5000 words that is substantively relevant to the research_query, delegate deep reading to **`hyperresearch-source-analyst`** (Sonnet, 1M context window, registered at `.claude/agents/hyperresearch-source-analyst.md`) with the source's note id:
 
 ```
-research_goal: <the user's original verbatim prompt>
-sub_goal: <what this batch of sources should contribute>
-source_note_ids: [<id-1>, <id-2>, <id-3>, <id-4>, <id-5>]   # 1-5 ids
-mode: guided
-already_covered: <sub-topics prior iterations answered, or "none">
-already_fetched_urls: <output of `$HPR sources list -j`>
+research_query: <the user's original verbatim prompt>
+source_note_id: <id-of-the-long-source>
+output_path: /tmp/source-analysis-<source-id>.md
+vault_tag: <current vault_tag>
 ```
 
-Group sources per spawn by semantic similarity (same sub-topic or entity — the analyst's unioned next_targets list benefits from cross-source convergence within a batch). Spawn batches in parallel — a 20-source iteration becomes 4 analyst spawns (not 20). Each returns: N extract note IDs + a consolidated Findings summary + covered sub-topics + 2–5 unioned next_targets + coverage status per source.
+The source-analyst reads the full source, writes a structured analysis note (type=source-analysis, backlinked to the source), and reports back with a relevance verdict + top findings. Spawn multiple analysts in parallel for independent long sources.
 
-**Phase 3 — Main agent orchestration.** After each iteration returns:
+For short/medium sources (<5000 words), read them inline in your own context using `$HPR note show <id> -j`. At the end of each reading iteration, consolidate what you found into a mental extract and identify next_targets: URLs, queries, named critics, canonical citations the sources point to that you have not yet fetched.
+
+**Phase 3 — Main agent orchestration.** After each iteration:
 
 1. **Track the iteration in TodoWrite.** Add `Iteration N: fetch [targets] from [sources]`. After it completes, mark with the coverage delta ("added 4 sources, 2 sub-topics newly covered"). This makes stalls visible.
-2. Collect every extract into a running knowledge accumulator.
-3. Merge and dedupe next_targets across all analysts. If three subagents propose the same URL, fetch it once — pass all three suggesting source IDs via repeated `--suggested-by` flags.
+2. Collect every source's extract (from inline reading) or analysis (from source-analyst delegation) into a running knowledge accumulator.
+3. Merge and dedupe next_targets from all sources. If three sources propose the same URL, fetch it once — pass all three suggesting source IDs via repeated `--suggested-by` flags.
 4. Prioritize next_targets by: (a) which would most likely *change* the argument if they disagreed with current sources, (b) which sub-topics the corpus doesn't yet cover, (c) which tiers are missing.
-5. **Fetch the top 8–12 next_targets per iteration WITH `--suggested-by` flag. This is mandatory.** Bias toward more rather than fewer — every analyst-recommended URL that gets skipped is a citation the draft won't make. Cheap fetches beat expensive re-runs.
+5. **Fetch the top 8–12 next_targets per iteration WITH `--suggested-by` flag. This is mandatory.** Bias toward more rather than fewer — every recommended URL that gets skipped is a citation the draft won't make. Cheap fetches beat expensive re-runs.
 
    ```bash
    $HPR fetch "<url>" \
      --tag <topic> \
      --suggested-by <source-note-id-1> \
      --suggested-by <source-note-id-2> \
-     --suggested-by-reason "<the analyst's justification>" \
+     --suggested-by-reason "<the justification from the suggesting sources>" \
      -j
    ```
 
@@ -345,11 +348,11 @@ Group sources per spawn by semantic similarity (same sub-topic or entity — the
 
    **Graceful duplicate handling:** if the URL is already in the vault, fetch will NOT error. It appends the breadcrumb to the existing note and returns `{ok: true, duplicate: true, backlinks_added: N}`. Fetch every next_target; let fetch handle dedup.
 
-6. Refresh `already_fetched_urls` (`$HPR sources list -j`). Pass it to the next iteration.
-7. Spawn `hyperresearch-analyst` on the new notes. Loop.
+6. Refresh `already_fetched_urls` (`$HPR sources list -j`) for the next iteration.
+7. Read the new notes (delegating long ones to `hyperresearch-source-analyst` as before). Loop.
 
 **Phase 4 — Termination.** Exit when ANY of these fires:
-- **Coverage complete** — all analyst returns report `coverage: complete` for the sub-topics you need.
+- **Coverage complete** — the reading loop's extracts (inline or source-analyst digests) report `coverage: complete` for the sub-topics you need.
 - **Cycle detected** — next_targets repeat or every proposed target's fetch returns `duplicate: true` with `backlinks_added: 0`.
 - **Diminishing returns** — a full iteration adds zero new sub-topics. The TodoWrite delta tracker catches this.
 - **Iteration cap: 8 full loops** — more than this and the loop is drifting. With 10-15 seeds and 8-12 fetches per iteration, 8 loops produces a target corpus of 40-80 sources before convergence, which is the right depth for deep research.
@@ -391,7 +394,7 @@ Never blindly `note show` every note. Triage first.
 | 2 — Meta | `$HPR note show <id> --meta -j` | When the summary hints at deeper value. |
 | 3 — Inline | `$HPR note show <id> -j` | word_count < 2000. Batch small notes: `note show <id1> <id2> <id3> -j` |
 | 4 — Search | `$HPR search "<q>" --include-body --max-tokens 6000 -j` | When you want content across multiple notes. |
-| 5 — Subagent | Spawn `hyperresearch-analyst` (mode=extract) | word_count > 3000, OR whenever you need one specific answer from a big source. Never dump large notes inline. |
+| 5 — Subagent | Spawn `hyperresearch-source-analyst` | word_count > 5000 AND the source is substantively relevant to the research_query. The analyst reads the full source on Sonnet's 1M-context window and writes a structured `type: source-analysis` note backlinked to the original. Never dump large notes inline in your own context. |
 
 ---
 
@@ -400,30 +403,28 @@ Never blindly `note show` every note. Triage first.
 Raw fetched notes arrive with `status=draft`, `tier=unknown`, auto-detected `content_type`, and no summary. Curation has two parallel jobs:
 
 1. **Set metadata** — tier, content_type, summary, tags, status (you do this with `$HPR note update`)
-2. **Extract relevant content** — spawn `hyperresearch-analyst` on the source so you have an extract note grounded in the research goal
+2. **Extract relevant content** — read the source yourself (for short/medium sources) or delegate to `hyperresearch-source-analyst` (for long sources >5000 words) to produce a structured analytical note grounded in the research goal
 
-**Both must happen for every fetched source.** The analyst extract is what gives you the substance to write deep prose about the source later; the metadata is what lets you query and filter the corpus during drafting.
+**Both must happen for every fetched source.** The extract (inline or delegated) is what gives you the substance to write deep prose about the source later; the metadata is what lets you query and filter the corpus during drafting.
 
-### Step A: Spawn the analyst on every source
+### Step A: Read every source with the goal in hand
 
-For research, the analyst is the default reading mechanism — not a fallback for big sources. Even small sources (1500 words) deserve analyst treatment because the analyst's URL-scan surfaces follow-up targets for the loop.
+For short/medium sources (<5000 words), read them inline in your own context via `$HPR note show <id> -j`. Batch-read when the sources are semantically related: `$HPR note show <id1> <id2> <id3> -j` is one call that returns all bodies. Extract: a mental summary of what each source contributes, plus a list of next_targets (URLs, named scholars, canonical citations) the source points at.
 
-The analyst is **batched**: one spawn reads 1-5 sources and produces one extract note per source. This amortizes per-spawn overhead so processing 20 draft notes means 4 analyst spawns (not 20). Group sources per spawn by semantic similarity — a batch of 5 Bronze Saints character pages converges on shared URLs; a batch mixing Bronze Saints + a physics paper + a forum thread doesn't.
+For **long sources (>5000 words)** that are substantively relevant, delegate to `hyperresearch-source-analyst`. The analyst runs on Sonnet's 1M-context window, reads the source end-to-end, writes a structured `type: source-analysis` note backlinked to the original, and returns a relevance verdict + top findings. Delegating long sources protects your own context budget for orchestration work.
 
 ```
-For each batch of 1-5 draft source notes (semantically grouped):
-  Spawn hyperresearch-analyst with:
-    research_goal: <the user's original verbatim prompt>
-    sub_goal: "establish what these sources contribute and what URLs / authors / claims warrant follow-up"
-    source_note_ids: [<draft-id-1>, <draft-id-2>, ..., up to 5]
-    mode: guided
-    already_covered: <running list from prior analysts>
-    already_fetched_urls: <output of `$HPR sources list -j`>
+For each long source (word_count > 5000, relevant to research_query):
+  Spawn hyperresearch-source-analyst with:
+    research_query: <the user's original verbatim prompt>
+    source_note_id: <the note id of the long source>
+    output_path: /tmp/source-analysis-<source-id>.md
+    vault_tag: <current vault_tag>
 ```
 
-Spawn 3–4 batches in parallel (Sonnet, cheap). Each analyst reads its 1-5 sources sequentially, persists one extract note per source (`--add-tag extract --parent <source-id>` per extract), and returns a list of extract note IDs + a consolidated Findings summary + unioned next_targets + coverage status per source.
+Spawn multiple source-analysts in parallel for independent long sources. Each returns a new `type: source-analysis` note (backlinked to the source) that you and downstream agents can cite.
 
-Collect every analyst's next_targets into TodoWrite. After each batch, fetch the top next_targets WITH `--suggested-by` so the loop iterates. **The fetch:extract ratio after curation should be at least 1:1** — every fetched source has a paired extract note with at least 150 words of real content. The `extract-coverage` lint rule catches both misses AND stubs at Checkpoint 2 (extracts under 150 words do NOT count — minting stubs will not satisfy the gate).
+Collect next_targets (from inline reading + the source-analyst's "Load-bearing citations" section) into TodoWrite. After each batch, fetch the top next_targets WITH `--suggested-by` so the loop iterates. **The fetch:extract ratio after curation should be at least 1:1** — every fetched source has either a written inline extract (captured in the scaffold or a follow-up note) or a paired source-analysis note. The `extract-coverage` lint rule catches extracts under 150 words — stubs do NOT satisfy the gate.
 
 ### Step B: Set metadata from the analyst's findings
 
@@ -915,9 +916,9 @@ $HPR note list --all -j | python -c "import sys,json; from collections import Co
 - [ ] At least two tiers represented
 - [ ] At least three content_types represented
 
-**On failure:** re-classify per-note based on each analyst's return; spawn analysts on skipped sources; **run the guided reading loop**: spawn `hyperresearch-analyst` on existing sources, collect their `next_targets`, and fetch the top 3-5 WITH `--suggested-by <source-note-id>`. You cannot proceed to Step 7 (scaffold) until the guided loop has fired at least once — the provenance chain is a load-bearing invariant.
+**On failure:** re-classify per-note, delegate long-source reads to `hyperresearch-source-analyst` where missing; **run the guided reading loop**: read each existing source (inline for short/medium, delegated for long), collect their `next_targets`, and fetch the top 3-5 WITH `--suggested-by <source-note-id>`. You cannot proceed to Step 7 (scaffold) until the guided loop has fired at least once — the provenance chain is a load-bearing invariant.
 
-**Specifically when `provenance` errors:** the rule message will say something like *"Only 3/19 source notes (16%) have breadcrumbs — the guided reading loop did not fire"*. Read that number literally. If it's below 30%, you MUST return to Step 4 and run the guided loop: spawn an analyst on each existing source, collect `next_targets`, fetch each target with `--suggested-by <source-note-id> --suggested-by-reason "<why>"`, then re-run Checkpoint 2. Skipping this means the draft rests on seed fetches alone and the bouncing-loop-discovered critical voices never made it into the corpus.
+**Specifically when `provenance` errors:** the rule message will say something like *"Only 3/19 source notes (16%) have breadcrumbs — the guided reading loop did not fire"*. Read that number literally. If it's below 30%, you MUST return to Step 4 and run the guided loop: read each source (delegating long ones to the source-analyst), collect `next_targets`, fetch each target with `--suggested-by <source-note-id> --suggested-by-reason "<why>"`, then re-run Checkpoint 2. Skipping this means the draft rests on seed fetches alone and the loop-discovered critical voices never made it into the corpus.
 
 ### Checkpoint 3 — BEFORE Step 9 (pre-draft gate — CRITICAL)
 

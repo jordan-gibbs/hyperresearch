@@ -210,6 +210,68 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
 
 ---
 
+## Long-source delegation (on-demand, any time after Layer 1)
+
+**Goal:** when a single long source (>5000 words) is load-bearing to the research_query or to a depth locus, delegate end-to-end analysis to the `hyperresearch-source-analyst` subagent instead of reading it inline. The analyst runs on Sonnet with a 1M-token context window, reads the full source, and writes a structured analytical digest as a new `type: source-analysis` note backlinked to the original. Downstream layers consume the digest as a dense proxy for the source — avoiding context-cost duplication and preserving far more substance than a fetcher summary alone.
+
+**Why this delegation exists:** the fetcher (Haiku) writes a 1-2 paragraph summary at fetch time. That's often enough for tangential or thin sources. But for a 70-page mechanism-design paper, a 500-page regulatory filing, or a long academic survey, a fetcher summary is structurally insufficient — details that matter for the research_query get compressed away. Depth investigators can read such sources for their specific locus, but they're scoped to that locus and may miss cross-locus substance. The source-analyst is the single-source deep-reading role that fills that gap.
+
+### Trigger rule
+
+Delegate to `hyperresearch-source-analyst` when ALL three conditions hold:
+
+1. **Length threshold:** the source's `word_count` (visible on `$HPR note show <id> -j`) exceeds ~5000 words.
+2. **Relevance:** the source is relevant to the research_query — not tangential, not off-topic. Judge from the fetcher summary + title + tags; if uncertain, err toward delegating (the analyst can produce a "not-relevant" verdict cheaply).
+3. **No existing analysis:** no `type: source-analysis` note already exists for this source. Check via `$HPR search "" --tag <vault_tag> --type source-analysis --json` and look for an incoming link from `[[<source_note_id>]]`.
+
+**Cap: at most 6 source-analysts per query.** Same ceiling as depth investigators; same cost reasoning. Beyond that, depth investigators read long sources inline for their specific locus — the source-analyst is for the most load-bearing sources only.
+
+### Who can trigger a spawn
+
+- **You (the orchestrator)** in Layer 1 (if a newly-fetched long source is clearly load-bearing) or between layers (when you realize a particular source deserves deeper treatment than a fetcher summary provides).
+- **A depth investigator** in Layer 3 — if the investigator encounters a long source central to its locus AND no analysis exists, the investigator can spawn the source-analyst via its own `Task` tool. The analysis feeds the investigator's interim note.
+
+### How to spawn
+
+Standard 3-piece Task contract (same as every other subagent) plus the source-specific inputs:
+
+```
+subagent_type: hyperresearch-source-analyst
+prompt: |
+  RESEARCH QUERY (verbatim, gospel):
+  > {{paste contents of research/prompt.txt character-for-character}}
+
+  PIPELINE POSITION: You are a leaf subagent available to Layers 1–4 for deep
+  end-to-end analysis of ONE long source. Prior layers have fetched the
+  source into the vault; your digest feeds the depth investigator's interim
+  note, the Layer 3.5 comparisons, or the Layer 4 draft directly. You do
+  NOT spawn other subagents.
+
+  YOUR INPUTS:
+  - source_note_id: <the vault note id of the long source>
+  - output_path: /tmp/source-analysis-<source_note_id>.md
+  - vault_tag: <vault_tag>
+
+  Read the source end-to-end, produce the structured analysis digest,
+  and report back with the new note id + your relevance verdict.
+```
+
+### How the output is consumed
+
+- **Depth investigators** cite the analysis by note id from their interim note's Committed position section.
+- **Layer 3.5 comparisons** can reference the analysis when a cross-locus tension turns on a specific long source.
+- **Layer 4 draft** can cite the analysis note OR the original source for the same substantive claim — both are valid. Prefer the analysis note when you want to signal "the full digest backs this sentence"; prefer the original source when you're citing a specific quote or number extracted from it.
+- **Layer 5 critics** may consume the analysis as pre-digested evidence. The dialectic critic, in particular, can compare the analyst's Key findings list against the draft's claims to spot missed substance.
+
+### When NOT to delegate
+
+- Short sources (<5000 words): the fetcher summary is enough.
+- Sources that are already fully summarized in their abstract and first page (some blog posts, some press releases).
+- When the cap has been reached — fall back to depth-investigator partial reads.
+- When the source is in a language the analyst can't read reliably (test with a non-ASCII spot-check if unsure).
+
+---
+
 ## Layer 3.5 — Cross-locus comparisons (orchestrator, bridge step)
 
 **Goal:** before drafting, reconcile the committed positions from all depth investigators. Produce `research/comparisons.md` — a short document naming 3–5 places where the loci conflict or complicate each other. This is the structural step that gives the single draft the argumentative density the old ensemble got from compiling three independent drafts.
