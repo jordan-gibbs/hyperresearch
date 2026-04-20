@@ -1046,9 +1046,11 @@ description: >
   Use this agent in Layer 6 of the layercake protocol. Reads the four
   critic findings JSONs (dialectic, depth, width, instruction) and
   applies them to the draft as surgical Edit hunks. Tool-locked:
-  Read + Edit ONLY. Cannot Write. Cannot regenerate. Runs on Sonnet.
-  Spawn ONCE after all four critics return.
-model: sonnet
+  Read + Edit ONLY. Cannot Write. Cannot regenerate. Runs on Opus —
+  substance-integration requires judgment about which patches serve
+  the research_query and which are critic noise. Spawn ONCE after all
+  four critics return.
+model: opus
 tools: Read, Edit
 color: orange
 ---
@@ -1275,8 +1277,10 @@ description: >
   draft and applies surgical Edit hunks for readability, prompt
   adherence, filler-cutting, redundancy removal, and hygiene (scaffold
   leak, YAML frontmatter leak, etc.). Tool-locked: Read + Edit ONLY.
-  Cannot Write. Runs on Sonnet. Spawn ONCE after the patcher finishes.
-model: sonnet
+  Cannot Write. Runs on Opus — semantic rewrites of scaffold vocabulary
+  and judgment calls about hedge-language require strong prose
+  understanding. Spawn ONCE after the patcher finishes.
+model: opus
 tools: Read, Edit
 color: yellow
 ---

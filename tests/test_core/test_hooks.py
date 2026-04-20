@@ -210,7 +210,9 @@ def test_install_patcher_agent_is_edit_only(tmp_vault):
     agent_path = tmp_vault.root / ".claude" / "agents" / "hyperresearch-patcher.md"
     assert agent_path.exists()
     body = agent_path.read_text(encoding="utf-8")
-    assert "model: sonnet" in body
+    # Opus: substance-integration judgment about which patches serve
+    # the research_query is a reasoning task Sonnet underperforms on.
+    assert "model: opus" in body
     # Tool lock: must be exactly "Read, Edit" — not Write, not Bash. The
     # tool lock is what enforces the no-regeneration invariant; there is
     # no arbitrary numerical size cap on hunks.
@@ -240,7 +242,9 @@ def test_install_polish_auditor_agent_is_edit_only(tmp_vault):
     agent_path = tmp_vault.root / ".claude" / "agents" / "hyperresearch-polish-auditor.md"
     assert agent_path.exists()
     body = agent_path.read_text(encoding="utf-8")
-    assert "model: sonnet" in body
+    # Opus: semantic rewrites of scaffold vocabulary + hedge-language
+    # judgment need strong prose comprehension.
+    assert "model: opus" in body
     assert "tools: Read, Edit" in body
     assert "tools: Bash" not in body
     # scaffold-only section list must be injected
