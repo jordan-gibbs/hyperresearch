@@ -40,7 +40,7 @@ Collect is **primary-source-heavy for the artifact itself, then secondary for th
 - For scientific enumerations: peer-reviewed classifications, reference databases (NCBI, ChEBI, PDB, etc.)
 
 **Institutional signal (second priority):**
-- Encyclopedia entries (Wikipedia, domain-specific wikis — these are load-bearing for collect because they often *are* the enumerable set)
+- Encyclopedia entries (Wikipedia as SOURCE HUB — fetch it to discover primary sources in its references, then fetch those; domain-specific wikis may be directly citable for collect when they *are* the enumerable set)
 - Reference books and field handbooks
 - Academic reviews that enumerate and classify
 
@@ -53,7 +53,7 @@ Collect is **primary-source-heavy for the artifact itself, then secondary for th
 
 ### Academic sweep — only if peer-reviewed literature enumerates the set
 
-Run Semantic Scholar / OpenAlex only if the enumerable set has a scholarly classification literature. For fictional / pop-culture / product / historical enumerations, skip it — the reference wikis and primary sources are the authoritative tier.
+Run Semantic Scholar / OpenAlex only if the enumerable set has a scholarly classification literature. For fictional / pop-culture / product / historical enumerations, skip it — domain-specific wikis (Fandom, TV Tropes, etc.) and primary sources are the authoritative tier. Wikipedia is never the authoritative tier — it's a discovery tool for finding the real sources.
 
 ### Adversarial round — MANDATORY, run all three before proceeding
 

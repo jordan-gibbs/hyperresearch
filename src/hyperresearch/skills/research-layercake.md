@@ -1,25 +1,36 @@
 ---
 name: research-layercake
 description: >
-  Deep research via the LAYERCAKE architecture — a 7-phase pipeline:
-  prompt decomposition → width sweep → loci analysis → depth
-  investigation → draft → four adversarial critics in parallel
-  (dialectic / depth / width / instruction) → surgical patch pass →
-  polish audit.
-  The patcher and polish auditor are TOOL-LOCKED to Read + Edit: they
-  cannot regenerate the draft, only apply surgical hunks. Invoke with
-  /research-layercake.
+  Deep research via the LAYERCAKE architecture — a tier-adaptive pipeline
+  (light / standard / full) that scales from a 3-minute $5 answer to a
+  45-minute $40 adversarially-audited report. Full pipeline: prompt
+  decomposition → width sweep → loci analysis → depth investigation →
+  draft → four adversarial critics (dialectic / depth / width /
+  instruction) → surgical patch pass → polish audit → readability
+  reformat. Light/standard tiers skip depth investigation and reduce
+  critic count. The patcher, polish auditor, and readability reformatter
+  are TOOL-LOCKED to Read + Edit. Invoke with /research-layercake.
 ---
 
 # Layercake — the default multi-agent research protocol
 
 This is the orchestrator. You are running it as Opus. The pipeline spawns specialized subagents in every layer; you do not do their work yourself. You coordinate, assemble evidence, write ONE draft, and ship.
 
-**Two canonical rules:**
+**Pipeline tiers** — not every query needs all 8 layers. Layer 0.5 classifies the query into a `pipeline_tier` (`light` / `standard` / `full`) that determines which layers run. Each layer section below has a **Tier gate** line at the top. Read it. The routing summary:
+
+| Tier | Layers that run | Typical cost | Typical time |
+|------|----------------|-------------|-------------|
+| `light` | 0.5 → 1 (reduced) → 4 → 7 → 8 | ~$3–8 | ~3–8 min |
+| `standard` | 0.5 → 1 → 4 → 5 (2 critics) → 6 → 7 → 8 | ~$10–20 | ~10–20 min |
+| `full` | 0.5 → 1 → 2 → 3 → 3.5 → 4 → 5 (4 critics) → 6 → 7 → 8 | ~$30–50 | ~25–45 min |
+
+**Three canonical rules:**
 
 1. **PATCH, NEVER REGENERATE.** After the first draft is written (Layer 4), the draft is only ever modified by Edit hunks produced by the patcher (Layer 6) and the polish auditor (Layer 7). Both subagents are tool-locked to `[Read, Edit]`. Neither can Write a new draft. If a critic's finding would require rewriting a whole section, it escalates to you as a structural issue — not a rewrite. Keep hunks surgical: change as little as possible while addressing the issue.
 
-2. **ARGUE, DON'T JUST REPORT.** The layercake pipeline is engineered to push the final report toward argumentative density. Loci analysts must flag at least one dialectical locus (where sources disagree). Depth investigators must commit to a position at the end of every interim note — not just summarize. Layer 3.5 forces you to reconcile those positions in `comparisons.md` before drafting. Layer 4 requires every body section that touches a cross-locus tension to engage it explicitly. A descriptive "survey" draft is a pipeline failure, not a neutral output.
+2. **ARGUE, DON'T JUST REPORT** (applies at full force to `argumentative` response_format; relaxed for `structured` and `short` — see Layer 4 step 0). The layercake pipeline is engineered to push the final report toward argumentative density. Loci analysts must flag at least one dialectical locus (where sources disagree). Depth investigators must commit to a position at the end of every interim note — not just summarize. Layer 3.5 forces you to reconcile those positions in `comparisons.md` before drafting. Layer 4 requires every body section that touches a cross-locus tension to engage it explicitly. A descriptive "survey" draft is a pipeline failure for `argumentative` format — but is acceptable for `structured` format when the query asks for breadth.
+
+3. **RESPECT THE TIER GATE.** When Layer 0.5 classifies a query as `light` or `standard`, do NOT run the skipped layers "just to be thorough." The tier classification is a product decision: simple queries should produce fast, cheap, right-sized answers. Running a full 7-layer pipeline on "What is CRISPR?" wastes $30 and produces an overwrought 8000-word report the user didn't ask for. Trust the classification. If you're uncertain, tier up — but never silently upgrade every query to `full`.
 
 ---
 
@@ -134,7 +145,10 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
     "## 4. Regional Market Analysis"
   ],
   "time_horizons": ["2010-present", "12-month forward"],
-  "scope_conditions": ["urban rail specifically, not mainline"]
+  "scope_conditions": ["urban rail specifically, not mainline"],
+  "pipeline_tier": "full",
+  "response_format": "argumentative",
+  "citation_style": "inline"
 }
 ```
 
@@ -142,33 +156,152 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
 
 6. **Do NOT include wrapper-contract requirements here** — those live in `research/wrapper_contract.json` separately. The decomposition is ONLY about what the user's actual prompt named.
 
-**Exit criterion:** `research/prompt-decomposition.json` exists, is valid JSON, and every atomic item in it can be pointed at a specific passage of the research_query.
+7. **Classify `pipeline_tier` and `response_format`.** These two fields control how much pipeline machinery runs and how the output is shaped. Classify them from the query itself — not from the topic's complexity, but from what the user is actually asking for.
+
+   **`pipeline_tier`** — how much pipeline to run:
+
+   | Tier | When to use | Signal words / patterns | What runs |
+   |------|-------------|------------------------|-----------|
+   | `"light"` | Query has a clear, bounded answer. Factual lookup, definition, simple explanation, short how-to, list/catalog, quick comparison. A few good sources suffice; no adversarial evidence needed; no thesis to defend. | "What is...", "How do I...", "List the...", "Define...", "What are the main...", short prompts (<50 words), single clear question | Layers 0.5 → 1 (reduced) → 4 → 7 |
+   | `"standard"` | Moderate coverage across a topic. Survey, landscape overview, current-state report, multi-entity comparison, decision support. Needs breadth more than depth. | "Overview of...", "Compare X and Y", "What's the current state of...", "Which should I use for...", moderate-length prompts, 2-5 sub-questions | Layers 0.5 → 1 → 4 → 5 (2 critics) → 6 → 7 |
+   | `"full"` | Deep analysis, synthesis of conflicting evidence, defended thesis, literature review, forecast with evidence chains. The adversarial architecture adds real value. | "Analyze the impact of...", "Evaluate whether...", multi-paragraph prompts, explicit request for depth/rigor, research-grade questions, contested topics where sources disagree | All layers (0.5 → 1 → 2 → 3 → 3.5 → 4 → 5 → 6 → 7) |
+
+   **Default is `"full"`.** When uncertain, tier up. The cost of running extra layers on a simple query is wasted money (~$30); the cost of running too few layers on a complex query is a bad report.
+
+   **`response_format`** — how the output is shaped:
+
+   | Format | When to use | Characteristics |
+   |--------|-------------|----------------|
+   | `"short"` | Query expects a direct answer, not a report. | 500–2000 words. 1–5 paragraphs. Tables/lists as needed. No Opinionated Synthesis section. Thesis up front, evidence follows. |
+   | `"structured"` | Query asks for coverage across entities/topics. Scannability matters more than argumentative density. | 2000–5000 words. Scannable subsections, visual hierarchy. Breadth-first: more topics, shorter treatments. Tables, bullets, visual devices liberally. Survey-style coverage is acceptable. |
+   | `"argumentative"` | Query demands a defended thesis, deep analysis, or evidence-chain reasoning. | 5000–10000 words. Dense thesis-driven prose. "ARGUE, DON'T JUST REPORT" fully active. Required Opinionated Synthesis with all subsections. |
+
+   **The two dimensions are independent.** A `light` query can be `short` (definition) or `structured` (catalog). A `full` query can be `structured` (comprehensive survey where depth investigation still matters) or `argumentative` (deep analysis). The most common pairings:
+
+   - `light` + `short` — factual lookup, definition, simple how-to
+   - `light` + `structured` — list/catalog, quick multi-entity comparison
+   - `standard` + `structured` — survey, landscape overview, decision matrix
+   - `full` + `argumentative` — deep analysis, literature review, forecast (the current default)
+   - `full` + `structured` — comprehensive survey where adversarial depth still matters
+
+   **`citation_style`** — how the final report handles source attribution:
+
+   | Style | When to use | Output |
+   |-------|-------------|--------|
+   | `"inline"` | **Default.** User wants a verifiable research report with evidence chains. Most research queries. | `[N]` inline citations + numbered Sources list at the end |
+   | `"none"` | User wants a polished expert-analysis piece with no visible citation apparatus. Magazine/editorial style. Also used for benchmark runs where references have no citations. | No `[N]` markers, no Sources section. Facts asserted authoritatively. |
+
+   Default is `"inline"`. Only use `"none"` when the user explicitly requests an uncited report, when `research/prompt.txt` or wrapper contract specifies no citations, or when the benchmark harness sets `citation_style: "none"` in the scaffold.
+
+**Exit criterion:** `research/prompt-decomposition.json` exists, is valid JSON, every atomic item traces to the research_query, and `pipeline_tier` + `response_format` + `citation_style` are set.
 
 ---
 
 ## Layer 1 — Width sweep
 
-**Goal:** cover the topical corners of the query with 30–80 curated sources before any depth investigation starts.
+**Tier gate:** Runs for ALL tiers. For `light` tier: skip academic APIs, target 12–20 sources, limit to 2–3 fetcher batches, and move directly to Layer 4 after fetching. For `standard` and `full`: run as documented below.
+
+**Goal:** achieve comprehensive topical coverage — every atomic item from the decomposition must have at least 3 supporting sources by the end of this layer. Target 40–100 curated sources for `standard`/`full` tiers.
+
+### Step 1 — Coverage-aware search planning
+
+Before spawning any fetchers, produce a **search plan** that maps the decomposition to concrete searches. This is the single highest-leverage step for comprehensiveness — an ad-hoc search finds 40 sources on the same 3 sub-topics; a planned search distributes sources across all atomic items.
+
+1. **Read `research/prompt-decomposition.json`.** Extract every `sub_question` and every `entity` with its `required_fields`.
+
+2. **For each atomic item, plan 2–4 distinct searches.** Each search should target a different angle:
+   - One search for the core factual content of that item
+   - One search for recent developments / state-of-the-art (last 2 years)
+   - One search for contrarian / adversarial takes ("criticism of X", "limitations of Y", "problems with Z")
+   - One search for a lateral angle (adjacent field, analogous case, upstream/downstream in a causal chain)
+
+3. **Write the search plan to `research/temp/search-plan.md`** — a simple table:
+   ```markdown
+   | Atomic item | Search query | Type | Target |
+   |---|---|---|---|
+   | Sub-Q1: "What are the growth trends?" | "China financial industry growth trends 2025 2026" | web | factual |
+   | Sub-Q1 | "China finance development forecast report" | web | recent |
+   | Sub-Q1 | "China financial sector risks challenges 2025" | web | adversarial |
+   | Entity: PE | "China private equity fundraising 2025 statistics" | web | factual |
+   | Entity: PE | "China PE exit problems structural decline" | web | adversarial |
+   | ... | ... | ... | ... |
+   ```
+
+   The plan typically has 20–60 planned searches for a `full` query. This is more searches than you'll execute — prioritize, but err toward breadth.
+
+4. **Add academic API searches.** For each atomic item with research literature, add Semantic Scholar / arXiv / OpenAlex queries. These go in the same plan table with `type: academic`.
+
+5. **Add at least 3 adversarial searches total** ("criticism of...", "failure of...", "why X doesn't work", "limitations of..."). The dialectic critic will punish one-sided coverage.
+
+### Step 2 — Execute searches and build URL queue
 
 1. **Academic APIs first.** For topics with a research literature, hit Semantic Scholar / arXiv / OpenAlex / PubMed BEFORE web search. Academic APIs return citation-ranked canonical papers; web search returns derivative commentary.
 
-2. **Plan the URL queue.** Aim for at least 30 URLs spanning:
-   - Top-cited canonical sources on the core topic
-   - Recent (last 2 years) developments
-   - At least one adversarial angle ("criticism of X", "limitations of Y")
-   - Obviously off-center corners (related subfields the query brushes against)
+2. **Web searches from the plan.** Execute ALL planned searches from Step 1. Collect every URL that looks relevant — aim for **80–150 candidate URLs** before deduplication for `full` tier, 50–80 for `standard`. Cast a wide net. Under-searching is the #1 cause of comprehensiveness failures; over-searching costs pennies.
 
-3. **Parallel fetcher batches.** Spawn `hyperresearch-fetcher` subagents via the Task tool with URL lists. Batch sizes of 4–8 URLs per fetcher. Spawn multiple fetchers in a single message when they're independent — that's parallel execution.
+3. **Build and deduplicate the master URL queue.** Remove exact-URL duplicates. Remove obvious junk domains (social media share pages, login walls, 404 farms). The deduplicated queue should have **60–120 URLs** for `full` tier, 40–70 for `standard`.
 
-4. **Fetcher must tag every new note** with your `<vault_tag>`. Seed fetches (URLs you found directly from search, not from another note) omit `--suggested-by` entirely. Do NOT invent breadcrumb tokens like `layercake-seed` — placeholder breadcrumbs are a process violation.
+   **Wikipedia SOURCE HUB rule:** Include Wikipedia URLs in the queue — they're valuable for discovery — but treat them as SOURCE HUBS, not as citable sources. When a fetcher processes a Wikipedia article, it extracts the references/citations Wikipedia links to. Those primary sources go into Wave 2 (or the same wave if capacity permits). Wikipedia itself is NEVER cited in the final report. The fetcher tags Wikipedia notes with `source-hub` automatically. If your URL queue contains Wikipedia articles, make sure to budget capacity for the follow-up primary sources they'll surface.
 
-5. **Curation happens inline.** The fetcher already deprecates junk and writes summaries. You monitor: if >30% of fetches come back as junk, the URL queue was bad — reassess before continuing.
+4. **Partition the queue into non-overlapping batches.** Split the master queue into **10–12 batches** of **8–12 URLs each**. Each batch goes to exactly ONE fetcher. **Zero overlap** — no URL appears in more than one batch. Partition strategy:
+   - Group by atomic item where possible (all PE sources in one batch, all IB sources in another)
+   - Mix in 1–2 cross-cutting sources per batch to avoid tunnel vision
+   - Put academic papers in their own batches (they're slower to fetch — PDF extraction)
 
-**Exit criterion for Layer 1:** at least 20 substantive (non-deprecated) notes in the vault tagged with `<vault_tag>`. If you fall short after two fetcher rounds, tell the user the topic is under-resourced and proceed anyway; the loci analysts will flag the shortfall.
+### Step 3 — Parallel fetcher waves (phased)
+
+**Wave 1 (main wave):** Spawn **10–12 fetcher subagents in ONE message** — that's true parallel execution. Each fetcher gets its own non-overlapping batch from Step 2. This single wave should fetch 80–120 URLs in the time it previously took to fetch 30.
+
+**CRITICAL: no token waste.** Each fetcher gets ONLY its batch. No fetcher searches for new URLs or duplicates another fetcher's work. The orchestrator did the searching in Step 2; fetchers just fetch, check quality, and summarize. If a fetcher finishes early, it's done — it does NOT go find more URLs.
+
+**Wave 2 (gap-filling, after coverage check):** Smaller, targeted. Only spawned if Step 5 identifies uncovered items. Typically 3–5 fetchers with 5–8 URLs each, all targeting specific gaps.
+
+### Step 4 — Tag and quality control
+
+**Fetcher must tag every new note** with your `<vault_tag>`. Seed fetches (URLs you found directly from search, not from another note) omit `--suggested-by` entirely. Do NOT invent breadcrumb tokens like `layercake-seed` — placeholder breadcrumbs are a process violation.
+
+**Curation happens inline.** The fetcher already deprecates junk and writes summaries. You monitor: if >30% of fetches come back as junk, the URL queue was bad — reassess before continuing.
+
+### Step 5 — Coverage check (MANDATORY)
+
+After Wave 1 returns, run the coverage check before proceeding:
+
+1. **List fetched sources:** `$HPR search "" --tag <vault_tag> --json` — count substantive (non-deprecated) notes.
+
+2. **Map sources → atomic items.** For each atomic item in the decomposition, identify which fetched sources serve it (by title/summary). Mark each item as:
+   - **Well-covered** (4+ relevant sources)
+   - **Adequate** (2–3 sources)
+   - **Thin** (1 source)
+   - **Uncovered** (0 sources)
+
+3. **Wave 2 fetch for gaps.** For every `thin` or `uncovered` item:
+   - Run 2–3 targeted searches specifically for that item
+   - Spawn 3–5 fetchers with gap-filling URLs (non-overlapping batches, same rules as Wave 1)
+   - This wave is smaller (typically 20–40 URLs) but surgically targeted at weak spots
+
+4. **Write coverage report.** After Wave 2, write `research/temp/coverage-gaps.md`:
+   - List every atomic item with its coverage status and source count
+   - Any item still at 0 sources after Wave 2 is a genuine gap — flag it prominently so the drafter acknowledges the limitation explicitly
+
+**Do NOT skip the coverage check.** The comprehensiveness score is directly proportional to how many atomic items have multi-source coverage. One targeted second-pass fetch (+2 minutes, +$2) can prevent a 5-point comprehensiveness drop.
+
+### Source count targets
+
+| Tier | Minimum sources | Target sources | Fetchers per wave | Waves |
+|------|----------------|---------------|-------------------|-------|
+| `light` | 10 | 15–25 | 3–5 | 1–2 |
+| `standard` | 30 | 40–60 | 8–10 | 2 |
+| `full` | 50 | 60–120 | 10–12 | 2–3 |
+
+These are substantive (non-deprecated) note counts. Junk doesn't count toward the minimum.
+
+**Exit criterion for Layer 1:** minimum source count met AND coverage check shows no `uncovered` atomic items (thin is acceptable, uncovered is not). If you fall short after two waves, proceed anyway but write `research/temp/coverage-gaps.md` listing what's missing so the drafter handles it.
 
 ---
 
 ## Layer 2 — Loci analysis (parallel, 2 analysts)
+
+**Tier gate:** SKIP entirely for `light` and `standard` tiers — proceed directly to Layer 4. Only `full` tier runs loci analysis.
 
 **Goal:** identify 1–6 specific questions where depth investigation will pay off.
 
@@ -194,6 +327,8 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
 ---
 
 ## Layer 3 — Depth investigation (parallel, K = len(loci))
+
+**Tier gate:** SKIP entirely for `light` and `standard` tiers. Only `full` tier runs depth investigation.
 
 **Goal:** produce ONE `interim-{locus}.md` note per locus with dense synthesis that the orchestrator will draft from in Layer 4.
 
@@ -274,6 +409,8 @@ prompt: |
 
 ## Layer 3.5 — Cross-locus comparisons (orchestrator, bridge step)
 
+**Tier gate:** SKIP entirely for `light` and `standard` tiers (no loci = no comparisons). Only `full` tier runs this step.
+
 **Goal:** before drafting, reconcile the committed positions from all depth investigators. Produce `research/comparisons.md` — a short document naming 3–5 places where the loci conflict or complicate each other. This is the structural step that gives the single draft the argumentative density the old ensemble got from compiling three independent drafts.
 
 **Why this step exists:** the depth investigators each committed to a position on their own locus. Some of those positions will disagree with each other, some will reinforce each other, some will partially complicate each other. The draft must engage those cross-locus dynamics explicitly — not summarize each locus in isolation. Writing `comparisons.md` forces you (the orchestrator) to see the loci in cross-section before you open the draft.
@@ -314,35 +451,107 @@ prompt: |
 
 ## Layer 4 — Draft (orchestrator, single pass)
 
+**Tier gate:** Runs for ALL tiers. For `light` tier: you have only the width corpus (no interim notes, no comparisons.md). For `standard`: same — width corpus only, no depth artifacts. For `full`: full access to all prior-layer artifacts.
+
 **Goal:** write ONE draft that weaves the width corpus with the depth interim notes AND engages the cross-locus tensions from `research/comparisons.md` AND mirrors the atomic items from `research/prompt-decomposition.json`, following the modality file's substance rules.
 
+0. **Read `response_format` from `research/prompt-decomposition.json` and adapt.** This field controls the draft's shape:
+
+   **`"short"` format:**
+   - Target **500–2000 words** (English) or **1500–6000 characters** (Chinese/CJK). Direct answer, 1–5 paragraphs. Tables/lists when appropriate.
+   - Thesis up front in the first sentence or paragraph. Evidence follows compactly.
+   - **No Opinionated Synthesis section** — the entire response IS the synthesis.
+   - Still honor the modality's substance rules. Just compress.
+   - This is NOT a lesser draft — it's a *calibrated* draft. A 3-paragraph answer with a clear committed position beats a 10-page report the user didn't ask for.
+
+   **`"structured"` format:**
+   - Target **2000–5000 words** (English) or **6000–15000 characters** (Chinese/CJK). Scannable subsections with clear visual hierarchy.
+   - **Breadth-first:** cover more ground with shorter treatments per topic. Each subsection should be 150–400 words (or 500–1200 characters for CJK), not 800.
+   - Use tables, bullet lists, comparison matrices, and visual devices *liberally*. A well-structured table can replace 3 paragraphs of prose.
+   - The "ARGUE, DON'T JUST REPORT" rule is **relaxed for body sections** — survey-style descriptive coverage is acceptable when the query asks for breadth. The Opinionated Synthesis at the end is where you argue.
+   - **Include the Opinionated Synthesis** with all required subsections unless the wrapper says otherwise.
+
+   **`"argumentative"` format (default):**
+   - Target **5000–10000 words** (English) or **20000–25000 characters** (Chinese/CJK). Dense thesis-driven prose. "ARGUE, DON'T JUST REPORT" fully active in every section.
+   - **CJK length calibration:** Chinese references average ~22-26K characters. A report under 18K chars will lose on comprehensiveness; a report over 30K chars dilutes good content with padding. For Chinese queries, aim for the CHARACTER count targets, not English word counts. 1 Chinese char ≈ 1.5-2 English words of information.
+   - This is the current default behavior — all existing Layer 4 rules below apply at full force.
+   
+   **Length discipline across all formats:** Target the MIDDLE of your character-count range. Under-length loses on comprehensiveness; over-length loses on readability and dilutes good content with padding. A 22K-char Chinese report that is dense, structured, and evaluative will outscore a 50K-char report that is verbose and repetitive. A focused 7000-word English report beats a meandering 15000-word one.
+
 1. **Re-read `research/prompt-decomposition.json`.** Every atomic item named there is a draft requirement. For each sub-question, the draft must answer it. For each named entity, the draft must address it (in a dedicated section, subsection, or paragraph, as the decomposition's structure implies). For each required format, the draft must honor it. You are mirroring the user's structure, not reorganizing the topic around your own analytical axes.
+
+1a. **Check `research/temp/coverage-gaps.md`** (if it exists). Any atomic item listed here had insufficient source coverage from Layer 1. For these items: still address them in the draft (they're prompt requirements), but acknowledge the limitation explicitly — "available evidence on X is limited" or similar — rather than silently omitting them or fabricating claims without source support. A well-flagged gap is better than a false confidence or a missing section.
 
 2. **Re-read `research/comparisons.md`.** The tensions there are your argumentative spine. Keep the document open in your working context while drafting.
 
 3. **Read your modality file now.** Open `.claude/skills/hyperresearch/SKILL-<modality>.md` and apply its substance rules. Pay particular attention to the modality's insight-generation rules — these are the rules that push you from reporting evidence to interpreting it.
 
-4. **Read SKILL.md's Step 9 (draft conventions).** The dispatcher's drafting rules (citation placement, length discipline, visual-device encouragement, filler bans) apply to the layercake draft the same way they apply to a single-pass draft.
+4. **Read SKILL.md's Step 9 (draft conventions).** The dispatcher's drafting rules (length discipline, visual-device encouragement, filler bans) apply to the layercake draft the same way they apply to a single-pass draft. **Note:** layercake's citation behavior is controlled by `citation_style` in step 8, which may differ from SKILL.md's default citation guidance. Step 8 takes precedence.
 
 5. **Structure the draft around the decomposition.** When the prompt named 5 entities in a list, the draft should typically have 5 sections or subsections in that order. When the prompt asked for a mind map, include a mind map. When the prompt named sub-questions A/B/C, answer them in that order. Your own analytical framing belongs in the synthesis section at the end — NOT as the body's structural spine. This single rule is the highest-leverage insight-following move available.
+
+   **Consider numbering sections** for formal structure. Numbered headings (e.g., `## I. 执行摘要`, `## II. 宏观背景`) with lettered subsections (`### A. 子主题`) signal structure and make hierarchy explicit. This is appropriate for analytical and advisory reports. For technical how-tos or informal overviews, unnumbered headings may read better. Use your judgment based on the query's tone and the `response_format`.
 
    **HARD GATE on `required_section_headings`.** If `research/prompt-decomposition.json` has a non-empty `required_section_headings` array, the draft's ordered top-level H2 list MUST equal that array element-wise before the body proceeds to the Opinionated Synthesis (or any terminal section). Every heading string from `required_section_headings` appears in order as a literal H2. Your own analytical framing (cross-tension narratives, methodological caveats, etc.) goes INSIDE those sections or inside the terminal Synthesis — NEVER as an additional top-level H2 that sits between or before the required headings. If `required_section_headings` is empty, this gate does not apply and you pick the spine.
 
 6. **Write the draft to `research/notes/final_report.md`.** Structure:
+   - **Executive summary (2-4 paragraphs)** at the top, immediately after the H1 title. State the core thesis, key findings, and top-line numbers. This is not optional — reference-quality reports always open with a summary that lets the reader grasp the conclusion before reading the evidence. For Chinese reports, this should be 400-800 characters.
    - Opening paragraphs that state the thesis / framing. Your thesis must commit to a position — not "this report surveys X" but "X is true (or X is false, or X is the right frame) because..." — grounded in the cross-locus comparisons you identified.
    - Body sections mirroring the decomposition's structural cues. **Each body section that touches a tension named in `comparisons.md` must engage that tension explicitly** — by name, with a paragraph that commits to a reading of the disagreement, not just reports both sides.
-   - Closing section per the modality rule. Where the modality demands a reasoned position (synthesize, compare, forecast), that position must visibly incorporate the strongest cross-locus tensions — not average them out into hedged prose.
-   - Sources list — numbered `[N]` entries matching the inline `[N]` citations
+   - **Each body H2 section should be 1500-3000 characters (Chinese) or 800-1500 words (English).** Sections shorter than this threshold are under-developed — go deeper. Add sub-arguments, specific data points, named examples, counter-arguments and responses, and forward-looking implications. A section that just states "X is true [3]" and moves on is wasting evidence the width corpus and depth investigators surfaced.
+   - **Comparative analysis section** — a dedicated H2 (e.g., "比较分析" or "Comparative Analysis") that synthesizes across body sections. This is where cross-cutting themes, ranking tables, and trade-off matrices go. Reference articles almost always include this; our reports often skip it and jump to conclusions.
+   - Closing section per the modality rule. Where the modality demands a reasoned position (synthesize, compare, forecast), that position must visibly incorporate the strongest cross-locus tensions — not average them out into hedged prose. **Include explicit strategic recommendations** — bulleted, actionable items. Not just "X is the best sector" but "practitioners should:" followed by a bold-labeled bullet list.
+   
+   **Structural completeness check before writing:** Before you start writing, verify your outline has: (a) executive summary, (b) context/background section, (c) one H2 per major topic from the decomposition, (d) comparative analysis section, (e) conclusion with recommendations, (f) Sources list if `citation_style` is `"inline"`. If any of these is missing from your mental outline, add it. Reports that skip the exec summary or comparative analysis section score systematically lower on instruction-following and comprehensiveness.
 
 7. **Insight-generation rules (applied to every body section):**
    - **Commit, don't hedge.** Sentences like "some argue X while others argue Y" are allowed as setup but MUST be followed by "the evidence weighs toward X because Z" or an equivalent committed reading. Pure "on the one hand / on the other hand" prose is low-insight reporting.
-   - **Interpret, don't just cite.** For every 2–3 citations, there should be at least one interpretive beat — a sentence or clause that draws a conclusion the sources themselves didn't draw. Interpretive density drives the insight dimension; descriptive citation stacks suppress it.
-   - **Privilege committed investigator positions.** Each `## Committed position` section from a depth investigator is a claim the draft can cite directly ("our reading of the FRMCS evidence is that..." — then [N]). These are your strongest argumentative levers — use them, don't soften them into "the literature suggests...".
+   - **Interpret, don't just assert.** For every 2–3 factual claims, there should be at least one interpretive beat — a sentence or clause that draws a conclusion the sources themselves didn't draw. Interpretive density drives the insight dimension; descriptive claim stacks suppress it.
+   - **Privilege committed investigator positions.** Each `## Committed position` section from a depth investigator is a claim the draft can assert directly ("the FRMCS evidence demonstrates that..."). These are your strongest argumentative levers — use them, don't soften them into "the literature suggests...".
    - **Every body section argues, not just the synthesis.** A common failure mode is drafts that save commitment for the synthesis section and leave body sections in descriptive / reporting mode. That doesn't work — the body is where evidence is introduced, and the body is where arguments should LAND. Each H2 should end with (or contain) at least one sentence that commits to a reading of that section's evidence. "Here is how this evidence is best understood" belongs in every section, not just the final one.
    - **Weave named tensions INLINE with immediate resolution.** When a cross-locus tension from `comparisons.md` is relevant to a body section, engage it inline in that section — name the tension, quote the strongest version of each side, and commit to a reading — then move on. Do NOT gather tensions into a dedicated "Source Tensions" H2 at the end; that gives the reader an unresolved buffet. Reference-quality reports name tensions where they arise in the doctrinal or analytical flow and resolve them immediately.
    - **Prescriptive specificity when evidence supports it.** When an investigator's `## Committed position` contains a specific threshold, number, rule, or named mechanism, preserve that specificity in the draft. Do not soften "manufacturer liability attaches when handover warnings fall below 10 seconds at highway speeds" into "manufacturer liability attaches when warnings are too brief." The precision is the authority; softening it to LLM-directional language drops the report's prescriptive weight. If a recommendation in the draft reads abstract, ask yourself what specific threshold or rule the evidence supports, and say it.
 
-8. **Include inline citations.** Every load-bearing claim gets `[N]`. The `[N]` numbering is deterministic: first cited source is `[1]`, next new source is `[2]`, and so on. The Sources list at the end matches this numbering.
+8. **Source attribution (controlled by `citation_style`).** Read `citation_style` from `research/prompt-decomposition.json`.
+
+   **If `citation_style` is `"inline"` (default):** Include inline `[N]` citations on load-bearing claims. The `[N]` numbering is deterministic: first cited source is `[1]`, next new source is `[2]`, and so on. End the report with a numbered Sources list matching the inline citations. Aim for moderate citation density — enough to ground key claims (30-60 total citations for an argumentative report) without cluttering every sentence. Wikipedia NEVER appears in the Sources list.
+
+   **If `citation_style` is `"none"`:** Do NOT include inline `[N]` citations anywhere. Do NOT include a Sources/References section. Assert facts directly and authoritatively: "中国直接融资比重仅为29%" — not "中国直接融资比重仅为29% [3]." You know which sources support which claims from the width corpus and interim notes — use that knowledge to write with confidence, but do not expose the citation apparatus. The report reads as authoritative expert analysis, not annotated literature review.
+
+8a. **Use bullet lists liberally.** Bullet lists make reports scannable and structured. Use them for:
+   - Sub-point enumeration within analysis sections (优势/劣势/机遇/挑战 for each topic)
+   - Policy measures and regulatory requirements
+   - Recommendations (always bulleted, never buried in prose)
+   - Comparative points within or across topics
+   - Any passage that enumerates 3+ items in a sentence — convert to a list
+
+   **Pattern — bold category labels within bullet lists:**
+   ```
+   **优势：**
+   - Point one with specific number
+   - Point two with mechanism named
+
+   **挑战：**
+   - Point one
+   - Point two
+   ```
+
+   Every H2 body section should contain at least one bulleted enumeration where the content is enumerative. Do NOT force bullets where the content is flowing argumentative prose — bullets serve enumeration, not narration.
+
+8b. **Short paragraphs.** No paragraph should exceed **400 characters** (Chinese/CJK) or **800 characters** (English). Target average paragraph length of **150-300 characters** (Chinese) or **300-600 characters** (English). One idea per paragraph. If a paragraph covers both "what happened" and "what it means," split into two.
+
+8c. **Short sentences.** Target average sentence length of **50-80 characters** (Chinese) or **80-150 characters** (English). Split compound sentences with multiple semicolons, parenthetical asides, or relative clauses. Each sentence expresses one idea. Avoid: "由于X因素的影响，加之Y政策的推动，再叠加Z趋势的催化，该领域呈现出..."  Instead: "X因素推动了增长。Y政策加速了这一趋势。Z进一步放大了效果。"
+
+8d. **Use bold for emphasis and visual hierarchy.** Bold key terms on first mention, key statistics and thresholds, verdict/judgment labels, and category labels within bullet lists. Examples: **买方投顾模式**, **29%直接融资比重**, **核心判断：**, **SWOT分析**. The goal is scannability — a reader skimming should be able to pick out key terms and numbers from bold text alone.
+
+8e. **Write evaluatively, not descriptively.** The report is expert analysis, not a neutral survey. Where the evidence supports a clear reading, state it directly:
+   - Instead of "可能存在风险" → **"面临结构性挑战"**
+   - Instead of "some evidence suggests" → **"evidence strongly indicates"**
+   - Instead of "various factors contribute" → **"three key drivers dominate"**
+
+   Include explicit verdict statements in every H2 section. Every body section should end with a committed reading of that section's evidence.
+
+   **Guardrail: do NOT overstate genuinely uncertain claims.** When evidence is contested, preliminary, or speculative, hedging is honesty, not weakness. "This outcome is likely IF current trends continue" is better than "This outcome WILL happen." The evaluative rule applies to claims the evidence supports — not to forecasts on open questions or actively-debated topics where the sources themselves disagree.
 
 9. **Honor wrapper contracts.** If `research/wrapper_contract.json` specifies a required terminal section (e.g., `## Opinionated Synthesis`), include it. If it specifies forbidden body sections, do not use them.
 
@@ -360,7 +569,7 @@ prompt: |
 
     **When you need to reference a cross-locus tension captured in `comparisons.md`:** name the substantive dynamic the tension describes. Not "Tension 2" but "the isolation-versus-competition question." Not "Locus 3's verdict" but "the 500K-threshold evidence commits:". The reader does not know about loci, tensions, or comparisons.md — do not teach them the pipeline's internal vocabulary just to cite it.
 
-    **When you cite an interim note:** use the `[N]` numeric citation that corresponds to it in the Sources list. The internal note id (`interim-report-*`) is never reader-facing.
+    **When you reference an interim note's findings:** If `citation_style` is `"inline"`, use the `[N]` numeric citation that corresponds to the interim note in the Sources list. If `"none"`, assert the finding directly in authoritative prose. Either way, the internal note id (`interim-report-*`) is never reader-facing.
 
     **"Loci" as a domain word** — if your topic is one where "locus" is a legitimate domain term (molecular biology, law, neuroscience), the ban applies only to pipeline-taxonomy usage. A sentence like "the coding locus lies within exon 3" is fine; "three loci converged on the same finding" is a leak.
 
@@ -369,6 +578,8 @@ prompt: |
 ---
 
 ## Layer 5 — Adversarial critique (parallel, 4 critics)
+
+**Tier gate:** SKIP entirely for `light` tier — proceed directly to Layer 7 (polish). For `standard` tier: spawn only **2 critics** — `width-critic` (catches missed coverage) and `instruction-critic` (catches prompt-adherence gaps). Skip dialectic and depth critics. For `full` tier: spawn all 4 as documented.
 
 **Goal:** four independent findings lists against the single draft, each from a different adversarial angle. Each critic has its own role — they complement, not duplicate.
 
@@ -392,6 +603,8 @@ prompt: |
 ---
 
 ## Layer 6 — Patch pass (`hyperresearch-patcher`)
+
+**Tier gate:** SKIP entirely for `light` tier (no critics = no findings to patch). For `standard` and `full`: run as documented.
 
 **Goal:** apply critic findings to the draft as surgical Edit hunks. Zero regeneration.
 
@@ -450,6 +663,8 @@ echo '{"total_findings": 0, "applied": [], "skipped": [], "conflicts": [], "orch
 
 ## Layer 7 — Polish audit (`hyperresearch-polish-auditor`)
 
+**Tier gate:** Runs for ALL tiers. Every report gets a polish pass regardless of tier.
+
 **Goal:** final hygiene + readability pass. Also tool-locked to `[Read, Edit]`.
 
 1. **Pre-create the polish log stub.** Same rule as Layer 6 — the polish auditor has `[Read, Edit]` only and cannot create a new file. Stub it first:
@@ -464,6 +679,7 @@ echo '{"applied": [], "escalations": []}' > research/polish-log.json
    - `polish_log_path` — `research/polish-log.json` (already stubbed above)
 
 3. **The polish auditor strips:**
+   - Citation cleanup per `citation_style`: if `"none"`, strips all `[N]` and the Sources section; if `"inline"`, strips only Wikipedia-sourced citations
    - Hygiene leaks (YAML frontmatter, scaffold sections, prompt echoes)
    - Filler phrases ("It is worth noting", "Importantly", etc.)
    - Redundant sentences / paragraphs that restate prior content
@@ -477,7 +693,46 @@ echo '{"applied": [], "escalations": []}' > research/polish-log.json
 
 ---
 
-## After Layer 7: audit findings + lint gate
+## Layer 8 — Readability reformat (`hyperresearch-readability-reformatter`)
+
+**Tier gate:** Runs for ALL tiers. Every report gets a readability pass.
+
+**Goal:** final structural pass for readability — break paragraphs to cap (400 chars CJK / 800 chars EN), convert enumerations to bullet lists, inject bold labels, split long sentences. If `citation_style` is `"none"`, also strip any residual `[N]` citations and Sources section. Does NOT change any substantive content.
+
+1. **Pre-create the reformat log stub.** The reformatter is tool-locked to `[Read, Edit]` — same pattern as Layer 6 and 7.
+
+```bash
+echo '{"paragraphs_split": 0, "subheadings_added": 0, "lists_created": 0, "tables_created": 0, "sentences_split": 0, "citations_stripped": 0, "sources_section_removed": false, "net_char_delta": 0}' > research/reformat-log.json
+```
+
+2. **Spawn the readability reformatter ONCE.** Pass:
+   - `research_query` — canonical, verbatim
+   - `draft_path` — `research/notes/final_report.md`
+   - `reformat_log_path` — `research/reformat-log.json` (already stubbed above)
+
+3. **The reformatter applies:**
+   - Citation cleanup: if `citation_style` is `"none"`, strip residual `[N]` and Sources section; if `"inline"`, leave intact
+   - Paragraph splits: any paragraph exceeding 400 chars (CJK) or 800 chars (EN)
+   - List conversions: enumerative passages → bullet lists with bold labels
+   - Bold injection: key terms, statistics, category labels
+   - Sentence splits: sentences exceeding 80 chars (CJK) or 150 chars (EN)
+   - Whitespace cleanup
+
+4. **The reformatter DOES NOT:**
+   - Add, remove, or change any substantive claims
+   - Add H3 subheadings (the drafter owns section structure)
+   - Rename H2 headings
+   - Move content between sections
+   - Change the report's language
+   - Add horizontal rules (`---`)
+
+5. **Check the reformat log.** Net char delta should be NEGATIVE if citations were stripped (they consume significant characters). If no citations were present, delta may be slightly positive from list formatting.
+
+6. **Do not apply reformat edits yourself.** Same tool-lock discipline as Layer 6 and 7.
+
+---
+
+## After Layer 8: audit findings + lint gate
 
 0. **Required-artifacts integrity check.** Before declaring the run complete, verify every expected pipeline artifact exists. Run:
 
@@ -487,7 +742,8 @@ for f in research/critic-findings-dialectic.json \
          research/critic-findings-width.json \
          research/critic-findings-instruction.json \
          research/patch-log.json \
-         research/polish-log.json; do
+         research/polish-log.json \
+         research/reformat-log.json; do
   test -f "$f" || echo "MISSING: $f"
 done
 ```

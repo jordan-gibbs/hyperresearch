@@ -251,7 +251,7 @@ Each iteration is a research director: the main agent reads one source (or deleg
 **When to delegate reading to `hyperresearch-source-analyst`:** when a source is longer than ~5000 words AND substantively matters to the research_query. The source-analyst runs on Sonnet's 1M-context window, reads the full source end-to-end, and writes a structured analytical digest as a new `type: source-analysis` note backlinked to the original. The digest is then a dense proxy you can consume without paying context cost to re-read the source.
 
 **Phase 1 — Seed fetch.** Pick the **10–15 highest-signal URLs** (more for broad enumerative queries, fewer only for very narrow single-question prompts):
-- 2–3 canonical reference entries (Wikipedia, field survey, official docs)
+- 2–3 canonical reference entries (Wikipedia as SOURCE HUB only — fetch it to discover primary sources in its references, then fetch THOSE; field survey, official docs)
 - 3–5 analytical/critical sources visible in search results
 - 2–3 primary sources (original papers, ground-truth datasets, official filings)
 - 2–3 adversarial/dissenting sources — named critic, contrarian view, opposing position
@@ -541,7 +541,10 @@ should be cited across multiple sections.>
 <Plan for at least 40-80 inline citations in the final draft. Rough target:
 density of 8-16 citations per 1000 words. The same source can be cited
 multiple times across sections — list which sources will anchor which
-claims. Under-citation is the #1 failure mode.>
+claims. Under-citation is the #1 failure mode.
+Wikipedia MUST NOT appear in the Sources list — it is a source hub for
+discovering primary sources, never a citable source. Trace Wikipedia claims
+back to their references and cite those instead.>
 
 ## Coverage checklist (the auditor will verify this)
 <One line per explicit contract from "What the user explicitly asked for".

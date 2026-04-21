@@ -88,7 +88,7 @@ For interpretive synthesis of pop-culture / contemporary / niche subjects where 
 
 **Ground truth:** the primary work itself (if available online; substantial excerpts if not), author/creator interviews stating intent, official materials.
 
-**Institutional signal:** named critical essays, longform analyses, scholarly monographs, Wikipedia references harvest (curated for notability).
+**Institutional signal:** named critical essays, longform analyses, scholarly monographs, Wikipedia as a SOURCE HUB (fetch to discover the primary sources in its references — then fetch THOSE; never cite Wikipedia itself in the final report).
 
 **Practitioner triangulation:** professional reviews, interviews with domain experts, conference keynote transcripts.
 
