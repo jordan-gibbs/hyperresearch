@@ -180,14 +180,11 @@ def test_install_dialectic_critic_agent(tmp_vault):
     assert agent_path.exists()
     body = agent_path.read_text(encoding="utf-8")
     assert "model: opus" in body
-    # Critics MUST NOT have Edit or Write — only Bash + Read
-    # (they produce JSON findings, they don't mutate the draft)
-    assert "tools: Bash, Read" in body
-    assert "suggested_patch" in body
-    # Surgical-patch discipline (no arbitrary size cap since the 500-char
-    # rule was dropped — the tool lock on the patcher enforces regeneration
-    # prevention, and critic prompts now teach surgical-patch discipline
-    # without a numerical threshold).
+    # Critics have Bash + Read + Write (Write for JSON output; no Edit
+    # since they don't mutate the draft — that's the revisor's job)
+    assert "tools: Bash, Read, Write" in body
+    assert "recommendation" in body
+    assert "location" in body
     assert "surgical" in body.lower()
     assert result is not None
 
@@ -241,33 +238,31 @@ def test_install_instruction_critic_agent(tmp_vault):
 
 
 def test_install_patcher_agent_is_edit_only(tmp_vault):
-    """The patcher MUST be tool-locked to Read + Edit only — no Write, no
-    Bash. This is the load-bearing invariant that enforces PATCH-NOT-REGEN."""
+    """The revisor (patcher) MUST be tool-locked to Read + Edit only — no
+    Write, no Bash. This is the load-bearing invariant that enforces
+    REVISE-NOT-REGEN."""
     result = _install_patcher_agent(tmp_vault.root, "hyperresearch")
     agent_path = tmp_vault.root / ".claude" / "agents" / "hyperresearch-patcher.md"
     assert agent_path.exists()
     body = agent_path.read_text(encoding="utf-8")
-    # Opus: substance-integration judgment about which patches serve
+    # Opus: substance-integration judgment about which findings serve
     # the research_query is a reasoning task Sonnet underperforms on.
     assert "model: opus" in body
     # Tool lock: must be exactly "Read, Edit" — not Write, not Bash. The
-    # tool lock is what enforces the no-regeneration invariant; there is
-    # no arbitrary numerical size cap on hunks.
+    # tool lock is what enforces the no-regeneration invariant.
     assert "tools: Read, Edit" in body
     assert "tools: Bash" not in body
     assert "Write" not in body.split("tools:")[1].split("\n")[0]
     assert "regenerat" in body.lower()  # the invariant spelled out
     assert "surgical" in body.lower()
     # Integrate-don't-caveat rule lifts insight score by preventing
-    # hedge-appending patches that dilute committed claims.
+    # hedge-appending edits that dilute committed claims.
     assert "Integrate, don't caveat" in body
     assert "scoping the claim" in body
-    # Canonical patch-log schema: the patcher must populate the five
-    # fields below and must not invent alternate shapes. Drift across
-    # runs (orchestrator_structural_fixes / counts-only variants) was a
-    # concrete past failure the test now locks out.
-    assert "orchestrator_escalated" in body
-    assert "total_findings" in body
+    # Dynamic revision: revisor reads findings with location/issue/
+    # recommendation fields and applies edits using its own judgment.
+    assert "location" in body
+    assert "recommendation" in body
     assert "requires_orchestrator_restructure" in body
     assert result is not None
 

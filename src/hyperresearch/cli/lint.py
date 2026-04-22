@@ -1014,7 +1014,7 @@ def lint(
                         f"{len(critical_skipped)} critical finding(s) skipped by patcher: "
                         f"{names}. The draft shipped with known-critical issues unresolved. "
                         "Inspect research/patch-log.json and either hand-craft Edits or "
-                        "re-spawn the critics with tighter suggested_patch entries."
+                        "re-spawn the critics with more specific recommendations."
                     ),
                 })
 

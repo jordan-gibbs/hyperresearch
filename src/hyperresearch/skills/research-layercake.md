@@ -655,9 +655,9 @@ echo '{"total_findings": 0, "applied": [], "skipped": [], "conflicts": [], "orch
    - Log what you changed in a new `research/orchestrator-restructure-log.md` file (plain markdown, one bullet per change) so downstream lint rules can see this step happened.
    - Never regenerate a whole section or the whole draft. The "patch not regenerate" invariant still binds you — you have broader tools but not broader license.
 
-5. **Do not apply the patches yourself.** You MUST spawn the patcher subagent. Do NOT call Edit directly on `research/notes/final_report.md` in Layer 6 — the patcher has the tool-lock invariants (surgical-hunk discipline, old-text exact match, conflict resolution, integrate-don't-caveat rule) baked into its prompt. Bypassing it defeats the entire adversarial-patch architecture. If the patcher returns an empty result or appears to have failed, re-spawn it — don't fall back to doing it yourself.
+5. **Do not apply the revisions yourself.** You MUST spawn the patcher (revisor) subagent. Do NOT call Edit directly on `research/notes/final_report.md` in Layer 6 — the revisor has the tool-lock invariants (surgical-edit discipline, conflict resolution, integrate-don't-caveat rule) baked into its prompt. Bypassing it defeats the entire adversarial-review architecture. If the revisor returns an empty result or appears to have failed, re-spawn it — don't fall back to doing it yourself.
 
-6. **Do not re-spawn the patcher on the same findings** unless you've modified the findings. The patcher's second run on identical input is a waste.
+6. **Do not re-spawn the revisor on the same findings** unless you've modified the findings. The revisor's second run on identical input is a waste.
 
 ---
 
