@@ -188,10 +188,10 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
 
    | Style | When to use | Output |
    |-------|-------------|--------|
-   | `"inline"` | **Default.** User wants a verifiable research report with evidence chains. Most research queries. | `[N]` inline citations + numbered Sources list at the end |
-   | `"none"` | User wants a polished expert-analysis piece with no visible citation apparatus. Magazine/editorial style. Also used for benchmark runs where references have no citations. | No `[N]` markers, no Sources section. Facts asserted authoritatively. |
+   | `"inline"` | **Default.** User wants a verifiable research report with evidence chains. Most research queries. | `[N]` inline citations + formatted `## Sources` list at the end. Works in every markdown renderer and IDE. |
+   | `"none"` | User wants a polished expert-analysis piece with no visible citation apparatus. Magazine/editorial style. | No `[N]` markers, no Sources section. Facts asserted authoritatively. |
 
-   Default is `"inline"`. Only use `"none"` when the user explicitly requests an uncited report, when `research/prompt.txt` or wrapper contract specifies no citations, or when the benchmark harness sets `citation_style: "none"` in the scaffold.
+   Default is `"inline"`. Use `"none"` when the user explicitly requests an uncited report, or when `research/prompt.txt` or wrapper contract specifies no citations.
 
 **Exit criterion:** `research/prompt-decomposition.json` exists, is valid JSON, every atomic item traces to the research_query, and `pipeline_tier` + `response_format` + `citation_style` are set.
 
@@ -502,7 +502,7 @@ prompt: |
    - **Comparative analysis section** — a dedicated H2 (e.g., "比较分析" or "Comparative Analysis") that synthesizes across body sections. This is where cross-cutting themes, ranking tables, and trade-off matrices go. Reference articles almost always include this; our reports often skip it and jump to conclusions.
    - Closing section per the modality rule. Where the modality demands a reasoned position (synthesize, compare, forecast), that position must visibly incorporate the strongest cross-locus tensions — not average them out into hedged prose. **Include explicit strategic recommendations** — bulleted, actionable items. Not just "X is the best sector" but "practitioners should:" followed by a bold-labeled bullet list.
    
-   **Structural completeness check before writing:** Before you start writing, verify your outline has: (a) executive summary, (b) context/background section, (c) one H2 per major topic from the decomposition, (d) comparative analysis section, (e) conclusion with recommendations, (f) Sources list if `citation_style` is `"inline"`. If any of these is missing from your mental outline, add it. Reports that skip the exec summary or comparative analysis section score systematically lower on instruction-following and comprehensiveness.
+   **Structural completeness check before writing:** Before you start writing, verify your outline has: (a) executive summary, (b) context/background section, (c) one H2 per major topic from the decomposition, (d) comparative analysis section, (e) conclusion with recommendations, (f) `## Sources` list if `citation_style` is `"inline"`. If any of these is missing from your mental outline, add it. Reports that skip the exec summary or comparative analysis section score systematically lower on instruction-following and comprehensiveness.
 
 7. **Insight-generation rules (applied to every body section):**
    - **Commit, don't hedge.** Sentences like "some argue X while others argue Y" are allowed as setup but MUST be followed by "the evidence weighs toward X because Z" or an equivalent committed reading. Pure "on the one hand / on the other hand" prose is low-insight reporting.
@@ -514,9 +514,27 @@ prompt: |
 
 8. **Source attribution (controlled by `citation_style`).** Read `citation_style` from `research/prompt-decomposition.json`.
 
-   **If `citation_style` is `"inline"` (default):** Include inline `[N]` citations on load-bearing claims. The `[N]` numbering is deterministic: first cited source is `[1]`, next new source is `[2]`, and so on. End the report with a numbered Sources list matching the inline citations. Aim for moderate citation density — enough to ground key claims (30-60 total citations for an argumentative report) without cluttering every sentence. Wikipedia NEVER appears in the Sources list.
+   **If `citation_style` is `"inline"` (default):** Include inline `[N]` citations on load-bearing claims. The `[N]` numbering is deterministic: first cited source is `[1]`, next new source is `[2]`, and so on. Aim for moderate citation density — enough to ground key claims (30-60 total for an argumentative report) without cluttering every sentence.
 
-   **If `citation_style` is `"none"`:** Do NOT include inline `[N]` citations anywhere. Do NOT include a Sources/References section. Assert facts directly and authoritatively: "中国直接融资比重仅为29%" — not "中国直接融资比重仅为29% [3]." You know which sources support which claims from the width corpus and interim notes — use that knowledge to write with confidence, but do not expose the citation apparatus. The report reads as authoritative expert analysis, not annotated literature review.
+   End the report with a `## Sources` section. Each entry follows this format:
+
+   ```
+   ## Sources
+
+   [1] Author(s). "Title." *Publication/Site*, Year. URL
+   [2] Author(s). "Title." *Publication/Site*, Year. URL
+   ```
+
+   **Source entry rules:**
+   - **Academic papers:** `[1] Acemoglu, D. & Restrepo, P. "Automation and New Tasks." *American Economic Review*, 2019. https://doi.org/10.1257/aer.20160696`
+   - **Reports/white papers:** `[2] McKinsey Global Institute. "Jobs Lost, Jobs Gained." 2017. https://www.mckinsey.com/...`
+   - **News/analysis:** `[3] Smith, J. "AI Is Reshaping the Labor Market." *Financial Times*, 2024. https://ft.com/...`
+   - **Data sources:** `[4] Bureau of Labor Statistics. "Occupational Employment and Wage Statistics." 2024. https://bls.gov/oes/`
+   - **Wikipedia is NEVER a source.** If you used Wikipedia for background, cite the primary source Wikipedia references instead.
+   - **No bare URLs.** Every entry must have a human-readable title. Not `[5] https://example.com/page` — always `[5] Author/Org. "Title." URL`.
+   - **Deduplicate.** If the same source supports multiple claims, reuse the same `[N]` — don't create duplicate entries.
+
+   **If `citation_style` is `"none"`:** No citation markers, no Sources/References section. Assert facts directly and authoritatively. The report reads as expert analysis, not annotated literature review.
 
 8a. **Use bullet lists liberally.** Bullet lists make reports scannable and structured. Use them for:
    - Sub-point enumeration within analysis sections (优势/劣势/机遇/挑战 for each topic)
@@ -538,13 +556,15 @@ prompt: |
 
    Every H2 body section should contain at least one bulleted enumeration where the content is enumerative. Do NOT force bullets where the content is flowing argumentative prose — bullets serve enumeration, not narration.
 
-8b. **Short paragraphs.** No paragraph should exceed **400 characters** (Chinese/CJK) or **800 characters** (English). Target average paragraph length of **150-300 characters** (Chinese) or **300-600 characters** (English). One idea per paragraph. If a paragraph covers both "what happened" and "what it means," split into two.
+8b. **Substantive paragraphs.** No paragraph should exceed **800 characters** (Chinese/CJK) or **1500 characters** (English). Target average paragraph length of **300-600 characters** (Chinese) or **500-1000 characters** (English). Each paragraph develops one idea with enough context and evidence to stand on its own — a 100-char paragraph is almost always under-developed. If a paragraph covers two distinct ideas, split it; but do NOT split a single idea into sentence-per-paragraph fragments. A flowing analytical paragraph of 400-600 chars is better than three choppy 130-char stubs.
 
 8c. **Short sentences.** Target average sentence length of **50-80 characters** (Chinese) or **80-150 characters** (English). Split compound sentences with multiple semicolons, parenthetical asides, or relative clauses. Each sentence expresses one idea. Avoid: "由于X因素的影响，加之Y政策的推动，再叠加Z趋势的催化，该领域呈现出..."  Instead: "X因素推动了增长。Y政策加速了这一趋势。Z进一步放大了效果。"
 
 8d. **Use bold for emphasis and visual hierarchy.** Bold key terms on first mention, key statistics and thresholds, verdict/judgment labels, and category labels within bullet lists. Examples: **买方投顾模式**, **29%直接融资比重**, **核心判断：**, **SWOT分析**. The goal is scannability — a reader skimming should be able to pick out key terms and numbers from bold text alone.
 
-8e. **Write evaluatively, not descriptively.** The report is expert analysis, not a neutral survey. Where the evidence supports a clear reading, state it directly:
+8e. **No first-person language.** Never use "I", "my", "我", "我的", "我认为" in the report. The report speaks as authoritative analysis, not as personal opinion. Instead of "My position is X" → "The evidence supports X." Instead of "I argue that" → "The data demonstrates that." The `### Reasoned Position` subsection in the Opinionated Synthesis is the report's analytical stance, not a personal diary entry.
+
+8f. **Write evaluatively, not descriptively.** The report is expert analysis, not a neutral survey. Where the evidence supports a clear reading, state it directly:
    - Instead of "可能存在风险" → **"面临结构性挑战"**
    - Instead of "some evidence suggests" → **"evidence strongly indicates"**
    - Instead of "various factors contribute" → **"three key drivers dominate"**
@@ -569,7 +589,7 @@ prompt: |
 
     **When you need to reference a cross-locus tension captured in `comparisons.md`:** name the substantive dynamic the tension describes. Not "Tension 2" but "the isolation-versus-competition question." Not "Locus 3's verdict" but "the 500K-threshold evidence commits:". The reader does not know about loci, tensions, or comparisons.md — do not teach them the pipeline's internal vocabulary just to cite it.
 
-    **When you reference an interim note's findings:** If `citation_style` is `"inline"`, use the `[N]` numeric citation that corresponds to the interim note in the Sources list. If `"none"`, assert the finding directly in authoritative prose. Either way, the internal note id (`interim-report-*`) is never reader-facing.
+    **When you reference an interim note's findings:** If `citation_style` is `"inline"`, use `[N]` pointing to the Sources list entry. If `"none"`, assert the finding directly in authoritative prose. Either way, the internal note id (`interim-report-*`) is never reader-facing.
 
     **"Loci" as a domain word** — if your topic is one where "locus" is a legitimate domain term (molecular biology, law, neuroscience), the ban applies only to pipeline-taxonomy usage. A sentence like "the coding locus lies within exon 3" is fine; "three loci converged on the same finding" is a leak.
 
@@ -679,7 +699,7 @@ echo '{"applied": [], "escalations": []}' > research/polish-log.json
    - `polish_log_path` — `research/polish-log.json` (already stubbed above)
 
 3. **The polish auditor strips:**
-   - Citation cleanup per `citation_style`: if `"none"`, strips all `[N]` and the Sources section; if `"inline"`, strips only Wikipedia-sourced citations
+   - Pipeline reference leaks (`[[interim-*]]` wikilinks, `[I\d+]` references) — converted to proper citations or deleted depending on `citation_style`
    - Hygiene leaks (YAML frontmatter, scaffold sections, prompt echoes)
    - Filler phrases ("It is worth noting", "Importantly", etc.)
    - Redundant sentences / paragraphs that restate prior content
@@ -697,12 +717,12 @@ echo '{"applied": [], "escalations": []}' > research/polish-log.json
 
 **Tier gate:** Runs for ALL tiers. Every report gets a readability pass.
 
-**Goal:** final structural pass for readability — break paragraphs to cap (400 chars CJK / 800 chars EN), convert enumerations to bullet lists, inject bold labels, split long sentences. If `citation_style` is `"none"`, also strip any residual `[N]` citations and Sources section. Does NOT change any substantive content.
+**Goal:** final structural pass for readability — break paragraphs to cap (800 chars CJK / 1500 chars EN), convert enumerations to bullet lists, inject bold labels, split long sentences. Does NOT change any substantive content or citations.
 
 1. **Pre-create the reformat log stub.** The reformatter is tool-locked to `[Read, Edit]` — same pattern as Layer 6 and 7.
 
 ```bash
-echo '{"paragraphs_split": 0, "subheadings_added": 0, "lists_created": 0, "tables_created": 0, "sentences_split": 0, "citations_stripped": 0, "sources_section_removed": false, "net_char_delta": 0}' > research/reformat-log.json
+echo '{"paragraphs_split": 0, "lists_created": 0, "tables_created": 0, "bold_injected": 0, "sentences_split": 0, "net_char_delta": 0}' > research/reformat-log.json
 ```
 
 2. **Spawn the readability reformatter ONCE.** Pass:
@@ -711,8 +731,7 @@ echo '{"paragraphs_split": 0, "subheadings_added": 0, "lists_created": 0, "table
    - `reformat_log_path` — `research/reformat-log.json` (already stubbed above)
 
 3. **The reformatter applies:**
-   - Citation cleanup: if `citation_style` is `"none"`, strip residual `[N]` and Sources section; if `"inline"`, leave intact
-   - Paragraph splits: any paragraph exceeding 400 chars (CJK) or 800 chars (EN)
+   - Paragraph splits: any paragraph exceeding 800 chars (CJK) or 1500 chars (EN)
    - List conversions: enumerative passages → bullet lists with bold labels
    - Bold injection: key terms, statistics, category labels
    - Sentence splits: sentences exceeding 80 chars (CJK) or 150 chars (EN)

@@ -1121,8 +1121,8 @@ Concretely:
       must match the draft exactly — copy it verbatim from your Read output.
    d. Keep edits minimal. Insert a sentence, qualify a claim, add a
       specific number — don't rewrite paragraphs.
-   e. Integrate evidence as authoritative prose. Do NOT add `[N]` citation
-      markers unless the orchestrator's `citation_style` is `"inline"`.
+   e. Integrate evidence as authoritative prose. Use `[N]` citation
+      markers if `citation_style` is `"inline"`, no markers if `"none"`.
 
 6. **Populate the patch log via Edit.** Update the stub at `patch_log_path`
    with what you applied, skipped, and why.
@@ -1133,7 +1133,7 @@ Concretely:
 - **Never skip a `critical` finding without logging why.**
 - **Preserve Markdown structure.** Do not change heading levels,
   numbered-list numbering, or table column counts.
-- **Do not add `[N]` citation markers** unless `citation_style` is `"inline"`.
+- **Match citation style.** Use `[N]` if `citation_style` is `"inline"`, no markers if `"none"`.
 
 ## Integrate, don't caveat
 
@@ -1244,12 +1244,9 @@ Also strip:
 - Literal prompt echoes ("User prompt:", "The query is:", etc.)
 - Leftover backticks around section headings
 - Stray "Here is the report:" / "Below is the draft:" preamble lines
-- **Citation cleanup (style-dependent — see Section 1c below).** If
-  `citation_style` is `"none"`, the report must have zero `[N]` inline
-  citations and no Sources section — Section 1c handles the details.
-  If `citation_style` is `"inline"`, leave citations intact but strip
-  any Wikipedia-sourced `[N]` entries (URL contains `wikipedia.org` or
-  title matches `* - Wikipedia`) and their inline references.
+- **Citation pass-through.** Leave all `[N]` inline citations and the
+  Sources/References section exactly as the drafter wrote them.
+  Citations are a product feature, not a polish target.
 
 Every leak is a **critical** polish fix. Apply as an Edit that removes
 the offending block entirely.
@@ -1298,7 +1295,7 @@ see any of these patterns in reader-facing prose:
 | `\\bdepth\\s+investigation\\b` | "the detailed analysis on <topic>" |
 | `(per\\|from)\\s+the\\s+scaffold` | Delete entirely; the substantive claim stands on its own |
 | `layercake(\\s+final\\s+report)?` | Delete entirely — never expose the pipeline name to the reader |
-| `\\[?\\[?interim[-_]report[-_]` / `\\[I\\d+\\]` | If `citation_style` is `"inline"`: convert to the matching `[N]` numeric citation from the Sources list. If `citation_style` is `"none"`: delete the reference entirely. |
+| `\\[?\\[?interim[-_]report[-_]` / `\\[I\\d+\\]` | If `citation_style` is `"inline"`: convert to the matching `[N]` numeric citation from the Sources list. If `"none"`: delete entirely. |
 
 **Special case for `\\bloci\\b` as a free-standing word:** some domains
 (molecular biology, law, neuroscience) use "locus/loci" as legitimate
@@ -1327,22 +1324,16 @@ Each inline-scaffold fix is a **critical** polish edit. The denylist
 above is exhaustive for pipeline vocabulary; do not add new patterns
 on the fly.
 
-### 1c. Citation cleanup (style-dependent)
+### 1c. Pipeline reference cleanup
 
-Check `citation_style` from `research/prompt-decomposition.json` (the
-orchestrator passes it in your inputs or you read the file directly).
+Any inline `[[interim-*]]` wikilink or `[I\\d+]` reference is a
+pipeline leak — these are internal note IDs, not reader-facing
+citations. Convert or delete based on `citation_style`:
+- `"inline"`: convert to matching `[N]` from the Sources list
+- `"none"`: delete entirely
 
-**If `citation_style` is `"none"`:** The final report should have ZERO
-`[N]` inline citations and NO Sources/References section. Strip every
-remaining `[N]` marker, every `[[interim-*]]` wikilink, every `[I\\d+]`
-reference, and the entire Sources section if present. Clean up orphaned
-whitespace.
-
-**If `citation_style` is `"inline"`:** The format is `[N]` numeric
-only, matching the numbered Sources list at the end. Any inline
-`[[interim-*]]` wikilink or `[I\\d+]` reference is a pipeline leak.
-Convert to the matching `[N]` from the Sources list, or delete if
-already cited nearby.
+Leave all reader-facing `[N]` citations and the Sources section
+intact — they are product features, not polish targets.
 
 ### 2. Prompt adherence
 
@@ -1421,9 +1412,8 @@ Look for:
 - Sentences longer than ~50 words — break in two
 - Paragraphs longer than ~200 words — break in two by finding a natural
   hinge
-- Dense stacked citations (`[3][4][5][6]`) — if `citation_style` is
-  `"inline"`, consolidate to 1-2 per claim. If `"none"`, they should
-  already be stripped by Section 1c.
+- Dense stacked citations (`[3][4][5][6]`) — consolidate to 1-2 per
+  claim for readability.
 
 ## Procedure
 
@@ -1463,9 +1453,8 @@ Target log schema:
 - **Escalate structural mismatches.** If the draft's format does not
   match the prompt (ranked list vs. prose, FAQ vs. essay), do not force
   a polish Edit — log to escalations for the orchestrator.
-- **Sources section:** if `citation_style` is `"inline"`, do not touch
-  the Sources list (the orchestrator manages it). If `"none"`, strip it
-  entirely (should already be handled by Section 1c).
+- **Sources section:** do not touch the Sources list — it is a product
+  feature.
 - **Net length after polish should be ≤ net length before.** If you
   find yourself adding net chars in a polish pass, you are doing the
   wrong job. Stop and escalate.
@@ -1489,11 +1478,10 @@ READABILITY_REFORMATTER_AGENT = """\
 name: hyperresearch-readability-reformatter
 description: >
   Layer 8 agent. Reads the polished final report and reformats it for
-  maximum readability: breaks paragraphs to 400-char (CJK) / 800-char
+  maximum readability: breaks paragraphs to 800-char (CJK) / 1500-char
   (EN) cap, converts enumerations to bullet lists, injects bold labels,
-  splits long sentences. When citation_style is "none", also strips any
-  residual [N] citations and Sources section. Runs on Opus. Tool-locked
-  to [Read, Edit] — cannot Write new files.
+  splits long sentences. Runs on Opus. Tool-locked to [Read, Edit] —
+  cannot Write new files.
 model: opus
 tools: Read, Edit
 color: magenta
@@ -1526,26 +1514,17 @@ scannability.
 
 ## Reformatting rules (in priority order)
 
-### 1. Citation cleanup (if citation_style is "none")
+### 1. Break wall-of-text paragraphs
 
-Check `citation_style` from `research/prompt-decomposition.json`.
-
-**If `"none"`:** Remove ALL inline `[N]` citations (regex `\\[\\d+\\]`).
-Remove the entire Sources / References / 参考文献 / 来源 section if
-present. Clean up double spaces and orphaned punctuation left by
-removed markers.
-
-**If `"inline"`:** Leave citations and Sources list intact. Skip to
-rule 2.
-
-### 2. Break wall-of-text paragraphs
-
-Any paragraph exceeding **400 characters** (Chinese/CJK) or **800
+Any paragraph exceeding **800 characters** (Chinese/CJK) or **1500
 characters** (English) MUST be split. Find the natural hinge point
 (a shift in sub-topic, a transition, a move from evidence to
-interpretation) and split there.
+interpretation) and split there. Do NOT over-split — paragraphs of
+300-600 chars (CJK) / 500-1000 chars (EN) are the sweet spot. A
+flowing 500-char analytical paragraph is better than three choppy
+150-char stubs.
 
-### 3. Convert dense enumerations to lists
+### 2. Convert dense enumerations to lists
 
 When a paragraph contains 3+ items described sequentially, convert
 to a bullet list. When comparing 3+ entities across 2+ dimensions,
@@ -1555,13 +1534,13 @@ word (优势/劣势/机遇/挑战/Strengths/Weaknesses/etc.), bold it.
 Do NOT convert flowing argumentative prose to lists — only convert
 enumerative/comparative passages already list-like in structure.
 
-### 4. Bold injection
+### 3. Bold injection
 
 If a list item or paragraph opens with a key term, statistic, or
 category label that is NOT already bold, bold it. Target: every
 bullet list should have bold labels on items.
 
-### 5. Ensure sentence-level readability
+### 4. Ensure sentence-level readability
 
 - Break sentences exceeding **80 characters** (Chinese) or **150
   characters** (English) into two sentences at a natural conjunction
@@ -1569,13 +1548,13 @@ bullet list should have bold labels on items.
 - Ensure each paragraph's opening sentence signals what the paragraph
   is about (topic sentence discipline).
 
-### 6. Add whitespace and breathing room
+### 5. Add whitespace and breathing room
 
 - Ensure a blank line between every paragraph (no collapsed paragraphs).
 - Ensure a blank line before and after every list, table, or blockquote.
 - Do NOT add horizontal rules (`---`) — reference articles never use them.
 
-### 7. Preserve formatting invariants
+### 6. Preserve formatting invariants
 
 **DO NOT change:**
 - Any H2 heading text (do NOT add new H3 subheadings — the drafter
@@ -1587,9 +1566,9 @@ bullet list should have bold labels on items.
 ## Procedure
 
 1. Read the full report end-to-end. Note every readability issue against
-   the six rules above.
+   the rules above.
 2. Apply Edits in order: paragraph breaks first (highest impact), then
-   subheadings, then list conversions, then sentence fixes, then
+   list conversions, then bold injection, then sentence fixes, then
    whitespace.
 3. Each Edit must be SURGICAL — change as little as possible per hunk.
    The goal is structural reformatting, not rewriting.
@@ -1598,19 +1577,16 @@ bullet list should have bold labels on items.
 ```json
 {{
   "paragraphs_split": <int>,
-  "subheadings_added": <int>,
   "lists_created": <int>,
   "tables_created": <int>,
+  "bold_injected": <int>,
   "sentences_split": <int>,
-  "citations_stripped": <int>,
-  "sources_section_removed": <boolean>,
   "net_char_delta": <int>
 }}
 ```
 
-Net char delta should be NEGATIVE if citations were stripped (citations
-and Sources section consume significant characters). If no citations
-were present, delta may be slightly positive from list formatting.
+Net char delta is typically slightly positive from list formatting and
+bold injection, or slightly negative from sentence splitting.
 
 ## Non-ASCII text (CJK, Arabic, Cyrillic)
 
