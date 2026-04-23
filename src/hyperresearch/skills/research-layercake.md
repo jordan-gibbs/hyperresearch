@@ -271,12 +271,15 @@ Before batching URLs for fetchers, score each candidate URL on six dimensions (0
 
 **CRITICAL: no token waste.** Each fetcher gets ONLY its batch. No fetcher searches for new URLs or duplicates another fetcher's work. The orchestrator did the searching in Step 2; fetchers just fetch, check quality, and summarize. If a fetcher finishes early, it's done — it does NOT go find more URLs.
 
-**CRITICAL: compaction-resilient completion check.** When running 10+ parallel fetchers, context compaction WILL happen during the wait. After compaction, you lose track of which task notifications already arrived. Do NOT rely on counting in-context notifications to know when all fetchers are done. Instead:
+**CRITICAL: never emit bare text while waiting for tasks.** In `-p` (non-interactive) mode, a text-only response with no tool call triggers `end_turn` — the process exits and the pipeline dies. When fetchers are still running, you MUST keep the conversation alive by always including a tool call in your response. After each batch notification, immediately run a vault count check:
 
-1. **Before spawning fetchers**, write `research/temp/expected-batches.txt` — one line per batch with its description (e.g., "Batch 1: UNWTO + industry overview").
-2. **After each batch notification**, do NOT just emit a status message and wait. Instead, run `$HPR search "" --tag <vault_tag> --json` to count actual notes in the vault. Compare against the expected total URL count from Step 2.
-3. **The wave is done when** the vault note count is ≥80% of the total URL count from the queue (some URLs will fail/be junk), OR when all spawned tasks have returned (check via TaskList if available).
-4. **If you find yourself saying "waiting for the last batch" but are unsure which batch is pending**, you have already lost state to compaction. Run the vault count check immediately and proceed to Step 5 if the count is reasonable. Do NOT wait indefinitely for a notification that may have already been compacted away.
+```bash
+PYTHONIOENCODING=utf-8 $HPR search "" --tag <vault_tag> --json | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Notes in vault: {len(d.get(\"data\",{}).get(\"results\",[]))}')"
+```
+
+This serves two purposes: (1) it keeps the turn alive so the next task notification can arrive, and (2) it gives you a ground-truth count that survives context compaction.
+
+**The wave is done when** the vault note count is ≥80% of the total URLs queued (some will fail/be junk). Do NOT rely on counting in-context notifications — context compaction will eat them. If you're unsure how many batches remain, the vault count is the answer. Proceed to Step 5 as soon as the count is reasonable rather than waiting for a notification that may have already been compacted away.
 
 **Wave 2 (gap-filling, after coverage check):** Smaller, targeted. Only spawned if Step 5 identifies uncovered items. Typically 3–5 fetchers with 5–8 URLs each, all targeting specific gaps.
 
