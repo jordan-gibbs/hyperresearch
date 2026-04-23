@@ -107,6 +107,18 @@ depth packet becomes a weak draft section.
   named — entities, sub-questions, required formats. Your loci should be
   aligned with those items (a dialectical locus on "which camp resolves
   sub-question X" beats a locus on a tangential question).
+- **contradiction_graph** (optional): if `research/temp/contradiction-graph.json`
+  exists, read it FIRST — before scanning the corpus. Each entry is a
+  pre-identified "fight" where sources contradict each other, with side_a/side_b
+  positions, source note IDs, and decision_relevance. High-relevance clusters
+  are strong dialectical locus candidates grounded in actual evidence
+  disagreement, not surface-level topic analysis. Validate them (are the
+  sources real? is the fight genuine or a scope mismatch?) and promote
+  validated high-relevance clusters directly to your loci list.
+- **claim_files** (optional): if `/tmp/claims-*.json` files exist, read them
+  to identify loci where specific falsifiable claims from different sources
+  directly contradict each other. This is stronger evidence for a dialectical
+  locus than prose-level disagreement.
 
 ## Procedure
 
@@ -114,6 +126,14 @@ depth packet becomes a weak draft section.
    to list every note the orchestrator fetched in Layer 1. If the corpus is
    sparse (<10 notes), tell the parent and stop — you cannot identify real
    loci from a thin corpus.
+
+1a. **Check for contradiction graph.** If `research/temp/contradiction-graph.json`
+   exists, read it. For each cluster with `decision_relevance: "high"`:
+   - Validate the fight is genuine (not a scope mismatch)
+   - If valid, add directly to your candidate loci as `flavor: "dialectical"`
+   - Use the cluster's `side_a`/`side_b` directly as `opposing_positions`
+   This pre-structured input is the primary source for dialectical loci.
+   You may still identify convergent loci from your own reading.
 
 2. **Read breadth first.** For each note, read the title + summary + first
    ~400 chars (use `{hpr_path} note show <id> -j` and truncate). Do NOT read
@@ -308,10 +328,18 @@ reading of the evidence.
    `{hpr_path} note show <id1> <id2> <id3> --json`
    Understand what the corpus already says about your locus.
 
-2. **Plan your source budget.** You get AT MOST 10 new sources. Plan which
-   to fetch first — prefer canonical / highly-cited sources over random
-   secondary commentary. The suggested_starting_urls are a starting point,
-   not a cap.
+   **Check for structured claims.** If `/tmp/claims-<note-id>.json` files
+   exist for corpus evidence notes, read them. Use the structured claims
+   to identify which specific assertions are contested or under-evidenced
+   for your locus — investigate those specific claims, not just the topic
+   generally. Claims with opposing `stance` values on the same
+   `stance_target` are prime investigation targets.
+
+2. **Plan your source budget.** Your budget is `locus.source_budget` if
+   provided (set by the orchestrator based on importance/uncertainty
+   scoring). If not provided, default to 10. Plan which sources to fetch
+   first — prefer canonical / highly-cited sources over random secondary
+   commentary. The suggested_starting_urls are a starting point, not a cap.
 
 3. **Fetch new sources via the fetcher subagent.** Do NOT call
    `{hpr_path} fetch` directly. Delegate to `hyperresearch-fetcher` via the
@@ -396,16 +424,29 @@ paragraph — honor the tension by giving each side its strongest case.
 
 ## Committed position
 
-ONE paragraph. Take a side. State what the evidence ADDS UP TO, not
-what it says. Use language like "I read this as...", "The evidence
-here weighs toward...", "The dominant view is X but I would argue Y
-because Z." For dialectical loci, commit to which position has better
-evidence OR to a synthesis that respects both sides; do not hedge with
-"both have merit." Name the load-bearing reason for your position in
-one sentence so the orchestrator can weight it. This section is
-argumentative. A descriptive "on balance, the sources converge on..."
-is insufficient — that's still a summary. You must COMMIT to a claim
-the orchestrator can cite.
+ONE paragraph taking a side, followed by calibration fields. State what
+the evidence ADDS UP TO, not what it says. For dialectical loci, commit
+to which position has better evidence OR to a synthesis; do not hedge
+with "both have merit." Name the load-bearing reason for your position
+in one sentence. This section is argumentative — a descriptive "on
+balance, the sources converge on..." is insufficient.
+
+**Required calibration fields (after your prose paragraph):**
+
+- **Position:** one-sentence committed claim
+- **Confidence:** high (>80% certain given available evidence) |
+  medium (50-80%) | low (30-50%) — calibrate honestly. If only 2 of 5
+  sources support your position, say medium, not high.
+- **Boundary conditions:** under what conditions this position holds.
+  "This applies to [scope X] because [reason]; outside [scope X], the
+  evidence is insufficient / contradictory / points the other way."
+- **What would change this position:** the specific evidence that would
+  flip your reading. "If a large-N study showed X < threshold Y, this
+  position would not hold." This is the single most valuable calibration
+  signal — it tells Layer 3.5 where the argument is weakest and Layer 4
+  where to hedge honestly vs. assert confidently.
+- **Evidence weight:** brief accounting — e.g., "3 empirical studies
+  support, 1 theoretical model contradicts, 2 case studies are ambiguous."
 
 **Prescriptive specificity.** Whenever the evidence supports it, state
 a specific rule, threshold, percentage, time window, or named mechanism
@@ -458,8 +499,10 @@ orchestrator's citation assembly.
   a dense synthesis packet for the orchestrator to read. Do not try to
   write prose that will go straight into the final draft; write prose
   that will inform it.
-- **Cap yourself at 10 new fetches.** More than that wastes context and
-  budget. If you genuinely need more, tell the orchestrator at the end
+- **Cap yourself at `locus.source_budget` new fetches** (default 10 if
+  not specified). If your budget is 15, use it — the orchestrator scored
+  your locus high on importance/uncertainty. If your budget is 5, be
+  surgical. If you genuinely need more, tell the orchestrator at the end
   and recommend a follow-up locus.
 - **If the locus is unanswerable** (sources are paywalled, the question is
   premature, the evidence conflicts too sharply to synthesize) — say so
@@ -1907,6 +1950,39 @@ For each URL you are given:
 
    Add multiple relevant tags based on the actual content.
 
+5a. **Extract structured claims.** After writing the summary, extract every
+   load-bearing falsifiable claim the source makes and write them as a JSON
+   array to `/tmp/claims-<note-id>.json` (use the Write tool or `echo`).
+
+   Each claim object:
+   ```json
+   {{
+     "claim": "one-sentence falsifiable statement",
+     "stance": "supports|refutes|neutral",
+     "stance_target": "what position this supports/refutes, if any",
+     "evidence_type": "empirical|theoretical|anecdotal|expert-opinion|statistical|legal|historical",
+     "scope_conditions": "geographic, temporal, domain constraints",
+     "quoted_support": "verbatim quote from source, max 2 sentences",
+     "numbers": ["specific numbers, thresholds, percentages mentioned"],
+     "entities": ["named entities relevant to this claim"],
+     "time_period": "temporal scope if stated",
+     "region": "geographic scope if stated",
+     "confidence": "high|medium|low — how confident the SOURCE is",
+     "source_note_id": "<note-id>"
+   }}
+   ```
+
+   **Caps by source density:**
+   - Short/thin sources: 3-8 claims
+   - Medium sources: 8-15 claims
+   - Long/dense sources: 15-25 claims
+
+   Do NOT pad with trivial claims ("X exists", "Y is a topic"). Each claim
+   must be load-bearing — something the downstream pipeline could argue with,
+   build on, or refute. If a source has only 2 real claims, write 2.
+
+   If the source is junk/off-topic (deprecated in step 4), skip claim extraction.
+
 6. Report back: the note ID, title, word count, your summary, quality verdict (good/junk/off-topic), AND a list of links found in the content that look like they lead to primary sources, references, related material, or deeper content. The parent agent will decide what to pursue.
 
 If a fetch fails (JUNK_CONTENT, FETCH_ERROR, AUTH_REQUIRED), report the failure and move on to the next URL. Do NOT stop on first failure — try all URLs.
@@ -1914,6 +1990,107 @@ If a fetch fails (JUNK_CONTENT, FETCH_ERROR, AUTH_REQUIRED), report the failure 
 If given multiple URLs and fetching works, process them sequentially. Report results for each.
 
 Keep your responses short — just the facts. The parent agent will synthesize.
+"""
+
+
+CORPUS_CRITIC_AGENT = """\
+---
+name: hyperresearch-corpus-critic
+description: >
+  Use this agent in Layer 3.7 of the layercake protocol. Reads the full
+  corpus (width + depth sources), the contradiction graph, the loci,
+  and comparisons.md, then asks: "what source, if found, would overturn
+  the current direction?" Outputs a targeted fetch list of 3-8
+  high-leverage missing sources. Runs on Sonnet. Spawn ONCE before
+  drafting, after Layer 3.5 comparisons.
+model: sonnet
+tools: Bash, Read, Write
+color: teal
+---
+
+You are the corpus critic. Your job: BEFORE the draft is written,
+identify the most dangerous gaps in the evidence base. You ask one
+question of every committed position and every consensus claim:
+"What source, if it existed, would overturn this?"
+
+## Pipeline position
+
+You are **Layer 3.7** — between cross-locus comparisons (Layer 3.5) and
+the draft (Layer 4). Everything gathered so far is available: width
+corpus, depth interim notes with committed positions, contradiction
+graph, comparisons.md. After you return, the orchestrator runs a
+targeted fetch wave to fill the gaps you identified, THEN proceeds
+to drafting.
+
+## Inputs (from the parent agent)
+
+- **research_query**: verbatim. GOSPEL.
+- **corpus_tag**: vault tag for searching.
+- **comparisons_path**: `research/comparisons.md`
+- **loci_path**: `research/loci.json`
+- **output_path**: `research/corpus-critic-gaps.json`
+
+## Procedure
+
+1. **Read comparisons.md.** For each committed position and cross-locus
+   tension:
+   - Read the investigator's "What would change this position" field
+   - Name the specific counter-evidence that would weaken the position
+   - Name the specific source TYPE that would strengthen it
+   - Example: "Position: FRMCS will be industry standard by 2030.
+     Overturning source: a deployment timeline study showing delays
+     past 2035. Strengthening source: vendor commitment data showing
+     95%+ adoption plans."
+
+2. **Read consensus claims** from `research/temp/consensus-claims.json`
+   (if it exists). For each high-confidence consensus:
+   - Is there a plausible dissenting source you haven't looked for?
+   - Is the consensus supported by INDEPENDENT sources, or by
+     derivative sources tracing to one upstream report? Check
+     `research/temp/redundancy-audit.md` if it exists.
+
+3. **Check the redundancy audit** (`research/temp/redundancy-audit.md`).
+   Are any positions supported only by derivative sources? That support
+   is fragile — flag it.
+
+4. **Search the vault** for existing sources that might already contain
+   overturning evidence that the investigators missed:
+   ```bash
+   PYTHONIOENCODING=utf-8 {hpr_path} search "<adversarial query>" --tag <corpus_tag> -j
+   ```
+
+5. **Produce output** at `output_path`:
+   ```json
+   {{
+     "gaps": [
+       {{
+         "type": "overturning|strengthening|independent-verification",
+         "target_position": "which claim/position this source would test",
+         "search_queries": ["2-3 specific search queries to find this source"],
+         "source_type": "academic|government|industry|investigative",
+         "priority": "critical|high|medium",
+         "rationale": "why finding this source matters for the draft"
+       }}
+     ]
+   }}
+   ```
+
+   **Cap: 3-8 gaps.** Only `critical` and `high` priority. Do not
+   identify gaps for tangential topics — every gap must serve the
+   research_query.
+
+## Rules
+
+- Every gap must be **actionable** — specific enough to turn into a
+  search query that a fetcher can execute.
+- **Overturning sources are highest priority.** The draft needs to
+  either find them (and adjust the committed position) or confirm they
+  don't exist (and commit harder).
+- Do NOT flag things the width sweep already covered. Check the vault
+  first.
+- Do NOT re-litigate the investigators' positions. Your job is to find
+  what's MISSING from the evidence base, not to disagree with how it
+  was interpreted.
 """
 
 
@@ -1964,10 +2141,10 @@ if (vault) {{
 def install_hooks(vault_root: Path, hpr_path: str = "hyperresearch") -> list[str]:
     """Install the Claude Code hook + skills + subagents. Returns list of actions taken.
 
-    Layercake roster (as of v0.8.0):
+    Layercake roster (as of v0.9.0):
       fetcher (Layer 1, 3), loci-analyst (Layer 2), depth-investigator (Layer 3),
-      source-analyst (on-demand, 1M context), dialectic-critic +
-      depth-critic + width-critic + instruction-critic (Layer 5),
+      source-analyst (on-demand, 1M context), corpus-critic (Layer 3.7),
+      dialectic-critic + depth-critic + width-critic + instruction-critic (Layer 5),
       patcher (Layer 6), polish-auditor (Layer 7),
       readability-reformatter (Layer 8, experimental).
     """
@@ -1988,6 +2165,7 @@ def install_hooks(vault_root: Path, hpr_path: str = "hyperresearch") -> list[str
         lambda: _install_patcher_agent(vault_root, hpr_path),
         lambda: _install_polish_auditor_agent(vault_root, hpr_path),
         lambda: _install_readability_reformatter_agent(vault_root, hpr_path),
+        lambda: _install_corpus_critic_agent(vault_root, hpr_path),
         lambda: _prune_retired_agents(vault_root),
     ):
         result = installer()
@@ -2173,6 +2351,16 @@ def _install_readability_reformatter_agent(vault_root: Path, hpr_path: str) -> s
         "hyperresearch-readability-reformatter.md",
         content,
         "opus readability reformatter (Read+Edit only)",
+    )
+
+
+def _install_corpus_critic_agent(vault_root: Path, hpr_path: str) -> str | None:
+    content = CORPUS_CRITIC_AGENT.replace("{hpr_path}", hpr_path)
+    return _write_agent_file(
+        vault_root,
+        "hyperresearch-corpus-critic.md",
+        content,
+        "sonnet corpus critic (Layer 3.7)",
     )
 
 

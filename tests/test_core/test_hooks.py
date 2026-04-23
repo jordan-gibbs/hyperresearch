@@ -353,13 +353,14 @@ def test_install_hooks_registers_full_layercake_roster(tmp_vault):
     actions = install_hooks(tmp_vault.root, "hyperresearch")
     assert actions  # something happened
 
-    # All 11 agent files must be present
+    # All 12 agent files must be present
     agents_dir = tmp_vault.root / ".claude" / "agents"
     expected_agents = {
         "hyperresearch-fetcher.md",
         "hyperresearch-loci-analyst.md",
         "hyperresearch-depth-investigator.md",
         "hyperresearch-source-analyst.md",
+        "hyperresearch-corpus-critic.md",
         "hyperresearch-dialectic-critic.md",
         "hyperresearch-depth-critic.md",
         "hyperresearch-width-critic.md",

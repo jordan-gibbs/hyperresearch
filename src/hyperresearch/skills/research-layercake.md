@@ -21,8 +21,8 @@ This is the orchestrator. You are running it as Opus. The pipeline spawns specia
 | Tier | Layers that run | Typical cost | Typical time |
 |------|----------------|-------------|-------------|
 | `light` | 0.5 → 1 (reduced) → 4 → 7 → 8 | ~$3–8 | ~3–8 min |
-| `standard` | 0.5 → 1 → 4 → 5 (2 critics) → 6 → 7 → 8 | ~$10–20 | ~10–20 min |
-| `full` | 0.5 → 1 → 2 → 3 → 3.5 → 4 → 5 (4 critics) → 6 → 7 → 8 | ~$30–50 | ~25–45 min |
+| `standard` | 0.5 → 1 → 1.5 → 4 → 5 (2 critics) → 6 → 7 → 8 | ~$10–20 | ~10–20 min |
+| `full` | 0.5 → 1 → 1.5 → 2 → 3 → 3.5 → 3.7 → 4 → 5 (4 critics) → 6 → 7 → 8 | ~$30–55 | ~25–50 min |
 
 **Three canonical rules:**
 
@@ -248,6 +248,23 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
    - Mix in 1–2 cross-cutting sources per batch to avoid tunnel vision
    - Put academic papers in their own batches (they're slower to fetch — PDF extraction)
 
+### Step 2.5 — Utility scoring and selection
+
+**Tier gate:** SKIP for `light`. Run for `standard` and `full`.
+
+Before batching URLs for fetchers, score each candidate URL on six dimensions (0–3 each, max composite 18):
+
+1. **Authority (0–3):** Primary data / government / academic (3) > institutional report (2) > quality journalism (1) > blog / derivative commentary (0)
+2. **Novelty (0–3):** Unique domain or perspective not yet in the queue (3) > partially overlapping (1) > redundant with another queued URL from the same site (0)
+3. **Stance diversity (0–3):** Explicitly adversarial / contrarian (3) > mixed-stance analysis (2) > neutral (1) > same-stance as queue majority (0)
+4. **Coverage (0–3):** Targets an uncovered atomic item (3) > thin item (2) > adequate item (1) > well-covered item (0)
+5. **Redundancy (0–3):** Likely novel content (3) > possibly overlapping with another queued URL (1) > almost certainly a rewrite of another queued source (0)
+6. **Freshness (0–3):** For temporal topics: last 12 months (3), 1–3 years (2), 3–5 years (1), older (0). For foundational topics: canonical/seminal (3), recent derivative (1).
+
+**Selection rule:** Rank by composite utility score. Select the top N URLs (where N = batch capacity × batch count from the Source Count Targets table). Hard constraint: every atomic item must have ≥3 candidate URLs before low-utility URLs from well-covered items are included.
+
+**Write the scored queue** to `research/temp/scored-urls.md` — a table with columns: URL, utility score, score breakdown, target atomic item. This is a planning artifact; it does NOT appear in the final report.
+
 ### Step 3 — Parallel fetcher waves (phased)
 
 **Wave 1 (main wave):** Spawn **10–12 fetcher subagents in ONE message** — that's true parallel execution. Each fetcher gets its own non-overlapping batch from Step 2. This single wave should fetch 80–120 URLs in the time it previously took to fetch 30.
@@ -297,6 +314,62 @@ These are substantive (non-deprecated) note counts. Junk doesn't count toward th
 
 **Exit criterion for Layer 1:** minimum source count met AND coverage check shows no `uncovered` atomic items (thin is acceptable, uncovered is not). If you fall short after two waves, proceed anyway but write `research/temp/coverage-gaps.md` listing what's missing so the drafter handles it.
 
+### Step 5.5 — Evidence redundancy audit
+
+**Tier gate:** SKIP for `light`. Run for `standard` and `full`.
+
+**Goal:** detect when N sources are really 1 source in N outfits. Ten articles all citing the same McKinsey report is coverage depth of 1, not 10.
+
+1. **Collect all claims.** Read `/tmp/claims-<note-id>.json` for every non-deprecated note tagged `<vault_tag>`. If no claim files exist (e.g., fetchers didn't produce them), skip this step.
+
+2. **Cluster by content overlap.** Sources sharing >60% of their `quoted_support` passages (by text similarity) are likely derivative. Flag each cluster.
+
+3. **Cluster by citation ancestry.** If source A cites source B, and source C also cites source B, and A's claims are a subset of C's claims — A is derivative commentary on B via C. Check `suggested-by` links in the vault graph to detect this.
+
+4. **For each cluster, identify the canonical upstream source.** Tag derivative sources with `derivative-of` in the redundancy report. Do NOT deprecate them — they may contain unique commentary — but discount them in coverage counting.
+
+5. **Write `research/temp/redundancy-audit.md`:**
+   - Each cluster: canonical source, derivative sources, overlap description
+   - Adjusted coverage counts per atomic item (original count vs. de-duped independent count)
+   - Any atomic item whose de-duped coverage drops below 2 → flag for Wave 3
+
+6. **Wave 3 fetch (conditional).** If any atomic item's independent source count drops below 2, run targeted searches specifically for INDEPENDENT sources on that item — from different institutions, different data sets, different methodological traditions. Spawn 2-3 fetchers with gap-filling URLs.
+
+---
+
+## Layer 1.5 — Contradiction graph (orchestrator, bridge step)
+
+**Tier gate:** SKIP for `light`. Run for `standard` and `full`.
+
+**Goal:** before loci analysis, build an explicit graph of opposing claims. Loci should emerge from where the evidence actually forks, not from agent intuition about what seems interesting.
+
+1. **Load all claims** from `/tmp/claims-*.json` files. If no claim files exist, skip this layer entirely — Layer 2 falls back to the current prose-scanning approach.
+
+2. **Pair contradictions.** For each claim, find claims from OTHER sources that contradict it. Match on:
+   - Same `stance_target` with opposing `stance` (supports vs. refutes)
+   - Same `entities` with opposite conclusions
+   - Same scope but different `numbers` (e.g., "market grew 15%" vs. "market shrank 3%")
+   - Overlapping `scope_conditions` but different `evidence_type` pointing different directions
+
+3. **Cluster contradiction pairs into fights.** Group related pairs into clusters — each cluster is one contested question:
+   ```json
+   {
+     "cluster_id": "short-slug",
+     "fight": "one-sentence description of what's contested",
+     "side_a": {"position": "...", "claims": ["claim-text-1", ...], "sources": ["note-id-1", ...]},
+     "side_b": {"position": "...", "claims": ["claim-text-1", ...], "sources": ["note-id-1", ...]},
+     "evidence_quality_delta": "which side has stronger evidence types (empirical > theoretical > anecdotal)",
+     "scope_overlap": "genuine disagreement, or are they scoped differently and both right?",
+     "decision_relevance": "high|medium|low — how much does resolving this matter for the research_query"
+   }
+   ```
+
+4. **Rank clusters** by decision_relevance (high first), then by evidence_quality_delta (tighter fights rank higher).
+
+5. **Write `research/temp/contradiction-graph.json`** — array of ranked fight clusters.
+
+6. **Identify consensus claims.** Claims where 3+ INDEPENDENT sources (after redundancy audit) agree. Write these to `research/temp/consensus-claims.json`. These are the "settled ground" the draft can assert confidently without hedging.
+
 ---
 
 ## Layer 2 — Loci analysis (parallel, 2 analysts)
@@ -317,10 +390,27 @@ These are substantive (non-deprecated) note counts. Junk doesn't count toward th
    - Read both JSON outputs.
    - Dedupe on `name` (exact match) or near-match (same core question, different phrasing). When in doubt, prefer the entry with stronger `corpus_evidence`.
    - If the deduped list exceeds 6, drop the weakest entries — rank by how load-bearing the rationale is for the canonical research query.
-   - The deduped, clamped list is authoritative. Write it to `research/loci.json`.
-   - **Persist both analysts' `skip_loci` arrays** in the same file — union them under a top-level `skip_loci` key. These justifications matter downstream: the `locus-coverage` lint rule can cross-reference them when an interim note is "missing" to distinguish real investigator failure from legitimate skip. Schema: `{"loci": [...deduped-clamped...], "skip_loci": [...union from both analysts...]}`.
+   - **Persist both analysts' `skip_loci` arrays** in the same file — union them under a top-level `skip_loci` key. These justifications matter downstream: the `locus-coverage` lint rule can cross-reference them when an interim note is "missing" to distinguish real investigator failure from legitimate skip.
 
-4. **Decide investigator count.** You spawn ONE depth-investigator per locus, capped at 6. If only 1 locus passes dedupe, spawn 1. The cap is a cost control — depth investigators can each fetch up to 10 new sources, and 6 × 10 = 60 new sources on top of the width corpus is already a lot.
+4. **Score and budget each locus (dynamic depth allocation).** For each surviving locus, compute four dimensions:
+   - **importance** (0-10): how central is this locus to the research_query? A locus that directly answers a primary sub-question from the decomposition scores 8-10; a tangential enrichment scores 2-4.
+   - **uncertainty** (0-10): how uncertain is the current evidence? If the contradiction graph shows a sharp fight with equal-quality evidence on both sides, uncertainty is high (8-10). If one side has clearly stronger evidence, moderate (4-6). If the corpus already resolves this, low (1-3).
+   - **disagreement** (0-10): how many independent sources disagree? Proxy from the contradiction cluster size. Singleton fights score low (2-3); multi-source fights score high (7-10). If no contradiction graph exists, estimate from the loci analyst's `opposing_positions`.
+   - **decision_impact** (0-10): would resolving this locus change the draft's recommendation or thesis? If yes, high (8-10). If it adds nuance but doesn't change direction, moderate (4-6).
+
+   **Composite score** = importance + uncertainty + disagreement + decision_impact (max 40).
+
+   **Allocate source budgets.** Total source budget for Layer 3 is 40 (same aggregate cost ceiling as the old 6 × ~7 average). Distribute proportionally:
+   - Loci scoring 30-40: `source_budget` up to 15 (deep dive)
+   - Loci scoring 20-29: `source_budget` up to 10 (standard)
+   - Loci scoring 10-19: `source_budget` up to 5 (shallow pass)
+   - Loci scoring <10: `source_budget` 0-3, or skip investigation entirely and use width corpus only
+
+   It's fine if only 1-2 loci score above 20 — allocate heavily to them. The old flat budget wasted sources on low-value loci.
+
+5. **Write scored loci to `research/loci.json`.** Each locus object now includes: `importance`, `uncertainty`, `disagreement`, `decision_impact`, `composite_score`, `source_budget`. Schema: `{"loci": [...scored-loci...], "skip_loci": [...union from both analysts...]}`.
+
+6. **Decide investigator count.** Spawn ONE depth-investigator per locus with `source_budget > 0`, capped at 6. If only 1 locus passes scoring, spawn 1. Loci with `source_budget: 0` are skipped — their width corpus coverage is sufficient.
 
 **Placeholder-breadcrumb ban reminder:** depth investigators will fetch sources; make sure your instructions to them match what the fetcher will accept. Do not hand them breadcrumb placeholders like `layercake-locus-seed` — use real source note ids from the vault or omit `--suggested-by` entirely.
 
@@ -333,9 +423,10 @@ These are substantive (non-deprecated) note counts. Junk doesn't count toward th
 **Goal:** produce ONE `interim-{locus}.md` note per locus with dense synthesis that the orchestrator will draft from in Layer 4.
 
 1. **Spawn K `hyperresearch-depth-investigator` subagents in parallel.** Pass each:
-   - `locus` — the full locus object from `research/loci.json`
+   - `locus` — the full locus object from `research/loci.json` (includes `source_budget`)
    - `research_query` — canonical, verbatim
    - `corpus_tag` — `<vault_tag>`
+   - Each investigator's hard cap is `locus.source_budget`, not a flat 10.
 
 2. **Each investigator writes ONE interim note** into the vault with `type: interim` and tags `<vault_tag>` + `locus-<locus-name>`. Return value is the note id.
 
@@ -445,7 +536,43 @@ prompt: |
 ## Tension 2: ...
 ```
 
-5. **This document is the argumentative spine of your draft.** Every tension you name here must become a visible argumentative beat in the final report — a paragraph or section that engages the disagreement explicitly, not a one-line gesture. If you write `comparisons.md` with 4 tensions and the draft only visibly engages 1 of them, the insight score suffers.
+5. **Calibration synthesis.** For each tension, note the investigators' confidence levels and "what would change this position" conditions from their calibrated committed positions. When two investigators disagree but one is "high confidence" and the other is "low confidence," the draft should weight accordingly — note this in the engagement guidance. When both name the same "what would change my mind" condition, that is a genuine open question the draft should flag explicitly rather than papering over.
+
+6. **This document is the argumentative spine of your draft.** Every tension you name here must become a visible argumentative beat in the final report — a paragraph or section that engages the disagreement explicitly, not a one-line gesture. If you write `comparisons.md` with 4 tensions and the draft only visibly engages 1 of them, the insight score suffers.
+
+---
+
+## Layer 3.7 — Pre-draft corpus critic (targeted gap-fill)
+
+**Tier gate:** `full` tier ONLY. Skip for `light` and `standard`.
+
+**Goal:** before drafting, ask "what source, if found, would overturn the current direction?" and run a targeted fetch wave to fill the most dangerous gaps. This is the highest-leverage intervention point in the pipeline — corrections applied before drafting cost nothing; corrections applied after drafting require patches and risk structural drift.
+
+### Procedure
+
+1. **Spawn ONE `hyperresearch-corpus-critic` subagent** (Sonnet). Pass it:
+   - `research_query` — verbatim, gospel
+   - `corpus_tag` — vault tag for this run
+   - `comparisons_path` — `research/comparisons.md`
+   - `loci_path` — `research/loci.json`
+   - `output_path` — `research/corpus-critic-gaps.json`
+   - Pipeline position statement: "You are Layer 3.7 of the layercake pipeline. Layer 3.5 produced comparisons.md. After you return, the orchestrator runs a targeted fetch wave, then Layer 4 drafts."
+
+2. **Read the gaps output** (`research/corpus-critic-gaps.json`). Each gap has a `priority` (critical / high) and a `type` (overturning / strengthening / independent-verification).
+
+3. **Targeted fetch wave.** Spawn **2–4 fetcher subagents** (Haiku) to search for and fetch the sources identified in the gaps. Each fetcher receives:
+   - The gap's `search_queries` as its search input
+   - The gap's `source_type` to guide source selection
+   - Standard fetcher contract (tag with vault_tag, write summaries, extract claims)
+
+4. **Assess results.**
+   - **Overturning source found:** re-read the relevant committed position from the interim note. If the new source genuinely undercuts it, update `research/comparisons.md` to note the weakened position — the draft will handle it with appropriate calibration. Do NOT re-run the full depth investigation; adjust the position's confidence level in the comparisons file.
+   - **Overturning source NOT found:** the committed position gains confidence. Note this in `comparisons.md` — "adversarial search for counter-evidence to [position] returned no substantive challenges."
+   - **Strengthening/verification source found:** note the additional support in `comparisons.md`. The draft can assert more confidently.
+
+5. **Log results** to `research/temp/corpus-critic-results.md`:
+   - Each gap: what was searched, what was found (or not), how it affects the committed positions
+   - Updated confidence levels for any positions that changed
 
 ---
 
@@ -511,6 +638,13 @@ prompt: |
    - **Every body section argues, not just the synthesis.** A common failure mode is drafts that save commitment for the synthesis section and leave body sections in descriptive / reporting mode. That doesn't work — the body is where evidence is introduced, and the body is where arguments should LAND. Each H2 should end with (or contain) at least one sentence that commits to a reading of that section's evidence. "Here is how this evidence is best understood" belongs in every section, not just the final one.
    - **Weave named tensions INLINE with immediate resolution.** When a cross-locus tension from `comparisons.md` is relevant to a body section, engage it inline in that section — name the tension, quote the strongest version of each side, and commit to a reading — then move on. Do NOT gather tensions into a dedicated "Source Tensions" H2 at the end; that gives the reader an unresolved buffet. Reference-quality reports name tensions where they arise in the doctrinal or analytical flow and resolve them immediately.
    - **Prescriptive specificity when evidence supports it.** When an investigator's `## Committed position` contains a specific threshold, number, rule, or named mechanism, preserve that specificity in the draft. Do not soften "manufacturer liability attaches when handover warnings fall below 10 seconds at highway speeds" into "manufacturer liability attaches when warnings are too brief." The precision is the authority; softening it to LLM-directional language drops the report's prescriptive weight. If a recommendation in the draft reads abstract, ask yourself what specific threshold or rule the evidence supports, and say it.
+
+7a. **Calibrated assertion rules.** When depth investigators provide calibrated committed positions (with confidence levels), use these to control assertion tone in the draft:
+   - **High confidence (>80%):** Assert directly and authoritatively. "X is the case because Y." No hedging needed.
+   - **Medium confidence (50–80%):** Assert with boundary conditions stated. "Under conditions A and B, X holds — though C could shift this." Name the scope explicitly.
+   - **Low confidence (30–50%):** Present as the best available reading. "Current evidence points toward X, though this remains contested" or "The balance of evidence favors X, pending [specific condition]."
+   - When two investigators disagree, the draft should weight the higher-confidence position more heavily — but must engage the lower-confidence counterargument explicitly rather than silently dropping it.
+   - When a corpus critic search (Layer 3.7) found no overturning evidence for a position, the draft can assert that position one tier more confidently than the investigator's original calibration.
 
 8. **Source attribution (controlled by `citation_style`).** Read `citation_style` from `research/prompt-decomposition.json`.
 
@@ -814,7 +948,7 @@ If any rule returns `error` severity issues, address them before declaring the r
 
 6. **Depth investigators' outputs are interim notes, not prose sections.** You consume their synthesis and positions in Layer 4. You do not paste their text into the draft; you weave it and reconcile it against other investigators.
 
-7. **Layers are sequential at the outermost level, parallel within.** You cannot start Layer 2 before Layer 1 completes, Layer 3 before Layer 2 completes, Layer 3.5 before Layer 3 completes, Layer 4 before Layer 3.5 completes. Within a layer, parallelism is mandatory when there are multiple subagents (spawn them in one message).
+7. **Layers are sequential at the outermost level, parallel within.** You cannot start Layer 2 before Layer 1 completes, Layer 3 before Layer 2 completes, Layer 3.5 before Layer 3 completes, Layer 3.7 before Layer 3.5 completes, Layer 4 before Layer 3.7 completes (or Layer 3.5 if 3.7 is skipped by tier). Within a layer, parallelism is mandatory when there are multiple subagents (spawn them in one message).
 
 8. **Canonical research query is gospel everywhere.** Every subagent you spawn gets the canonical research query as an explicit input. Do not let wrapper instructions leak into their task prompts.
 
