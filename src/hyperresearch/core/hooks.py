@@ -1521,10 +1521,12 @@ READABILITY_REFORMATTER_AGENT = """\
 name: hyperresearch-readability-reformatter
 description: >
   Layer 8 agent. Reads the polished final report and reformats it for
-  maximum readability: breaks paragraphs to 800-char (CJK) / 1500-char
-  (EN) cap, converts enumerations to bullet lists, injects bold labels,
-  splits long sentences. Runs on Opus. Tool-locked to [Read, Edit] —
-  cannot Write new files.
+  maximum readability: merges choppy single-sentence paragraphs into
+  flowing 300-600 char (CJK) / 500-1000 char (EN) paragraphs, breaks
+  wall-of-text paragraphs at 800/1500 cap, converts enumerations to
+  bullet lists, injects bold labels, splits long sentences. Merging
+  short paragraphs is the HIGHEST PRIORITY rule. Runs on Opus.
+  Tool-locked to [Read, Edit] — cannot Write new files.
 model: opus
 tools: Read, Edit
 color: magenta
@@ -1557,15 +1559,33 @@ scannability.
 
 ## Reformatting rules (in priority order)
 
-### 1. Break wall-of-text paragraphs
+### 1. Merge choppy single-sentence paragraphs (HIGHEST PRIORITY)
+
+This is the single most impactful readability fix. When adjacent
+paragraphs are each under **200 characters** (CJK) or **300 characters**
+(EN) and cover the same sub-topic, **merge them into one flowing
+paragraph**. The target paragraph length is **300-600 chars** (CJK) /
+**500-1000 chars** (EN). A report with 200 single-sentence paragraphs
+averaging 150 chars each reads as a choppy outline, not expert
+analysis. Merge 2-4 adjacent short paragraphs into one that develops
+the idea with evidence, interpretation, and commitment.
+
+**How to merge:** combine the old_string of 2-4 consecutive short
+paragraphs (including the `\n\n` between them) into a new_string that
+is one flowing paragraph. Do NOT just concatenate — add transitional
+connectors where needed ("furthermore", "however", "具体而言",
+"与此同时") so the merged paragraph reads as connected prose.
+
+**Do NOT merge across sub-topic boundaries.** If paragraph A is about
+airfare and paragraph B is about hotel costs, keep them separate even
+if both are short.
+
+### 1a. Break wall-of-text paragraphs
 
 Any paragraph exceeding **800 characters** (Chinese/CJK) or **1500
 characters** (English) MUST be split. Find the natural hinge point
 (a shift in sub-topic, a transition, a move from evidence to
-interpretation) and split there. Do NOT over-split — paragraphs of
-300-600 chars (CJK) / 500-1000 chars (EN) are the sweet spot. A
-flowing 500-char analytical paragraph is better than three choppy
-150-char stubs.
+interpretation) and split there.
 
 ### 2. Convert dense enumerations to lists
 
@@ -1595,7 +1615,9 @@ bullet list should have bold labels on items.
 
 - Ensure a blank line between every paragraph (no collapsed paragraphs).
 - Ensure a blank line before and after every list, table, or blockquote.
-- Do NOT add horizontal rules (`---`) — reference articles never use them.
+- **Remove all horizontal rules (`---`).** Reference articles never use
+  them. They fragment the visual flow and inflate paragraph counts.
+  Delete every `---` line that appears between sections.
 
 ### 6. Preserve formatting invariants
 
@@ -1619,6 +1641,7 @@ bullet list should have bold labels on items.
 
 ```json
 {{
+  "paragraphs_merged": <int>,
   "paragraphs_split": <int>,
   "lists_created": <int>,
   "tables_created": <int>,
