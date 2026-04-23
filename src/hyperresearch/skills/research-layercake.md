@@ -276,7 +276,7 @@ Before batching URLs for fetchers, score each candidate URL on six dimensions (0
 **CRITICAL: never emit bare text while waiting for tasks.** In `-p` (non-interactive) mode, a text-only response with no tool call triggers `end_turn` — the process exits and the pipeline dies. When fetchers are still running, you MUST keep the conversation alive by always including a tool call in your response. After each batch notification, immediately run a vault count check:
 
 ```bash
-PYTHONIOENCODING=utf-8 $HPR search "" --tag <vault_tag> --json | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Notes in vault: {len(d.get(\"data\",{}).get(\"results\",[]))}')"
+PYTHONIOENCODING=utf-8 $HPR search "" --tag <vault_tag> --json | python -c "import sys,json; d=json.load(sys.stdin); print(f'Notes in vault: {len(d.get(\"data\",{}).get(\"results\",[]))}')"
 ```
 
 This serves two purposes: (1) it keeps the turn alive so the next task notification can arrive, and (2) it gives you a ground-truth count that survives context compaction.
@@ -777,15 +777,12 @@ prompt: |
 0. **Skip gate (optional — for advanced users).** Before spawning the patcher, check whether `research/skip-patcher.txt` exists. If it does, the invoker has requested that Layer 6 be bypassed for this run. In that case, skip steps 1–6 entirely and record a minimal log:
 
 ```bash
-# Count findings across all four critic JSON files
-total=$(jq -s '[.[] | .findings | length] | add' \
-  research/critic-findings-dialectic.json \
-  research/critic-findings-depth.json \
-  research/critic-findings-width.json \
-  research/critic-findings-instruction.json 2>/dev/null)
-cat > research/patch-log.json <<EOF
-{"total_findings": ${total:-0}, "applied": [], "skipped": [{"reason": "patcher-skipped-by-invoker"}], "conflicts": [], "orchestrator_escalated": []}
-EOF
+python -c "
+import json, pathlib
+files = ['research/critic-findings-dialectic.json','research/critic-findings-depth.json','research/critic-findings-width.json','research/critic-findings-instruction.json']
+total = sum(len(json.loads(pathlib.Path(f).read_text()).get('findings',[])) for f in files if pathlib.Path(f).exists())
+pathlib.Path('research/patch-log.json').write_text(json.dumps({'total_findings': total, 'applied': [], 'skipped': [{'reason': 'patcher-skipped-by-invoker'}], 'conflicts': [], 'orchestrator_escalated': []}))
+"
 ```
 
 Then proceed directly to Layer 7 (polish auditor). Do NOT spawn the patcher and do NOT attempt to apply findings yourself — the skip flag is respected as-is. Most runs should not use this gate; it exists for users who want to compare draft quality with and without surgical patching.
@@ -970,7 +967,7 @@ If any rule returns `error` severity issues, address them before declaring the r
 
 11. **NEVER emit a bare text response while subagent tasks are in flight.** In non-interactive (`-p`) mode, a text-only response with no tool call triggers `end_turn` — Claude Code exits the process and the pipeline dies permanently. This is the single most dangerous failure mode in the pipeline: the orchestrator says "waiting for batch N" as plain text, the session terminates, and no report is ever written. **Every response while tasks are running MUST include at least one tool call** — a vault count check, a file read, anything. The specific tool call to use:
     ```bash
-    PYTHONIOENCODING=utf-8 $HPR search "" --tag <vault_tag> --json | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Notes in vault: {len(d.get(\"data\",{}).get(\"results\",[]))}')"
+    PYTHONIOENCODING=utf-8 $HPR search "" --tag <vault_tag> --json | python -c "import sys,json; d=json.load(sys.stdin); print(f'Notes in vault: {len(d.get(\"data\",{}).get(\"results\",[]))}')"
     ```
     This keeps the turn alive AND gives you a compaction-resilient ground-truth count of fetched sources. Apply this rule at EVERY parallel wait point: Layer 1 fetcher waves, Layer 2 loci analysts, Layer 3 depth investigators, Layer 5 critics, and any conditional fetch waves (Wave 2, Wave 3, Layer 3.7 corpus critic fetches).
 
