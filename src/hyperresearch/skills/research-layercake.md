@@ -332,7 +332,7 @@ These are substantive (non-deprecated) note counts. Junk doesn't count toward th
 
 **Goal:** detect when N sources are really 1 source in N outfits. Ten articles all citing the same McKinsey report is coverage depth of 1, not 10.
 
-1. **Collect all claims.** Read `/tmp/claims-<note-id>.json` for every non-deprecated note tagged `<vault_tag>`. If no claim files exist (e.g., fetchers didn't produce them), skip this step.
+1. **Collect all claims.** Read `research/temp/claims-<note-id>.json` for every non-deprecated note tagged `<vault_tag>`. If no claim files exist (e.g., fetchers didn't produce them), skip this step.
 
 2. **Cluster by content overlap.** Sources sharing >60% of their `quoted_support` passages (by text similarity) are likely derivative. Flag each cluster.
 
@@ -355,7 +355,7 @@ These are substantive (non-deprecated) note counts. Junk doesn't count toward th
 
 **Goal:** before loci analysis, build an explicit graph of opposing claims. Loci should emerge from where the evidence actually forks, not from agent intuition about what seems interesting.
 
-1. **Load all claims** from `/tmp/claims-*.json` files. If no claim files exist, skip this layer entirely — Layer 2 falls back to the current prose-scanning approach.
+1. **Load all claims** from `research/temp/claims-*.json` files. If no claim files exist, skip this layer entirely — Layer 2 falls back to the current prose-scanning approach.
 
 2. **Pair contradictions.** For each claim, find claims from OTHER sources that contradict it. Match on:
    - Same `stance_target` with opposing `stance` (supports vs. refutes)
@@ -487,7 +487,7 @@ prompt: |
 
   YOUR INPUTS:
   - source_note_id: <the vault note id of the long source>
-  - output_path: /tmp/source-analysis-<source_note_id>.md
+  - output_path: research/temp/source-analysis-<source_note_id>.md
   - vault_tag: <vault_tag>
 
   Read the source end-to-end, produce the structured analysis digest,

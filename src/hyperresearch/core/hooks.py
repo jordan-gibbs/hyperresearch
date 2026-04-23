@@ -115,7 +115,7 @@ depth packet becomes a weak draft section.
   disagreement, not surface-level topic analysis. Validate them (are the
   sources real? is the fight genuine or a scope mismatch?) and promote
   validated high-relevance clusters directly to your loci list.
-- **claim_files** (optional): if `/tmp/claims-*.json` files exist, read them
+- **claim_files** (optional): if `research/temp/claims-*.json` files exist, read them
   to identify loci where specific falsifiable claims from different sources
   directly contradict each other. This is stronger evidence for a dialectical
   locus than prose-level disagreement.
@@ -328,7 +328,7 @@ reading of the evidence.
    `{hpr_path} note show <id1> <id2> <id3> --json`
    Understand what the corpus already says about your locus.
 
-   **Check for structured claims.** If `/tmp/claims-<note-id>.json` files
+   **Check for structured claims.** If `research/temp/claims-<note-id>.json` files
    exist for corpus evidence notes, read them. Use the structured claims
    to identify which specific assertions are contested or under-evidenced
    for your locus — investigate those specific claims, not just the topic
@@ -379,14 +379,19 @@ reading of the evidence.
    accounting. This is a real failure mode observed in past runs; do not
    fall into it.
 
-   If no existing note matches, create the new one:
+   If no existing note matches, create the new one. First ensure the
+   temp directory exists, then write the body file and create the note:
+
+```bash
+mkdir -p research/temp
+```
 
 ```bash
 {hpr_path} note new "Interim report — <locus name>" \\
   --tag <corpus_tag> \\
   --tag locus-<locus-name> \\
   --type interim \\
-  --body-file /tmp/interim-report-<locus-name>.md \\
+  --body-file research/temp/interim-report-<locus-name>.md \\
   --summary "<one-line summary of what you found>" \\
   --json
 ```
@@ -1735,7 +1740,7 @@ analyst, fetch new sources, or move on.
   full body.
 - **output_path**: the markdown file path where you write the analysis
   body BEFORE calling `note new --body-file` (e.g.,
-  `/tmp/source-analysis-<source_note_id>.md`).
+  `research/temp/source-analysis-<source_note_id>.md`).
 - **vault_tag**: the run-level corpus tag so the new note is findable
   alongside its sibling notes.
 
@@ -1975,7 +1980,7 @@ For each URL you are given:
 
 5a. **Extract structured claims.** After writing the summary, extract every
    load-bearing falsifiable claim the source makes and write them as a JSON
-   array to `/tmp/claims-<note-id>.json` (use the Write tool or `echo`).
+   array to `research/temp/claims-<note-id>.json` (use the Write tool or `echo`).
 
    Each claim object:
    ```json
