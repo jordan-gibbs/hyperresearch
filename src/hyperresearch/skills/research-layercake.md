@@ -271,6 +271,13 @@ Before batching URLs for fetchers, score each candidate URL on six dimensions (0
 
 **CRITICAL: no token waste.** Each fetcher gets ONLY its batch. No fetcher searches for new URLs or duplicates another fetcher's work. The orchestrator did the searching in Step 2; fetchers just fetch, check quality, and summarize. If a fetcher finishes early, it's done — it does NOT go find more URLs.
 
+**CRITICAL: compaction-resilient completion check.** When running 10+ parallel fetchers, context compaction WILL happen during the wait. After compaction, you lose track of which task notifications already arrived. Do NOT rely on counting in-context notifications to know when all fetchers are done. Instead:
+
+1. **Before spawning fetchers**, write `research/temp/expected-batches.txt` — one line per batch with its description (e.g., "Batch 1: UNWTO + industry overview").
+2. **After each batch notification**, do NOT just emit a status message and wait. Instead, run `$HPR search "" --tag <vault_tag> --json` to count actual notes in the vault. Compare against the expected total URL count from Step 2.
+3. **The wave is done when** the vault note count is ≥80% of the total URL count from the queue (some URLs will fail/be junk), OR when all spawned tasks have returned (check via TaskList if available).
+4. **If you find yourself saying "waiting for the last batch" but are unsure which batch is pending**, you have already lost state to compaction. Run the vault count check immediately and proceed to Step 5 if the count is reasonable. Do NOT wait indefinitely for a notification that may have already been compacted away.
+
 **Wave 2 (gap-filling, after coverage check):** Smaller, targeted. Only spawned if Step 5 identifies uncovered items. Typically 3–5 fetchers with 5–8 URLs each, all targeting specific gaps.
 
 ### Step 4 — Tag and quality control
