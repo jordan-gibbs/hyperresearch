@@ -24,13 +24,15 @@ This is the orchestrator. You are running it as Opus. The pipeline spawns specia
 | `standard` | 0.5 → 1 → 1.5 → 4 → 5 (2 critics) → 6 → 7 → 8 | ~$10–20 | ~10–20 min |
 | `full` | 0.5 → 1 → 1.5 → 2 → 3 → 3.5 → 3.7 → 4 → 5 (4 critics) → 6 → 7 → 8 | ~$30–55 | ~25–50 min |
 
-**Three canonical rules:**
+**Four canonical rules:**
 
-1. **PATCH, NEVER REGENERATE.** After the first draft is written (Layer 4), the draft is only ever modified by Edit hunks produced by the patcher (Layer 6) and the polish auditor (Layer 7). Both subagents are tool-locked to `[Read, Edit]`. Neither can Write a new draft. If a critic's finding would require rewriting a whole section, it escalates to you as a structural issue — not a rewrite. Keep hunks surgical: change as little as possible while addressing the issue.
+1. **NEVER EMIT BARE TEXT WHILE TASKS ARE RUNNING.** In non-interactive (`-p`) mode, a text-only response (no tool call) triggers `end_turn` — the process exits and the pipeline dies. This has killed benchmark runs: the orchestrator says "waiting for batch N" as plain text, the session terminates, no report is written. **Every response while subagent tasks are in flight MUST include a tool call.** Use a vault count check (`$HPR search "" --tag <vault_tag> --json`) — it keeps the turn alive AND gives you ground-truth source counts that survive context compaction.
 
-2. **ARGUE, DON'T JUST REPORT** (applies at full force to `argumentative` response_format; relaxed for `structured` and `short` — see Layer 4 step 0). The layercake pipeline is engineered to push the final report toward argumentative density. Loci analysts must flag at least one dialectical locus (where sources disagree). Depth investigators must commit to a position at the end of every interim note — not just summarize. Layer 3.5 forces you to reconcile those positions in `comparisons.md` before drafting. Layer 4 requires every body section that touches a cross-locus tension to engage it explicitly. A descriptive "survey" draft is a pipeline failure for `argumentative` format — but is acceptable for `structured` format when the query asks for breadth.
+2. **PATCH, NEVER REGENERATE.** After the first draft is written (Layer 4), the draft is only ever modified by Edit hunks produced by the patcher (Layer 6) and the polish auditor (Layer 7). Both subagents are tool-locked to `[Read, Edit]`. Neither can Write a new draft. If a critic's finding would require rewriting a whole section, it escalates to you as a structural issue — not a rewrite. Keep hunks surgical: change as little as possible while addressing the issue.
 
-3. **RESPECT THE TIER GATE.** When Layer 0.5 classifies a query as `light` or `standard`, do NOT run the skipped layers "just to be thorough." The tier classification is a product decision: simple queries should produce fast, cheap, right-sized answers. Running a full 7-layer pipeline on "What is CRISPR?" wastes $30 and produces an overwrought 8000-word report the user didn't ask for. Trust the classification. If you're uncertain, tier up — but never silently upgrade every query to `full`.
+3. **ARGUE, DON'T JUST REPORT** (applies at full force to `argumentative` response_format; relaxed for `structured` and `short` — see Layer 4 step 0). The layercake pipeline is engineered to push the final report toward argumentative density. Loci analysts must flag at least one dialectical locus (where sources disagree). Depth investigators must commit to a position at the end of every interim note — not just summarize. Layer 3.5 forces you to reconcile those positions in `comparisons.md` before drafting. Layer 4 requires every body section that touches a cross-locus tension to engage it explicitly. A descriptive "survey" draft is a pipeline failure for `argumentative` format — but is acceptable for `structured` format when the query asks for breadth.
+
+4. **RESPECT THE TIER GATE.** When Layer 0.5 classifies a query as `light` or `standard`, do NOT run the skipped layers "just to be thorough." The tier classification is a product decision: simple queries should produce fast, cheap, right-sized answers. Running a full 7-layer pipeline on "What is CRISPR?" wastes $30 and produces an overwrought 8000-word report the user didn't ask for. Trust the classification. If you're uncertain, tier up — but never silently upgrade every query to `full`.
 
 ---
 
@@ -965,6 +967,12 @@ If any rule returns `error` severity issues, address them before declaring the r
 9. **Hygiene rules apply to the final report only.** The scaffold, the loci JSONs, the interim notes, `comparisons.md`, the patch log — these are workspace artifacts and can look however they need to look. The `final_report.md` is the single artifact subject to frontmatter-strip, scaffold-strip, filler-strip rules.
 
 10. **Orchestrator scratch files live under `research/tmp/`.** Any test JSON you build while debugging a critic output, any Python assembly script, any `.pkl` / `.txt` / `build_*.py` helper — these go in `research/tmp/` or `<run_dir>/tmp/`. Never emit scratch files directly under `research/`. The top-level `research/` namespace is reserved for the canonical pipeline artifacts listed in the integrity check above.
+
+11. **NEVER emit a bare text response while subagent tasks are in flight.** In non-interactive (`-p`) mode, a text-only response with no tool call triggers `end_turn` — Claude Code exits the process and the pipeline dies permanently. This is the single most dangerous failure mode in the pipeline: the orchestrator says "waiting for batch N" as plain text, the session terminates, and no report is ever written. **Every response while tasks are running MUST include at least one tool call** — a vault count check, a file read, anything. The specific tool call to use:
+    ```bash
+    PYTHONIOENCODING=utf-8 $HPR search "" --tag <vault_tag> --json | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Notes in vault: {len(d.get(\"data\",{}).get(\"results\",[]))}')"
+    ```
+    This keeps the turn alive AND gives you a compaction-resilient ground-truth count of fetched sources. Apply this rule at EVERY parallel wait point: Layer 1 fetcher waves, Layer 2 loci analysts, Layer 3 depth investigators, Layer 5 critics, and any conditional fetch waves (Wave 2, Wave 3, Layer 3.7 corpus critic fetches).
 
 ---
 
