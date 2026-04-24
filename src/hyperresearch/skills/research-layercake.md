@@ -3,13 +3,15 @@ name: research-layercake
 description: >
   Deep research via the LAYERCAKE architecture — a tier-adaptive pipeline
   (light / standard / full) that scales from a 3-minute $5 answer to a
-  45-minute $40 adversarially-audited report. Full pipeline: prompt
-  decomposition → width sweep → loci analysis → depth investigation →
-  draft → four adversarial critics (dialectic / depth / width /
-  instruction) → surgical patch pass → polish audit → readability
-  reformat. Light/standard tiers skip depth investigation and reduce
-  critic count. The patcher, polish auditor, and readability reformatter
-  are TOOL-LOCKED to Read + Edit. Invoke with /research-layercake.
+  55-minute $60 adversarially-audited report. Full pipeline: prompt
+  decomposition → multi-perspective width sweep → loci analysis → depth
+  investigation → source tension extraction → draft (with mandatory
+  Source Tensions section) → four adversarial critics (dialectic / depth
+  / width / instruction) → surgical patch pass → polish audit →
+  readability reformat. Light/standard tiers skip depth investigation
+  and reduce critic count. The patcher, polish auditor, and readability
+  reformatter are TOOL-LOCKED to Read + Edit. Invoke with
+  /research-layercake.
 ---
 
 # Layercake — the default multi-agent research protocol
@@ -22,7 +24,7 @@ This is the orchestrator. You are running it as Opus. The pipeline spawns specia
 |------|----------------|-------------|-------------|
 | `light` | 0.5 → 1 (reduced) → 4 → 7 → 8 | ~$3–8 | ~3–8 min |
 | `standard` | 0.5 → 1 → 1.5 → 4 → 5 (2 critics) → 6 → 7 → 8 | ~$10–20 | ~10–20 min |
-| `full` | 0.5 → 1 → 1.5 → 2 → 3 → 3.5 → 3.7 → 4 → 5 (4 critics) → 6 → 7 → 8 | ~$30–55 | ~25–50 min |
+| `full` | 0.5 → 1 → 1.5 → 2 → 3 → 3.5 → 3.6 → 3.7 → 4 → 5 (4 critics) → 6 → 7 → 8 | ~$35–60 | ~25–55 min |
 
 **Four canonical rules:**
 
@@ -205,43 +207,62 @@ Write all of this to `research/scaffold.md` before Layer 1 starts. Use the same 
 
 **Goal:** achieve comprehensive topical coverage — every atomic item from the decomposition must have at least 3 supporting sources by the end of this layer. Target 40–100 curated sources for `standard`/`full` tiers.
 
-### Step 1 — Coverage-aware search planning
+### Step 1 — Multi-perspective search planning
 
-Before spawning any fetchers, produce a **search plan** that maps the decomposition to concrete searches. This is the single highest-leverage step for comprehensiveness — an ad-hoc search finds 40 sources on the same 3 sub-topics; a planned search distributes sources across all atomic items.
+Before spawning any fetchers, produce a **search plan** that maps the decomposition to concrete searches from **three independent perspectives**. This is the single highest-leverage step for comprehensiveness — an ad-hoc search finds 40 sources on the same 3 sub-topics; a multi-perspective planned search distributes sources across all atomic items from angles a single researcher would miss.
+
+**Why multi-perspective?** A single search plan reflects one researcher's framing. Three lenses — breadth, depth, and adversarial — produce URL candidates that cover different conceptual territory. The ensemble architecture achieved 2x source counts and higher comprehensiveness scores precisely because three independent researchers searched with different framings. Multi-perspective planning captures that advantage without the cost of three full parallel pipelines.
 
 1. **Read `research/prompt-decomposition.json`.** Extract every `sub_question` and every `entity` with its `required_fields`.
 
-2. **For each atomic item, plan 2–4 distinct searches.** Each search should target a different angle:
+2. **Generate searches from three lenses.** For EACH atomic item, generate searches from all three perspectives:
+
+   **Lens A — Breadth coverage (systematic):**
    - One search for the core factual content of that item
    - One search for recent developments / state-of-the-art (last 2 years)
-   - One search for contrarian / adversarial takes ("criticism of X", "limitations of Y", "problems with Z")
-   - One search for a lateral angle (adjacent field, analogous case, upstream/downstream in a causal chain)
+   - One search for each named entity or sub-concept within the item
+   - Goal: no atomic item left uncovered. Cast wide.
 
-3. **Write the search plan to `research/temp/search-plan.md`** — a simple table:
+   **Lens B — Citation-chain depth (academic/canonical):**
+   - Academic API queries (Semantic Scholar, arXiv, OpenAlex, PubMed) for each item with research literature
+   - Searches targeting canonical/seminal works, foundational papers, authoritative reports
+   - Searches for the upstream sources that derivative commentary cites ("original study", "primary data", "foundational paper")
+   - Goal: find the load-bearing sources that secondary commentary is built on.
+
+   **Lens C — Adversarial/contrarian (dialectical):**
+   - "criticism of X", "limitations of X", "problems with X", "why X doesn't work" for each item
+   - Searches for competing frameworks, alternative explanations, dissenting experts
+   - Searches for failure cases, negative results, counter-examples
+   - At least one "X is wrong" or "against X" search per major atomic item
+   - Goal: ensure the corpus includes the strongest case AGAINST the emerging consensus.
+
+3. **Write the combined search plan to `research/temp/search-plan.md`** — a table with a `Lens` column:
    ```markdown
-   | Atomic item | Search query | Type | Target |
-   |---|---|---|---|
-   | Sub-Q1: "What are the growth trends?" | "China financial industry growth trends 2025 2026" | web | factual |
-   | Sub-Q1 | "China finance development forecast report" | web | recent |
-   | Sub-Q1 | "China financial sector risks challenges 2025" | web | adversarial |
-   | Entity: PE | "China private equity fundraising 2025 statistics" | web | factual |
-   | Entity: PE | "China PE exit problems structural decline" | web | adversarial |
-   | ... | ... | ... | ... |
+   | Atomic item | Search query | Type | Lens | Target |
+   |---|---|---|---|---|
+   | Sub-Q1 | "China financial industry growth trends 2025" | web | breadth | factual |
+   | Sub-Q1 | "China finance development forecast" | web | breadth | recent |
+   | Sub-Q1 | "China financial sector structural risks" | web | adversarial | contrarian |
+   | Sub-Q1 | "financial repression China scholarly analysis" | academic | depth | canonical |
+   | Entity: PE | "China PE fundraising 2025 statistics" | web | breadth | factual |
+   | Entity: PE | "China PE exit problems structural decline" | web | adversarial | contrarian |
+   | Entity: PE | "China private equity returns academic study" | academic | depth | canonical |
+   | ... | ... | ... | ... | ... |
    ```
 
-   The plan typically has 20–60 planned searches for a `full` query. This is more searches than you'll execute — prioritize, but err toward breadth.
+   The plan typically has **40–100 planned searches** for a `full` query (up from 20-60 with single-perspective). This is more searches than you'll execute — prioritize, but err toward breadth. The utility scoring in Step 2.5 handles selection from the larger candidate pool.
 
-4. **Add academic API searches.** For each atomic item with research literature, add Semantic Scholar / arXiv / OpenAlex queries. These go in the same plan table with `type: academic`.
+4. **Execute searches from ALL three lenses.** Do not shortcut by running only Lens A. The adversarial and depth lenses produce qualitatively different URLs that breadth searching misses. Run them in the order that makes sense for the topic: academic-heavy topics benefit from Lens B first; policy/opinion topics benefit from Lens C first.
 
-5. **Add at least 3 adversarial searches total** ("criticism of...", "failure of...", "why X doesn't work", "limitations of..."). The dialectic critic will punish one-sided coverage.
+5. **Minimum adversarial coverage:** at least **5 adversarial searches total** (up from 3). The dialectic critic will punish one-sided coverage, and adversarial sources are the highest-leverage input for the Source Tensions section in Layer 4.
 
 ### Step 2 — Execute searches and build URL queue
 
 1. **Academic APIs first.** For topics with a research literature, hit Semantic Scholar / arXiv / OpenAlex / PubMed BEFORE web search. Academic APIs return citation-ranked canonical papers; web search returns derivative commentary.
 
-2. **Web searches from the plan.** Execute ALL planned searches from Step 1. Collect every URL that looks relevant — aim for **80–150 candidate URLs** before deduplication for `full` tier, 50–80 for `standard`. Cast a wide net. Under-searching is the #1 cause of comprehensiveness failures; over-searching costs pennies.
+2. **Web searches from the plan.** Execute ALL planned searches from Step 1 across all three lenses. Collect every URL that looks relevant — aim for **120–200 candidate URLs** before deduplication for `full` tier, 60–100 for `standard`. Cast a wide net. Under-searching is the #1 cause of comprehensiveness failures; over-searching costs pennies. The three-lens approach naturally produces more candidates from diverse angles.
 
-3. **Build and deduplicate the master URL queue.** Remove exact-URL duplicates. Remove obvious junk domains (social media share pages, login walls, 404 farms). The deduplicated queue should have **60–120 URLs** for `full` tier, 40–70 for `standard`.
+3. **Build and deduplicate the master URL queue.** Remove exact-URL duplicates. Remove obvious junk domains (social media share pages, login walls, 404 farms). The deduplicated queue should have **80–160 URLs** for `full` tier, 50–80 for `standard`.
 
    **Wikipedia SOURCE HUB rule:** Include Wikipedia URLs in the queue — they're valuable for discovery — but treat them as SOURCE HUBS, not as citable sources. When a fetcher processes a Wikipedia article, it extracts the references/citations Wikipedia links to. Those primary sources go into Wave 2 (or the same wave if capacity permits). Wikipedia itself is NEVER cited in the final report. The fetcher tags Wikipedia notes with `source-hub` automatically. If your URL queue contains Wikipedia articles, make sure to budget capacity for the follow-up primary sources they'll surface.
 
@@ -319,10 +340,10 @@ After Wave 1 returns, run the coverage check before proceeding:
 | Tier | Minimum sources | Target sources | Fetchers per wave | Waves |
 |------|----------------|---------------|-------------------|-------|
 | `light` | 10 | 15–25 | 3–5 | 1–2 |
-| `standard` | 30 | 40–60 | 8–10 | 2 |
-| `full` | 50 | 60–120 | 10–12 | 2–3 |
+| `standard` | 30 | 40–70 | 8–10 | 2 |
+| `full` | 60 | 80–150 | 10–14 | 2–3 |
 
-These are substantive (non-deprecated) note counts. Junk doesn't count toward the minimum.
+These are substantive (non-deprecated) note counts. Junk doesn't count toward the minimum. The `full` tier targets are higher than previous versions because multi-perspective search planning (Step 1) generates a larger, more diverse candidate pool — the extra sources come from angles that single-perspective planning misses, not from padding.
 
 **Exit criterion for Layer 1:** minimum source count met AND coverage check shows no `uncovered` atomic items (thin is acceptable, uncovered is not). If you fall short after two waves, proceed anyway but write `research/temp/coverage-gaps.md` listing what's missing so the drafter handles it.
 
@@ -554,6 +575,69 @@ prompt: |
 
 ---
 
+## Layer 3.6 — Source tension extraction (orchestrator, bridge step)
+
+**Tier gate:** SKIP for `light` and `standard` tiers. Only `full` tier runs this step.
+
+**Goal:** extract explicit expert disagreements from the corpus and comparisons into a structured artifact that Layer 4 MUST include as a dedicated section. This is the single highest-leverage move for the insight dimension — the ensemble architecture scored 5+ points higher on insight specifically because it gave expert disagreements standalone treatment with resolution, not just inline mentions.
+
+**Why this step exists:** Layer 3.5's `comparisons.md` captures cross-locus tensions — places where depth investigators disagree. But the richest disagreements often live in the width corpus itself: Source A says X, Source B says Y, and neither the loci analysts nor the depth investigators elevated this as a locus because it cut across multiple topics. These "orphan tensions" are invisible to locus-driven analysis but are exactly what distinguishes an expert synthesis from a competent survey.
+
+### Procedure
+
+1. **Re-read `comparisons.md`.** Each tension there is already a candidate source tension. Extract: the two positions, the strongest evidence for each, your preliminary reading of which side has the better case.
+
+2. **Scan the width corpus for orphan tensions.** Read note summaries (not full bodies) for the 15–20 highest-quality non-deprecated sources. Look for:
+   - Sources that explicitly disagree with each other (different conclusions from similar evidence)
+   - Sources that use competing theoretical frameworks to explain the same phenomenon
+   - Sources where one side cites data the other side ignores
+   - Government/institutional positions that conflict with academic findings
+   - Industry claims that contradict independent research
+   - Historical consensus that recent evidence challenges
+
+3. **If `research/temp/contradiction-graph.json` exists**, read it. Any high-relevance fight cluster that was NOT promoted to a locus is a prime orphan-tension candidate. It was important enough for the contradiction graph but wasn't investigated in depth — these deserve standalone treatment in the draft.
+
+4. **Select 3–7 source tensions.** Combine comparisons.md tensions with orphan tensions. Rank by:
+   - **Decision relevance:** does resolving this tension change the report's recommendation?
+   - **Evidence quality:** are both sides grounded in real evidence (not just opinion)?
+   - **Reader value:** would an expert reader find this tension illuminating?
+
+   Drop tensions that are: trivially resolved (one side is clearly wrong), definitional (the disagreement is about word meaning, not substance), or orthogonal to the research query.
+
+5. **For each tension, pre-commit to a resolution.** Do NOT leave tensions open. For each:
+   - Name it in 5–10 words (e.g., "NHTSA's 'no defect' vs. NTSB's 'design failure'")
+   - State Side A's strongest case with evidence (quote or cite specific sources)
+   - State Side B's strongest case with evidence
+   - Commit to a reading: which side has the better evidence, or is there a synthesis? Name the load-bearing reason.
+
+6. **Write `research/temp/source-tensions.json`:**
+   ```json
+   {
+     "tensions": [
+       {
+         "name": "short descriptive name",
+         "side_a": {
+           "position": "one-sentence claim",
+           "evidence": "strongest evidence with source note ids",
+           "proponents": ["source-note-id-1", "source-note-id-2"]
+         },
+         "side_b": {
+           "position": "one-sentence claim",
+           "evidence": "strongest evidence with source note ids",
+           "proponents": ["source-note-id-3"]
+         },
+         "resolution": "one-paragraph committed reading with load-bearing reason",
+         "origin": "comparisons|contradiction-graph|orphan-scan",
+         "decision_relevance": "high|medium"
+       }
+     ]
+   }
+   ```
+
+This artifact feeds directly into Layer 4's mandatory Source Tensions section. Every tension named here becomes a subsection in the final report.
+
+---
+
 ## Layer 3.7 — Pre-draft corpus critic (targeted gap-fill)
 
 **Tier gate:** `full` tier ONLY. Skip for `light` and `standard`.
@@ -639,16 +723,17 @@ prompt: |
    - Body sections mirroring the decomposition's structural cues. **Each body section that touches a tension named in `comparisons.md` must engage that tension explicitly** — by name, with a paragraph that commits to a reading of the disagreement, not just reports both sides.
    - **Each body H2 section should be 1500-3000 characters (Chinese) or 800-1500 words (English).** Sections shorter than this threshold are under-developed — go deeper. Add sub-arguments, specific data points, named examples, counter-arguments and responses, and forward-looking implications. A section that just states "X is true [3]" and moves on is wasting evidence the width corpus and depth investigators surfaced.
    - **Comparative analysis section** — a dedicated H2 (e.g., "比较分析" or "Comparative Analysis") that synthesizes across body sections. This is where cross-cutting themes, ranking tables, and trade-off matrices go. Reference articles almost always include this; our reports often skip it and jump to conclusions.
+   - **Source Tensions section** (for `argumentative` format with `full` tier only) — a dedicated H2 (e.g., "Where Experts Disagree" / "核心分歧" / "Source Tensions") placed between the body and the Opinionated Synthesis. Each tension from `research/temp/source-tensions.json` gets an H3 subsection: name the tension, present both sides with their strongest evidence, then commit to a resolution. This is NOT an unresolved buffet — each subsection ENDS with a committed reading. This section is the single highest-leverage structural addition for insight scores; the ensemble architecture scored 5+ points higher on insight specifically because it gave expert disagreements this treatment. If `source-tensions.json` does not exist (e.g., Layer 3.6 was skipped by tier), omit this section.
    - Closing section per the modality rule. Where the modality demands a reasoned position (synthesize, compare, forecast), that position must visibly incorporate the strongest cross-locus tensions — not average them out into hedged prose. **Include explicit strategic recommendations** — bulleted, actionable items. Not just "X is the best sector" but "practitioners should:" followed by a bold-labeled bullet list.
    
-   **Structural completeness check before writing:** Before you start writing, verify your outline has: (a) executive summary, (b) context/background section, (c) one H2 per major topic from the decomposition, (d) comparative analysis section, (e) conclusion with recommendations, (f) `## Sources` list if `citation_style` is `"inline"`. If any of these is missing from your mental outline, add it. Reports that skip the exec summary or comparative analysis section score systematically lower on instruction-following and comprehensiveness.
+   **Structural completeness check before writing:** Before you start writing, verify your outline has: (a) executive summary, (b) context/background section, (c) one H2 per major topic from the decomposition, (d) comparative analysis section, (e) Source Tensions section (for `argumentative` + `full` tier, if `source-tensions.json` exists), (f) conclusion with recommendations, (g) `## Sources` list if `citation_style` is `"inline"`. If any of these is missing from your mental outline, add it. Reports that skip the exec summary, comparative analysis, or source tensions section score systematically lower on instruction-following, comprehensiveness, and insight.
 
 7. **Insight-generation rules (applied to every body section):**
    - **Commit, don't hedge.** Sentences like "some argue X while others argue Y" are allowed as setup but MUST be followed by "the evidence weighs toward X because Z" or an equivalent committed reading. Pure "on the one hand / on the other hand" prose is low-insight reporting.
    - **Interpret, don't just assert.** For every 2–3 factual claims, there should be at least one interpretive beat — a sentence or clause that draws a conclusion the sources themselves didn't draw. Interpretive density drives the insight dimension; descriptive claim stacks suppress it.
    - **Privilege committed investigator positions.** Each `## Committed position` section from a depth investigator is a claim the draft can assert directly ("the FRMCS evidence demonstrates that..."). These are your strongest argumentative levers — use them, don't soften them into "the literature suggests...".
    - **Every body section argues, not just the synthesis.** A common failure mode is drafts that save commitment for the synthesis section and leave body sections in descriptive / reporting mode. That doesn't work — the body is where evidence is introduced, and the body is where arguments should LAND. Each H2 should end with (or contain) at least one sentence that commits to a reading of that section's evidence. "Here is how this evidence is best understood" belongs in every section, not just the final one.
-   - **Weave named tensions INLINE with immediate resolution.** When a cross-locus tension from `comparisons.md` is relevant to a body section, engage it inline in that section — name the tension, quote the strongest version of each side, and commit to a reading — then move on. Do NOT gather tensions into a dedicated "Source Tensions" H2 at the end; that gives the reader an unresolved buffet. Reference-quality reports name tensions where they arise in the doctrinal or analytical flow and resolve them immediately.
+   - **Weave tensions INLINE in body sections AND give them standalone treatment.** When a cross-locus tension from `comparisons.md` is relevant to a body section, engage it inline in that section — name the dynamic, quote the strongest version of each side, and commit to a reading. ADDITIONALLY, for `argumentative` format on `full` tier, the Source Tensions section (see step 6) gives each tension concentrated standalone treatment between the body and synthesis. This dual coverage is intentional: body sections engage tensions where they arise in the analytical flow; the Source Tensions section provides a concentrated synthesis that expert readers can scan independently. Each appearance must RESOLVE the tension — no unresolved listings anywhere.
    - **Prescriptive specificity when evidence supports it.** When an investigator's `## Committed position` contains a specific threshold, number, rule, or named mechanism, preserve that specificity in the draft. Do not soften "manufacturer liability attaches when handover warnings fall below 10 seconds at highway speeds" into "manufacturer liability attaches when warnings are too brief." The precision is the authority; softening it to LLM-directional language drops the report's prescriptive weight. If a recommendation in the draft reads abstract, ask yourself what specific threshold or rule the evidence supports, and say it.
 
 7a. **Calibrated assertion rules.** When depth investigators provide calibrated committed positions (with confidence levels), use these to control assertion tone in the draft:
@@ -957,7 +1042,7 @@ If any rule returns `error` severity issues, address them before declaring the r
 
 6. **Depth investigators' outputs are interim notes, not prose sections.** You consume their synthesis and positions in Layer 4. You do not paste their text into the draft; you weave it and reconcile it against other investigators.
 
-7. **Layers are sequential at the outermost level, parallel within.** You cannot start Layer 2 before Layer 1 completes, Layer 3 before Layer 2 completes, Layer 3.5 before Layer 3 completes, Layer 3.7 before Layer 3.5 completes, Layer 4 before Layer 3.7 completes (or Layer 3.5 if 3.7 is skipped by tier). Within a layer, parallelism is mandatory when there are multiple subagents (spawn them in one message).
+7. **Layers are sequential at the outermost level, parallel within.** You cannot start Layer 2 before Layer 1 completes, Layer 3 before Layer 2 completes, Layer 3.5 before Layer 3 completes, Layer 3.6 before Layer 3.5 completes, Layer 3.7 before Layer 3.6 completes (or Layer 3.5 if 3.6/3.7 are skipped by tier), Layer 4 before Layer 3.7 completes (or the last pre-draft layer that ran). Within a layer, parallelism is mandatory when there are multiple subagents (spawn them in one message).
 
 8. **Canonical research query is gospel everywhere.** Every subagent you spawn gets the canonical research query as an explicit input. Do not let wrapper instructions leak into their task prompts.
 
