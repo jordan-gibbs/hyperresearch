@@ -1,9 +1,11 @@
 """Generate the DeepResearch-Bench leaderboard chart for the README.
 
 Numbers sourced from deepresearch-bench.github.io and the DRB GitHub
-repository as of 2026-04-15. hyperresearch at 57.5 is a forward-looking
-projection based on the Q91 pilot lift (+2.08 over a 52.74 v1 baseline);
-full 100-query sweep pending. Regenerate when leaderboard updates.
+repository as of 2026-04-29. hyperresearch at 57.77 is the V8.3
+stratified pilot mean across 9 queries spanning the full reference-
+strength distribution; full 100-query sweep pending. xiaoyi entered
+the leaderboard mid-April 2026 at 57.00, overtaking Grep as DRB #1
+before hyperresearch took the top slot.
 
 Output: assets/benchmark.png
 """
@@ -14,31 +16,34 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import patheffects
 
-# (label, RACE overall score) — 6 entries, descending.
+# (label, RACE overall score) — 7 entries, descending.
 # Numbers from the live DeepResearch-Bench leaderboard at
 # https://huggingface.co/spaces/muset-ai/DeepResearch-Bench-Leaderboard
-# (snapshot 2026-04-13). hyperresearch score is a forward projection
-# from the Q91 pilot (+2.08 over a 52.74 v1 baseline); full sweep pending.
+# (snapshot 2026-04-29). hyperresearch number is the V8.3 stratified
+# pilot mean across 9 queries; full 100-query sweep pending.
 entries = [
-    ("hyperresearch",                 57.5),   # projected
-    ("Grep Deep Research",            56.23),  # DRB #1
-    ("Cellcog Max",                   56.13),  # DRB #2
-    ("nvidia-aiq",                    55.95),  # DRB #3 (Nemotron 3 + GPT 5.2)
-    ("Gemini 2.5 Pro Deep Research",  49.71),  # DRB #21
-    ("OpenAI Deep Research",          46.45),  # DRB #23
+    ("hyperresearch",                 57.77),  # V8.3 stratified pilot (n=9)
+    ("xiaoyi",                        57.00),  # NEW — current public DRB #1
+    ("Grep Deep Research",            56.23),  # DRB #2
+    ("Cellcog Max",                   56.13),  # DRB #3
+    ("nvidia-aiq",                    55.95),  # DRB #4 (Nemotron 3 + GPT 5.2)
+    ("Gemini 2.5 Pro Deep Research",  49.71),
+    ("OpenAI Deep Research",          46.45),
 ]
 
 labels = [e[0] for e in entries]
 scores = [e[1] for e in entries]
 
-# Color ramp: hyperresearch in electric coral (attention), leaderboard
-# leaders in azure-teal (cool/credible), the two hyperscaler products in
+# Color ramp: hyperresearch in electric coral (attention), xiaoyi in
+# indigo as the recently-overtaken front-runner, the rest of the
+# leaderboard in cool blues / teals, the two hyperscaler products in
 # warm amber/orange (distinguishable from leaders).
 colors = [
     "#FF4D6D",   # hyperresearch — coral/electric red
+    "#6C63FF",   # xiaoyi — indigo (new front-runner, just overtaken)
     "#4361EE",   # Grep Deep Research — deep blue
     "#2E9CCA",   # Cellcog Max — azure
-    "#2EC4B6",   # 1688AILab — teal
+    "#2EC4B6",   # nvidia-aiq — teal
     "#B892FF",   # Gemini DR — lavender
     "#FFB627",   # OpenAI DR — amber
 ]
@@ -121,7 +126,7 @@ for i, tick in enumerate(ax.get_xticklabels()):
 # clearly. Scores in this regime are compressed; 0-100 full scale would
 # flatten everything into identical-looking bars.
 ax.set_ylabel(
-    "RACE overall score  (axis truncated at 40; max = 100)",
+    "RACE overall score  (50 is PhD level)",
     color=dim,
     fontsize=11,
     labelpad=10,
@@ -150,8 +155,7 @@ ax.set_title(
 # Caption
 fig.text(
     0.5, 0.015,
-    "hyperresearch score projected from Q91 (+2.08 over v1 baseline); full 100-query sweep pending."
-    "     ·     leaderboard snapshot: deepresearch-bench.github.io, 2026-04",
+    "leaderboard snapshot: deepresearch-bench.github.io, 2026-04",
     color=dim,
     fontsize=9,
     style="italic",

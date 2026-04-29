@@ -2,7 +2,7 @@
   <img src="assets/banner.png" alt="HYPERRESEARCH" width="700">
 </p>
 
-<h3 align="center">A Deep Research Harness for Claude Code</h3>
+<h3 align="center">The Most Powerful Deep Research Harness</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/hyperresearch/"><img src="https://img.shields.io/pypi/v/hyperresearch" alt="PyPI version"></a>
@@ -13,13 +13,13 @@
 
 ---
 
-**Hyperresearch turns Claude Code into a deep research agent — and currently leads the DeepResearch-Bench RACE leaderboard internally.** A tier-adaptive 16-step pipeline produces adversarially-audited reports with full source provenance. Every fetched source lands in a persistent, searchable vault that compounds across sessions.
+**Hyperresearch turns Claude Code into a deep research agent. and currently leads the DeepResearch-Bench RACE leaderboard (benchmarked internally).** A tier-adaptive 16-step pipeline produces adversarially-audited reports with full source provenance. Every fetched source lands in a persistent, searchable vault that compounds across sessions.
 
 <p align="center">
   <img src="assets/benchmark.png" alt="DeepResearch-Bench top-5 — hyperresearch leads the chart ahead of Grep Deep Research, Cellcog Max, nvidia-aiq, Gemini Deep Research, and OpenAI Deep Research" width="780">
 </p>
 
-<p align="center"><sub>Forward-looking projection from a stratified pilot against the DeepResearch-Bench leaderboard snapshot (muset-ai/DeepResearch-Bench-Leaderboard). Full 100-query sweep pending.</sub></p>
+<p align="center"><sub>Forward-looking projection from a stratified pilot against the DeepResearch-Bench leaderboard snapshot (https://huggingface.co/spaces/muset-ai/DeepResearch-Bench-Leaderboard). Third party validation is pending.</sub></p>
 
 ## Install
 
@@ -28,20 +28,13 @@ pip install hyperresearch
 hyperresearch install
 ```
 
-In Claude Code, type `/hyperresearch <anything>`. Step 1 classifies your query into one of two tiers and the rest of the pipeline scales accordingly:
-
-| Tier | Steps that run | Typical time |
-|---|---|---|
-| `light` | bounded factual queries, surveys, comparisons — 1 → 2 → 10 → 15 → 16 | ~30–40 min |
-| `full` | deep argumentative analysis with adversarial review — all 16 steps | ~1.5–2.5 hours |
-
-The single install command provisions a SQLite vault, auto-installs Chromium for headless browsing, generates `CLAUDE.md`, registers the `/hyperresearch` entry skill, installs all 16 step skills, and wires the agent roster + PreToolUse hooks into `.claude/`.
+Then, in a fresh Claude Code session, type `/hyperresearch <anything>`. 
 
 ---
 
-## How it works — the 16-step pipeline
+## The 16-step research pipeline
 
-The entry skill is a thin **router**. It bootstraps the canonical research query, then invokes one step skill per pipeline phase via Claude Code's `Skill` tool. Each step's procedure is loaded fresh into context only when needed — defeating the context-compaction problem that makes monolithic long pipelines silently drop steps.
+The entry skill is a thin router. It bootstraps the canonical research query, then invokes one step skill per pipeline phase via Claude Code's `Skill` tool. Each step's procedure is loaded fresh into context only when needed defeating context-rot problems that makes long pipelines silently drop steps.
 
 | # | Step | What it does | Tiers |
 |---|---|---|---|
@@ -62,11 +55,20 @@ The entry skill is a thin **router**. It bootstraps the canonical research query
 | 15 | Polish | Hygiene + filler pass (tool-locked Read+Edit subagent) | both |
 | 16 | Readability audit | Recommender writes JSON suggestions; orchestrator selectively applies | both |
 
-### The two load-bearing invariants
+### Depth Modes 
 
-1. **Patch, never regenerate.** After step 11 produces the synthesized report (or step 10 for light tier), the only modifications are surgical Edit hunks. The patcher and polish auditor are tool-locked to `[Read, Edit]` at the Claude Code allowlist level — they physically cannot Write a new draft. Per-hunk caps make "just rewrite it" mechanically impossible. Critic findings that don't fit a small hunk escalate as structural issues.
+In your prompt, you can request one of two tiers and the rest of the pipeline scales accordingly. Full mode is default.
 
-2. **Canonical research query is gospel.** The verbatim user prompt is persisted to `research/query-<vault_tag>.md` once and re-read by every subsequent step and every spawned subagent. Wrapper requirements (save paths, citation format, terminal sections) are a separate contract — they never contaminate the query itself.
+| Tier | Steps that run | Typical time |
+|---|---|---|
+| `light` | bounded factual queries, surveys, comparisons — 1 → 2 → 10 → 15 → 16 | ~30–40 min |
+| `full` | deep argumentative analysis with adversarial review — all 16 steps | ~1.5–2.5 hours |
+
+### The two load-bearing principles
+
+1. **Patch, never regenerate.** After step 11 produces the synthesized report (or step 10 for light tier), the only modifications are surgical Edit hunks. The patcher and polish auditor are tool-locked to `[Read, Edit]` at the Claude Code allowlist level so they physically cannot Write a new draft. Per-hunk caps make "just rewrite it" mechanically impossible. Critic findings that don't fit a small hunk escalate as structural issues.
+
+2. **Canonical research query is gospel.** The verbatim user prompt is persisted to `research/query-<vault_tag>.md` once and re-read by every subsequent step and every spawned subagent. Wrapper requirements (save paths, citation format, terminal sections) are a separate contract.
 
 ### Subagent roster
 
@@ -91,7 +93,7 @@ The entry skill is a thin **router**. It bootstraps the canonical research query
 
 ## The vault: persistent, searchable, compounding
 
-Hyperresearch is not a one-shot report generator. Every fetched source lands in a SQLite-indexed vault that every future research session can reuse.
+Hyperresearch is not a one-shot report generator like most other Deep research harnesses. Every fetched source lands in a SQLite-indexed vault that every future research session can reuse.
 
 ```bash
 hyperresearch search "ion-trap gate fidelity" -j           # Full-text search
@@ -102,7 +104,7 @@ hyperresearch graph backlinks <id> -j                      # Reverse links
 hyperresearch lint -j                                      # Health check (broken links, missing tags)
 ```
 
-**Markdown is truth, SQLite is cache.** Notes live as plain markdown with YAML frontmatter in `research/notes/`. The SQLite index is fully rebuildable — delete it and `hyperresearch sync` reconstructs it from the markdown. The vault is inspectable in any editor, version-controllable in git, and readable without the tool installed.
+**Markdown is truth, SQLite is cache.** Notes live as plain markdown with YAML frontmatter in `research/notes/`. The SQLite index is fully rebuildable. Delete it and `hyperresearch sync` reconstructs it from the markdown. The vault is inspectable in any editor, version-controllable in git, and readable without the tool installed.
 
 **PDFs fetch directly.** `hyperresearch fetch` auto-detects PDF URLs (arXiv, NBER, SSRN, direct `.pdf` links) and extracts full text via pymupdf. Raw PDFs land in `research/raw/<note-id>.pdf` and the note's `raw_file:` frontmatter links back.
 
@@ -123,7 +125,7 @@ hyperresearch lint -j                                      # Health check (broke
 
 ## Authenticated crawling
 
-Fetch from LinkedIn, Twitter, paywalled sites — anything you can log into:
+Fetch from LinkedIn, Twitter, paywalled sites or anything you can log into:
 
 ```bash
 hyperresearch setup       # Browser opens. Log into your sites. Done.
@@ -148,19 +150,17 @@ After the academic sweep, run web searches for context, news, non-academic angle
 
 ## What it doesn't do
 
-- It doesn't replace your judgment on which sources matter — the agent picks, you steer.
+- It doesn't replace your judgment on which sources matter. The agent picks, you steer.
 - It can't fetch what's behind a paywall you haven't logged into.
-- It runs on Anthropic models — Opus + Sonnet + Haiku via the subagent roster. Costs scale with tier and corpus size.
-- The lint gate catches **structural** failures (missing scaffold, broken provenance, unresolved CRITICALs). It cannot guarantee factual accuracy — that's still your call.
+- It runs on Anthropic models Opus + Sonnet + Haiku via the subagent roster. Costs scale with tier and corpus size. If anyone wants to port this to Codex, put up a PR! 
+- The lint gate catches **structural** failures (missing scaffold, broken provenance, unresolved CRITICALs). It cannot guarantee factual accuracy, that's still your call.
 
 ---
 
 ## Requirements
 
 - Python 3.11+
-- [Claude Code](https://claude.com/claude-code) with Anthropic API access
-- API key with access to Opus, Sonnet, and Haiku — one key powers the full roster
-- Windows, macOS, Linux
+- [Claude Code](https://claude.com/claude-code)
 
 ---
 
