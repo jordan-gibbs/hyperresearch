@@ -23,8 +23,20 @@
 
 ## Install
 
+**Once, globally** (recommended) — `/hyperresearch` becomes available in every Claude Code session anywhere:
+
 ```bash
 pip install hyperresearch
+hyperresearch install --global
+```
+
+The vault, `research/` folder, and project-level `CLAUDE.md` are created automatically in the project root the first time you type `/hyperresearch <query>` in a Claude Code session.
+
+**Per-project** (if you'd rather opt in explicitly per repo):
+
+```bash
+pip install hyperresearch
+cd your-project
 hyperresearch install
 ```
 

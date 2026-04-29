@@ -74,6 +74,12 @@ Step 1 classifies the query into a `pipeline_tier` (`light` / `full`). The tier 
 
 Before you invoke any step skill, do this:
 
+0. **Auto-init if no vault exists.** Check whether `.hyperresearch/` exists in the working directory. If not, the user installed hyperresearch globally (`hyperresearch install --global`) and this is the first `/hyperresearch` invocation in this project. Run:
+   ```bash
+   hyperresearch init . --json
+   ```
+   This creates the SQLite vault, the `research/` directory, and a project-level `CLAUDE.md` with the hyperresearch workflow blurb. If this fails because the binary isn't on PATH, tell the user to run `pip install hyperresearch` first. If `.hyperresearch/` already exists, skip this step.
+
 1. **Resolve the canonical research query.** Order of precedence:
    - If `research/prompt.txt` exists (legacy harness / wrapped run), read it. Its contents are the canonical research query. GOSPEL.
    - Otherwise, use the user's verbatim prompt as the canonical research query.

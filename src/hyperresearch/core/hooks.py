@@ -2976,6 +2976,51 @@ def install_hooks(vault_root: Path, hpr_path: str = "hyperresearch") -> list[str
     return actions
 
 
+def install_global_hooks(home: Path | None = None, hpr_path: str = "hyperresearch") -> list[str]:
+    """Install Claude Code skills + agents globally under ~/.claude/.
+
+    Unlike `install_hooks`, this skips:
+      - The PreToolUse vault-check hook (don't want it firing on every
+        Claude Code session, only ones that have a hyperresearch vault)
+      - Vault init (handled per-project, on first /hyperresearch invocation)
+      - CLAUDE.md injection (per-project)
+
+    The result: pip install + this once, and `/hyperresearch` is available
+    in every Claude Code session anywhere on the machine. The actual
+    research artifacts (vault, research/, CLAUDE.md) materialize in the
+    project root where Claude Code is running, on first invocation.
+    """
+    if home is None:
+        home = Path.home()
+
+    actions = []
+
+    for installer in (
+        lambda: _install_hyperresearch_skill(home),
+        lambda: _install_hyperresearch_step_skills(home),
+        lambda: _install_researcher_agent(home, hpr_path),
+        lambda: _install_loci_analyst_agent(home, hpr_path),
+        lambda: _install_depth_investigator_agent(home, hpr_path),
+        lambda: _install_source_analyst_agent(home, hpr_path),
+        lambda: _install_dialectic_critic_agent(home, hpr_path),
+        lambda: _install_instruction_critic_agent(home, hpr_path),
+        lambda: _install_depth_critic_agent(home, hpr_path),
+        lambda: _install_width_critic_agent(home, hpr_path),
+        lambda: _install_patcher_agent(home, hpr_path),
+        lambda: _install_polish_auditor_agent(home, hpr_path),
+        lambda: _install_readability_reformatter_agent(home, hpr_path),
+        lambda: _install_corpus_critic_agent(home, hpr_path),
+        lambda: _install_draft_orchestrator_agent(home, hpr_path),
+        lambda: _install_synthesizer_agent(home, hpr_path),
+        lambda: _prune_retired_agents(home),
+    ):
+        result = installer()
+        if result:
+            actions.append(result)
+
+    return actions
+
+
 def _write_hook_script(vault_root: Path, hpr_path: str) -> Path:
     """Write the hook JS script to .hyperresearch/hook.js."""
     hook_dir = vault_root / ".hyperresearch"

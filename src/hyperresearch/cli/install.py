@@ -14,12 +14,53 @@ def install(
     path: str = typer.Argument(".", help="Path to install in"),
     name: str = typer.Option("Research Base", "--name", "-n", help="Vault name"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
+    global_install: bool = typer.Option(
+        False,
+        "--global",
+        "-g",
+        help="Install Claude Code skills + agents to ~/.claude/ so /hyperresearch works in every Claude Code session anywhere. Skips vault init and CLAUDE.md (those happen per-project on first /hyperresearch run).",
+    ),
 ) -> None:
     """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
     import sys
 
-    from hyperresearch.core.hooks import install_hooks
+    from hyperresearch.core.hooks import install_global_hooks, install_hooks
     from hyperresearch.core.vault import Vault, VaultError
+
+    # Global install path: only the user-level Claude Code skills + agents.
+    # No vault, no CLAUDE.md, no project-level state — pure "make the slash
+    # command available everywhere" mode.
+    if global_install:
+        from hyperresearch.core.agent_docs import _resolve_executable
+
+        hpr_path = _resolve_executable()
+        home = Path.home()
+        hook_actions = install_global_hooks(home, hpr_path=hpr_path)
+
+        if json_output:
+            output(
+                success(
+                    {"global": True, "home": str(home), "hooks_installed": hook_actions},
+                    vault=None,
+                ),
+                json_mode=True,
+            )
+            return
+
+        console.print(f"[green]Global install:[/] {home}/.claude/")
+        if hook_actions:
+            for action in hook_actions:
+                console.print(f"  {action}")
+        else:
+            console.print("[dim]All skills and agents already installed.[/]")
+        console.print(
+            "\n[bold]Ready.[/] /hyperresearch is now available in every Claude Code session."
+        )
+        console.print(
+            "[dim]On first /hyperresearch run in a project, the vault and research/ folder "
+            "are created in that project's root.[/]"
+        )
+        return
 
     root = Path(path).resolve()
 

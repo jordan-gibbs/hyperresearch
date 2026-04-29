@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.2] - 2026-04-29
+
+### Global install
+
+- **`hyperresearch install --global`** writes the Claude Code skills + agents to `~/.claude/` so `/hyperresearch` is available in every Claude Code session anywhere on the machine, with no per-project setup. Skips vault init and CLAUDE.md injection (those happen automatically per-project on first `/hyperresearch` invocation).
+- New `install_global_hooks()` in `core/hooks.py` that targets `~/.claude/` and skips the PreToolUse hook script (would otherwise fire on every Claude Code session).
+- Entry skill bootstrap now auto-runs `hyperresearch init .` if no vault exists in cwd, so the global-install workflow is fully seamless: pip install + `hyperresearch install --global` once, then `/hyperresearch` works everywhere and materializes the vault + `research/` folder + `CLAUDE.md` in whatever project root you're in on first use.
+
 ## [0.8.1] - 2026-04-29
 
 ### Surface cleanup
