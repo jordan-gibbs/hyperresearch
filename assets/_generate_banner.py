@@ -31,21 +31,25 @@ src = Image.open(SRC).convert("RGBA")
 # chunky letterforms instead of blurring them.
 upscaled = src.resize((src.width * 2, src.height * 2), Image.NEAREST)
 
-# Cap at ~70% of canvas height so the wordmark doesn't crowd the edges
-max_h = int(TARGET_H * 0.70)
+# Wordmark should DOMINATE the social card, not float in a sea of dark
+# padding. Fill ~92% of the canvas width — leaves a thin margin so the
+# letterforms breathe but the content reads clearly when platforms
+# crop to tighter aspect ratios than GitHub's native 2:1.
+max_w = int(TARGET_W * 0.92)
+if upscaled.width != max_w:
+    ratio = max_w / upscaled.width
+    upscaled = upscaled.resize(
+        (max_w, int(upscaled.height * ratio)),
+        Image.NEAREST,
+    )
+
+# Sanity cap at 88% of canvas height (mostly defensive — the source
+# wordmark's 2.34:1 aspect ratio means width usually constrains first).
+max_h = int(TARGET_H * 0.88)
 if upscaled.height > max_h:
     ratio = max_h / upscaled.height
     upscaled = upscaled.resize(
         (int(upscaled.width * ratio), max_h),
-        Image.NEAREST,
-    )
-
-# Cap at ~85% of canvas width
-max_w = int(TARGET_W * 0.85)
-if upscaled.width > max_w:
-    ratio = max_w / upscaled.width
-    upscaled = upscaled.resize(
-        (max_w, int(upscaled.height * ratio)),
         Image.NEAREST,
     )
 
