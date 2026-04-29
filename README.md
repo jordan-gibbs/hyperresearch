@@ -28,7 +28,9 @@ pip install hyperresearch
 hyperresearch install
 ```
 
-Then, in a fresh Claude Code session, type `/hyperresearch <anything>`. 
+Then, in a fresh Claude Code session, type `/hyperresearch <anything>`.
+
+> **Python 3.11–3.13 only.** 3.14 isn't supported yet — Crawl4AI pins `lxml~=5.3` and that line has no cp314 wheels. Tracking the upstream fix at [unclecode/crawl4ai#1903](https://github.com/unclecode/crawl4ai/issues/1903). Use `pyenv install 3.13`, `uv venv -p 3.13 .venv`, or `py -3.13 -m venv .venv` to create a compatible environment.
 
 ---
 
