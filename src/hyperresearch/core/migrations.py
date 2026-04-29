@@ -28,7 +28,7 @@ def _migrate_v7_interim_note_type(conn: sqlite3.Connection) -> None:
     """Add 'interim' to the notes.type CHECK constraint.
 
     SQLite can't alter a CHECK constraint in place — we rebuild the table.
-    Layercake Layer 3 depth-investigator writes type='interim' notes, so
+    Hyperresearch step 3 depth-investigator writes type='interim' notes, so
     pre-v7 vaults would reject those on sync.
     """
     # Cheap pre-check: if the table already accepts 'interim', skip.

@@ -23,7 +23,7 @@ class NoteType(StrEnum):
     RAW = "raw"
     INDEX = "index"
     MOC = "moc"
-    INTERIM = "interim"  # layercake depth-investigator output (Layer 3)
+    INTERIM = "interim"  # hyperresearch depth-investigator output (Layer 3)
     SOURCE_ANALYSIS = "source-analysis"  # deep single-source analytical digest
 
 

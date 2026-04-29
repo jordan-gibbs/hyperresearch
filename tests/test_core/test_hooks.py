@@ -1,20 +1,18 @@
-"""Tests for hook installer and skill file provisioning (layercake roster)."""
+"""Tests for hook installer and skill file provisioning (hyperresearch roster)."""
 
 from __future__ import annotations
 
 from hyperresearch.core.hooks import (
     _RETIRED_AGENT_FILES,
     _RETIRED_SKILL_DIRS,
-    _SKILL_FILES,
     _install_depth_critic_agent,
     _install_depth_investigator_agent,
     _install_dialectic_critic_agent,
+    _install_hyperresearch_skill,
     _install_instruction_critic_agent,
-    _install_layercake_skill,
     _install_loci_analyst_agent,
     _install_patcher_agent,
     _install_polish_auditor_agent,
-    _install_research_skill,
     _install_researcher_agent,
     _install_source_analyst_agent,
     _install_width_critic_agent,
@@ -23,80 +21,88 @@ from hyperresearch.core.hooks import (
 )
 
 # ---------------------------------------------------------------------------
-# /research skill (single-pass, unchanged)
+# Entry skill — installs at both /hyperresearch and /research
 # ---------------------------------------------------------------------------
 
 
-def test_install_skill_writes_expected_files(tmp_vault):
-    result = _install_research_skill(tmp_vault.root)
-    skill_dir = tmp_vault.root / ".claude" / "skills" / "hyperresearch"
-    assert skill_dir.is_dir()
-
-    expected = {dest_name for _, dest_name in _SKILL_FILES}
-    present = {p.name for p in skill_dir.glob("SKILL*.md")}
-    assert expected.issubset(present)
+def test_install_hyperresearch_skill_creates_both_aliases(tmp_vault):
+    """The entry skill installs at .claude/skills/hyperresearch/SKILL.md and
+    .claude/skills/research/SKILL.md so Claude Code registers BOTH
+    `/hyperresearch` and `/research` as slash-command triggers. Same content,
+    different `name:` frontmatter.
+    """
+    result = _install_hyperresearch_skill(tmp_vault.root)
     assert result is not None
 
+    hyper_path = tmp_vault.root / ".claude" / "skills" / "hyperresearch" / "SKILL.md"
+    research_path = tmp_vault.root / ".claude" / "skills" / "research" / "SKILL.md"
+    assert hyper_path.exists()
+    assert research_path.exists()
 
-def test_install_skill_prunes_stale_files(tmp_vault):
-    skill_dir = tmp_vault.root / ".claude" / "skills" / "hyperresearch"
-    skill_dir.mkdir(parents=True, exist_ok=True)
+    hyper_body = hyper_path.read_text(encoding="utf-8")
+    research_body = research_path.read_text(encoding="utf-8")
+    assert "name: hyperresearch" in hyper_body
+    assert "name: research" in research_body
+    # Body content (everything after the name line) is identical
+    assert hyper_body.replace("name: hyperresearch", "") == research_body.replace(
+        "name: research", ""
+    )
 
-    stale_names = [
-        "SKILL-humanities.md",
-        "SKILL-academic.md",
-        "SKILL-landscape.md",
-        "SKILL-technical.md",
-        "SKILL-ensemble.md",  # pre-layercake stale file
-    ]
-    for name in stale_names:
-        (skill_dir / name).write_text("stale content\n", encoding="utf-8")
-
-    result = _install_research_skill(tmp_vault.root)
-
-    remaining = {p.name for p in skill_dir.glob("SKILL*.md")}
-    expected = {dest_name for _, dest_name in _SKILL_FILES}
-    assert remaining == expected
-    for name in stale_names:
-        assert not (skill_dir / name).exists(), f"stale file {name} still present"
-    assert result is not None
-    assert "pruned" in result
-
-
-def test_install_skill_idempotent_second_run(tmp_vault):
-    first = _install_research_skill(tmp_vault.root)
-    assert first is not None
-    second = _install_research_skill(tmp_vault.root)
-    assert second is None, "second run should report no changes"
-
-
-# ---------------------------------------------------------------------------
-# /research-layercake skill
-# ---------------------------------------------------------------------------
-
-
-def test_install_layercake_skill_creates_separate_skill_dir(tmp_vault):
-    """Layercake skill lives at .claude/skills/research-layercake/SKILL.md so
-    Claude Code registers `/research-layercake` as its own slash-command trigger."""
-    result = _install_layercake_skill(tmp_vault.root)
-    own_dir_path = tmp_vault.root / ".claude" / "skills" / "research-layercake" / "SKILL.md"
-    assert own_dir_path.exists()
-
-    body = own_dir_path.read_text(encoding="utf-8")
-    assert "name: research-layercake" in body
-    assert "hyperresearch-loci-analyst" in body
-    assert "hyperresearch-depth-investigator" in body
-    assert "hyperresearch-patcher" in body
-    assert "hyperresearch-polish-auditor" in body
+    # Entry skill is the chain router — must reference step skills
+    assert "hyperresearch-1-decompose" in hyper_body
+    assert "hyperresearch-10-triple-draft" in hyper_body
+    assert "hyperresearch-11-synthesize" in hyper_body
+    assert "hyperresearch-16-readability-audit" in hyper_body
+    # Chain mechanics: must explain Skill tool invocation
+    assert "Skill" in hyper_body
     # Patching invariant must appear in the skill prose
-    assert "PATCH" in body
-    assert result is not None
+    assert "PATCH" in hyper_body
+    # The most common V7 failure mode (single-draft instead of ensemble) must be
+    # called out by name in the entry skill
+    assert "PIPELINE VIOLATION" in hyper_body
 
 
-def test_install_layercake_skill_idempotent(tmp_vault):
-    first = _install_layercake_skill(tmp_vault.root)
+def test_install_hyperresearch_skill_idempotent(tmp_vault):
+    first = _install_hyperresearch_skill(tmp_vault.root)
     assert first is not None
-    second = _install_layercake_skill(tmp_vault.root)
+    second = _install_hyperresearch_skill(tmp_vault.root)
+    assert second is None
+
+
+def test_install_hyperresearch_step_skills_creates_all_16(tmp_vault):
+    """Each step skill lives at .claude/skills/hyperresearch-N-name/SKILL.md so the
+    orchestrator can invoke it via the Skill tool. All 16 must install on a
+    fresh vault."""
+    from hyperresearch.core.hooks import (
+        _HYPERRESEARCH_STEP_SKILLS,
+        _install_hyperresearch_step_skills,
+    )
+
+    result = _install_hyperresearch_step_skills(tmp_vault.root)
+    assert result is not None
+    assert len(_HYPERRESEARCH_STEP_SKILLS) == 16
+
+    skills_root = tmp_vault.root / ".claude" / "skills"
+    for skill_name in _HYPERRESEARCH_STEP_SKILLS:
+        skill_path = skills_root / skill_name / "SKILL.md"
+        assert skill_path.exists(), f"missing step skill: {skill_name}"
+
+        body = skill_path.read_text(encoding="utf-8")
+        # Every step skill must have its name in frontmatter so the Skill tool
+        # can invoke it
+        assert f"name: {skill_name}" in body
+        # Every step skill (except 16, the terminal step) must point to the
+        # next step via the Skill tool
+        if skill_name != "hyperresearch-16-readability-audit":
+            assert "Skill" in body
+
+
+def test_install_hyperresearch_step_skills_idempotent(tmp_vault):
+    from hyperresearch.core.hooks import _install_hyperresearch_step_skills
+
+    first = _install_hyperresearch_step_skills(tmp_vault.root)
+    assert first is not None
+    second = _install_hyperresearch_step_skills(tmp_vault.root)
     assert second is None
 
 
@@ -110,7 +116,7 @@ def test_install_fetcher_agent(tmp_vault):
     agent_path = tmp_vault.root / ".claude" / "agents" / "hyperresearch-fetcher.md"
     assert agent_path.exists()
     body = agent_path.read_text(encoding="utf-8")
-    assert "model: haiku" in body
+    assert "model: sonnet" in body
     # Summary policy is length-proportional — no hard one-sentence cap.
     # Long sources should get multi-paragraph summaries, short ones stay
     # short. The prompt must discuss both ends of that range AND flag
@@ -313,13 +319,13 @@ def test_patcher_install_idempotent(tmp_vault):
 
 
 def test_prune_retired_agents_removes_old_files(tmp_vault):
-    """Pre-layercake vaults have analyst/auditor/rewriter/subrun/merger agent
+    """Pre-hyperresearch vaults have analyst/auditor/rewriter/subrun/merger agent
     files and a research-ensemble skill dir. Installing onto such a vault
     must prune those so the installed state matches the current architecture."""
     agents_dir = tmp_vault.root / ".claude" / "agents"
     agents_dir.mkdir(parents=True, exist_ok=True)
     for name in _RETIRED_AGENT_FILES:
-        (agents_dir / name).write_text("pre-layercake content\n", encoding="utf-8")
+        (agents_dir / name).write_text("pre-hyperresearch content\n", encoding="utf-8")
 
     skills_dir = tmp_vault.root / ".claude" / "skills"
     for name in _RETIRED_SKILL_DIRS:
@@ -348,12 +354,12 @@ def test_prune_retired_agents_noop_on_clean_vault(tmp_vault):
 # ---------------------------------------------------------------------------
 
 
-def test_install_hooks_registers_full_layercake_roster(tmp_vault):
-    """install_hooks wires the hook + both skills + all 10 layercake agents."""
+def test_install_hooks_registers_full_hyperresearch_roster(tmp_vault):
+    """install_hooks wires the hook, both entry-skill aliases, and the agent roster."""
     actions = install_hooks(tmp_vault.root, "hyperresearch")
     assert actions  # something happened
 
-    # All 12 agent files must be present
+    # All agent files must be present
     agents_dir = tmp_vault.root / ".claude" / "agents"
     expected_agents = {
         "hyperresearch-fetcher.md",
@@ -367,18 +373,18 @@ def test_install_hooks_registers_full_layercake_roster(tmp_vault):
         "hyperresearch-instruction-critic.md",
         "hyperresearch-patcher.md",
         "hyperresearch-polish-auditor.md",
-        "hyperresearch-readability-reformatter.md",
+        "hyperresearch-readability-recommender.md",
+        "hyperresearch-draft-orchestrator.md",
+        "hyperresearch-synthesizer.md",
     }
     actual_agents = {p.name for p in agents_dir.iterdir() if p.is_file()}
     assert expected_agents == actual_agents, (
         f"missing: {expected_agents - actual_agents}, extra: {actual_agents - expected_agents}"
     )
 
-    # Both skill entry points registered
+    # Both entry-skill aliases registered (/hyperresearch and /research)
     assert (tmp_vault.root / ".claude" / "skills" / "hyperresearch" / "SKILL.md").exists()
-    assert (
-        tmp_vault.root / ".claude" / "skills" / "research-layercake" / "SKILL.md"
-    ).exists()
+    assert (tmp_vault.root / ".claude" / "skills" / "research" / "SKILL.md").exists()
 
     # Hook settings written
     assert (tmp_vault.root / ".claude" / "settings.json").exists()

@@ -122,6 +122,11 @@ def note_new(
                           note_type=note_type, parent=parent, summary=summary,
                           source=source, tier=tier, content_type=content_type)
 
+    # Sync the new file into the DB so type/tags are indexed immediately
+    from hyperresearch.core.sync import compute_sync_plan, execute_sync
+    plan = compute_sync_plan(vault)
+    execute_sync(vault, plan)
+
     # Read back the note ID (may have been collision-adjusted)
     from hyperresearch.core.note import read_note
     note = read_note(path, vault.root)

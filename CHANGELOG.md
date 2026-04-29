@@ -1,14 +1,32 @@
 # Changelog
 
+## [0.8.0] - 2026-04-29
+
+### Architecture — V8.3 deployment release
+
+The flagship pipeline ships as a tier-adaptive 16-step chain. The `/research-layercake` slash command is retired; the entry skill is now invokable as both `/hyperresearch` and `/research`. Internal codename "layercake" is gone — everywhere — replaced by the product name. The simple V1 single-pass research skill and its four modality variants are removed; the V8 `light` tier replaces them as the fast path for bounded queries.
+
+### Changed
+- **Entry skill aliasing.** `hyperresearch install` now writes the entry skill to both `.claude/skills/hyperresearch/SKILL.md` and `.claude/skills/research/SKILL.md` so Claude Code registers `/hyperresearch` and `/research` as independent triggers for the same V8 pipeline.
+- **Step skills renamed.** All 16 step skills moved from `layercake-N-name` to `hyperresearch-N-name`. The Skill-tool invocations in every step file route to the new names. Pre-existing `layercake-*` skill directories are pruned automatically on the next `hyperresearch install`.
+- **V1 skills removed.** `research.md`, `research-collect.md`, `research-compare.md`, `research-forecast.md`, `research-synthesize.md` deleted from the source tree. The V8 `light` tier (steps 1 → 2 → 10 → 15 → 16) is the fast path for short bounded queries.
+- **Light tier coherence.** Step 10's light path now has explicit guidance for vault-driven evidence sourcing, structural-heading compliance, citation rendering, and hygiene rules. Step 15's integrity gate is tier-conditional — it no longer demands critic-findings or patch-log artifacts when those steps were tier-skipped.
+- **Lint workflow rule** renamed from "Layercake artifacts missing" to "Hyperresearch artifacts missing" (cosmetic).
+
+### Pruned on upgrade
+- Skill dir `research-layercake` deleted (superseded by `/hyperresearch` alias).
+- V1 modality files (`SKILL-collect.md`, `SKILL-synthesize.md`, `SKILL-compare.md`, `SKILL-forecast.md`) removed from the install dir.
+- Legacy `layercake-*` step-skill directories cleaned up.
+
 ## [0.7.0] - 2026-04-17
 
-### Architecture — `/research-ensemble` retired, `/research-layercake` introduced
+### Architecture — `/research-ensemble` retired, `/hyperresearch` introduced
 
 This release replaces the three-parallel-drafts-plus-merger ensemble design with a seven-phase layered pipeline. Width is discovered first, depth loci are derived from the width corpus (not pre-assigned framings), one draft is written from the combined evidence, three adversarial critics run in parallel against it, and the draft is then modified ONLY by surgical Edit hunks — never regenerated.
 
 ### New
 
-- **7-phase layercake pipeline** — (1) width sweep via parallel fetchers, (2) two parallel loci-analysts identify 1–8 depth loci from the corpus, (3) one depth-investigator per locus writes an `interim-<locus>.md` note, (4) orchestrator writes ONE draft, (5) dialectic / depth / width critics return structured findings JSONs, (6) the patcher applies findings as Edit hunks, (7) the polish auditor cuts filler and strips hygiene leaks via more Edit hunks. Protocol lives at `.claude/skills/research-layercake/SKILL.md`.
+- **7-phase hyperresearch pipeline** — (1) width sweep via parallel fetchers, (2) two parallel loci-analysts identify 1–8 depth loci from the corpus, (3) one depth-investigator per locus writes an `interim-<locus>.md` note, (4) orchestrator writes ONE draft, (5) dialectic / depth / width critics return structured findings JSONs, (6) the patcher applies findings as Edit hunks, (7) the polish auditor cuts filler and strips hygiene leaks via more Edit hunks. Protocol lives at `.claude/skills/hyperresearch/SKILL.md`.
 - **Tool-locked patcher + polish auditor** — both agents register with tools `[Read, Edit]` ONLY. They physically cannot Write. Every hunk is capped at 500 chars of net expansion — any critic that proposes a larger patch escalates to the orchestrator instead of triggering a rewrite. This is the load-bearing invariant that enforces PATCH-NOT-REGEN at the tool level, not the prompt level.
 - **`NoteType.INTERIM`** — new first-class note type for depth-investigator outputs. Persisted in the vault with `type: interim` and tagged `locus-<name>` for indexability. Added to the SQLite CHECK constraint via migration v7.
 - **`locus-coverage` lint rule** — reads `research/loci.json` (Layer 2 output) and verifies every identified locus has a corresponding interim-report note. Missing interims flag as errors.
@@ -23,7 +41,7 @@ This release replaces the three-parallel-drafts-plus-merger ensemble design with
 
 - **`/research-ensemble` skill** — the three-parallel-sub-run ensemble protocol is gone. The slash command no longer registers.
 - **Retired subagents** — `hyperresearch-analyst`, `hyperresearch-auditor`, `hyperresearch-rewriter`, `hyperresearch-subrun`, `hyperresearch-merger` are no longer installed. On reinstall, any vault that had them gets them pruned automatically by `_prune_retired_agents()`.
-- **`analyst-coverage` lint rule** — superseded by `locus-coverage` (extracts were the ensemble era's per-source deep-read artifact; interim notes are the layercake equivalent scoped per locus).
+- **`analyst-coverage` lint rule** — superseded by `locus-coverage` (extracts were the ensemble era's per-source deep-read artifact; interim notes are the hyperresearch equivalent scoped per locus).
 
 ### New subagent roster (9 agents)
 
