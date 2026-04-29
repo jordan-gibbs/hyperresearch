@@ -1,8 +1,12 @@
 name: Publish to PyPI
 
 on:
+  push:
+    tags:
+      - "v*"
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: read
