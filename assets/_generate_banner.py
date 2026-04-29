@@ -1,12 +1,15 @@
-"""Regenerate banner.png at GitHub-social-preview dimensions (1280x640).
+"""Generate banner_social.png at GitHub-social-preview dimensions (1280x640).
 
-Takes the existing pixel-art wordmark (584x250), upscales it 2x with
-nearest-neighbor to preserve the chunky pixel aesthetic, and places it
-centered on a 1280x640 dark canvas matching the benchmark chart's
-background color so the README header + social preview + Star History
-icon all read as one visual system.
+Takes the original pixel-art wordmark (assets/banner.png, 584x250),
+upscales it 2x with nearest-neighbor to preserve the chunky pixel
+aesthetic, and places it centered on a 1280x640 dark canvas matching
+the benchmark chart's background color so the README header + social
+preview + Star History icon all read as one visual system.
 
-Output: assets/banner.png (overwrites)
+The README still references the original `banner.png` for inline display.
+This script writes a SEPARATE file so the original is never overwritten.
+
+Output: assets/banner_social.png (for repo Settings → Social preview)
 """
 
 from pathlib import Path
@@ -15,7 +18,7 @@ from PIL import Image
 
 ASSETS = Path(__file__).parent
 SRC = ASSETS / "banner.png"
-OUT = ASSETS / "banner.png"
+OUT = ASSETS / "banner_social.png"
 
 # Match the chart's dark background so the README header + chart + social
 # preview share one visual treatment.
