@@ -18,18 +18,49 @@ def install(
         False,
         "--global",
         "-g",
-        help="Install Claude Code skills + agents to ~/.claude/ so /hyperresearch works in every Claude Code session anywhere. Skips vault init and CLAUDE.md (those happen per-project on first /hyperresearch run).",
+        help="Install Claude Code entry skill + agents to ~/.claude/ so /hyperresearch works in every Claude Code session anywhere. Skips vault init, CLAUDE.md, and the 16 step skills (those happen per-project on first /hyperresearch run).",
+    ),
+    steps_only: bool = typer.Option(
+        False,
+        "--steps-only",
+        help="Install only the 16 step skills to <PATH>/.claude/skills/. Used internally by the entry skill bootstrap on first /hyperresearch invocation in a project. Not normally invoked by users.",
     ),
 ) -> None:
     """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
     import sys
 
-    from hyperresearch.core.hooks import install_global_hooks, install_hooks
+    from hyperresearch.core.hooks import (
+        _install_hyperresearch_step_skills,
+        install_global_hooks,
+        install_hooks,
+    )
     from hyperresearch.core.vault import Vault, VaultError
 
-    # Global install path: only the user-level Claude Code skills + agents.
-    # No vault, no CLAUDE.md, no project-level state — pure "make the slash
-    # command available everywhere" mode.
+    # Steps-only path: lazy install of the 16 step skills to a project's
+    # .claude/skills/. Called by the entry skill's bootstrap on first
+    # /hyperresearch in a project (after a global install). Cheap no-op
+    # on subsequent invocations.
+    if steps_only:
+        target = Path(path).resolve()
+        result = _install_hyperresearch_step_skills(target)
+        if json_output:
+            output(
+                success({"steps_installed": result, "target": str(target)}, vault=None),
+                json_mode=True,
+            )
+            return
+        if result:
+            console.print(f"[green]Step skills installed:[/] {target}/.claude/skills/")
+            console.print(f"  {result}")
+        else:
+            console.print(f"[dim]Step skills already installed at {target}/.claude/skills/[/]")
+        return
+
+    # Global install path: only the user-level Claude Code entry skill +
+    # agents. No vault, no CLAUDE.md, no step skills — pure "make the
+    # slash command available everywhere" mode. Step skills install
+    # per-project, lazily, when the entry skill bootstrap calls
+    # `hyperresearch install --steps-only .` on first invocation.
     if global_install:
         from hyperresearch.core.agent_docs import _resolve_executable
 
@@ -57,8 +88,8 @@ def install(
             "\n[bold]Ready.[/] /hyperresearch is now available in every Claude Code session."
         )
         console.print(
-            "[dim]On first /hyperresearch run in a project, the vault and research/ folder "
-            "are created in that project's root.[/]"
+            "[dim]On first /hyperresearch run in a project, the vault, research/ folder, "
+            "and the 16 step skills are created in that project's .claude/.[/]"
         )
         return
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.3] - 2026-04-29
+
+### Quieter global install — step skills lazy-load per-project
+
+Global install (`hyperresearch install --global`) used to write all 16 step skills to `~/.claude/skills/`, advertising them in the available-skills system reminder of every Claude Code session — ~3K tokens of noise on sessions where `/hyperresearch` is never used.
+
+- **Global install now writes only the entry skill + agents to `~/.claude/`.** The 16 step skills (`hyperresearch-1-decompose` … `hyperresearch-16-readability-audit`) install per-project, lazily.
+- **Entry skill bootstrap step 0** now also runs `hyperresearch install --steps-only .` if step skills aren't found in the project's `.claude/skills/`. First `/hyperresearch` invocation in a fresh project materializes the step skills there. Subsequent invocations no-op.
+- **New `hyperresearch install --steps-only [PATH]`** flag — installs only the 16 step skills to `<path>/.claude/skills/`. Used by the bootstrap, also available manually.
+- **Upgrade prune** — `hyperresearch install --global` removes any `hyperresearch-N-*` step-skill dirs left in `~/.claude/skills/` by 0.8.2-and-earlier global installs.
+
+Net effect: sessions in projects that never use hyperresearch see only the entry skill + agent descriptions in their available-skills/agents lists. Step-skill noise is scoped to projects that actually use the tool.
+
 ## [0.8.2] - 2026-04-29
 
 ### Global install
