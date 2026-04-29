@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.4] - 2026-04-29
+
+### Polish + release plumbing
+
+- **README install section** now leads with the per-project path. `hyperresearch install --global` is documented as a power-user footnote with the honest tradeoff (~15 lines of system-reminder cost in every CC session). Per-project install keeps unrelated CC sessions clean.
+- **Tightened install section** from 22 lines to 7 — single command, single usage line, single Python disclaimer.
+- **Subagent roster table** corrected: `hyperresearch-fetcher` runs on Sonnet (not Haiku), `hyperresearch-draft-orchestrator` runs on Opus (not Sonnet).
+- **CI**: `publish.yml` now triggers on git tag pushes (`v*`) and `workflow_dispatch` in addition to GitHub releases. Future versions auto-publish on `git push --tags`.
+
 ## [0.8.3] - 2026-04-29
 
 ### Quieter global install — step skills lazy-load per-project
