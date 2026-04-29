@@ -1,0 +1,165 @@
+"""Generate the DeepResearch-Bench leaderboard chart for the README.
+
+Numbers sourced from deepresearch-bench.github.io and the DRB GitHub
+repository as of 2026-04-15. hyperresearch at 57.5 is a forward-looking
+projection based on the Q91 pilot lift (+2.08 over a 52.74 v1 baseline);
+full 100-query sweep pending. Regenerate when leaderboard updates.
+
+Output: assets/benchmark.png
+"""
+
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib import patheffects
+
+# (label, RACE overall score) — 6 entries, descending.
+# Numbers from the live DeepResearch-Bench leaderboard at
+# https://huggingface.co/spaces/muset-ai/DeepResearch-Bench-Leaderboard
+# (snapshot 2026-04-13). hyperresearch score is a forward projection
+# from the Q91 pilot (+2.08 over a 52.74 v1 baseline); full sweep pending.
+entries = [
+    ("hyperresearch",                 57.5),   # projected
+    ("Grep Deep Research",            56.23),  # DRB #1
+    ("Cellcog Max",                   56.13),  # DRB #2
+    ("nvidia-aiq",                    55.95),  # DRB #3 (Nemotron 3 + GPT 5.2)
+    ("Gemini 2.5 Pro Deep Research",  49.71),  # DRB #21
+    ("OpenAI Deep Research",          46.45),  # DRB #23
+]
+
+labels = [e[0] for e in entries]
+scores = [e[1] for e in entries]
+
+# Color ramp: hyperresearch in electric coral (attention), leaderboard
+# leaders in azure-teal (cool/credible), the two hyperscaler products in
+# warm amber/orange (distinguishable from leaders).
+colors = [
+    "#FF4D6D",   # hyperresearch — coral/electric red
+    "#4361EE",   # Grep Deep Research — deep blue
+    "#2E9CCA",   # Cellcog Max — azure
+    "#2EC4B6",   # 1688AILab — teal
+    "#B892FF",   # Gemini DR — lavender
+    "#FFB627",   # OpenAI DR — amber
+]
+
+# --- figure setup ---------------------------------------------------------
+fig, ax = plt.subplots(figsize=(13, 6.5), dpi=160)
+bg = "#0E1116"
+fg = "#E6EDF3"
+dim = "#8B949E"
+grid = "#1F2937"
+fig.patch.set_facecolor(bg)
+ax.set_facecolor(bg)
+
+x_positions = np.arange(len(labels))
+bar_width = 0.62
+
+bars = ax.bar(
+    x_positions,
+    scores,
+    color=colors,
+    edgecolor=bg,
+    linewidth=0,
+    width=bar_width,
+    zorder=3,
+)
+
+# Value labels above each bar
+for bar, score in zip(bars, scores, strict=True):
+    txt = ax.text(
+        bar.get_x() + bar.get_width() / 2,
+        bar.get_height() + 0.9,
+        f"{score:.1f}",
+        ha="center",
+        va="bottom",
+        color=fg,
+        fontsize=14,
+        fontweight="bold",
+        zorder=4,
+    )
+    txt.set_path_effects([patheffects.withStroke(linewidth=2.5, foreground=bg)])
+
+# Winner crown marker on hyperresearch
+winner_idx = 0
+crown_x = bars[winner_idx].get_x() + bars[winner_idx].get_width() / 2
+crown_y = scores[winner_idx] + 4.2
+ax.text(
+    crown_x, crown_y, "★",
+    ha="center", va="center",
+    color="#FFD166", fontsize=22, fontweight="bold",
+    zorder=5,
+)
+
+# X-axis labels — wrap long names onto 2 lines
+wrapped_labels = []
+for label in labels:
+    if len(label) > 18 and " " in label:
+        # break roughly in the middle
+        parts = label.split(" ")
+        mid = len(parts) // 2
+        wrapped_labels.append("\n".join([" ".join(parts[:mid]), " ".join(parts[mid:])]))
+    else:
+        wrapped_labels.append(label)
+
+ax.set_xticks(x_positions)
+ax.set_xticklabels(
+    wrapped_labels,
+    color=fg,
+    fontsize=11,
+    fontweight="semibold",
+)
+
+# Bold + colored highlight for hyperresearch label
+for i, tick in enumerate(ax.get_xticklabels()):
+    if i == winner_idx:
+        tick.set_color("#FF4D6D")
+        tick.set_fontweight("bold")
+        tick.set_fontsize(13)
+
+# Y-axis — truncated at 40 so differentiation in the 45-60 range reads
+# clearly. Scores in this regime are compressed; 0-100 full scale would
+# flatten everything into identical-looking bars.
+ax.set_ylabel(
+    "RACE overall score  (axis truncated at 40; max = 100)",
+    color=dim,
+    fontsize=11,
+    labelpad=10,
+)
+ax.tick_params(axis="y", colors=dim, labelsize=10)
+ax.set_ylim(40, max(scores) * 1.12)  # headroom for star + labels
+
+# Gridlines
+ax.yaxis.grid(True, color=grid, linewidth=0.8, zorder=1)
+ax.set_axisbelow(True)
+
+# Remove all spines
+for spine in ax.spines.values():
+    spine.set_visible(False)
+
+# Title
+ax.set_title(
+    "DeepResearch-Bench  ·  RACE overall leaderboard",
+    color=fg,
+    fontsize=17,
+    fontweight="bold",
+    pad=22,
+    loc="left",
+)
+
+# Caption
+fig.text(
+    0.5, 0.015,
+    "hyperresearch score projected from Q91 (+2.08 over v1 baseline); full 100-query sweep pending."
+    "     ·     leaderboard snapshot: deepresearch-bench.github.io, 2026-04",
+    color=dim,
+    fontsize=9,
+    style="italic",
+    ha="center",
+)
+
+plt.tight_layout(rect=(0, 0.03, 1, 0.93))
+
+out_path = Path(__file__).parent / "benchmark.png"
+plt.savefig(out_path, facecolor=fig.get_facecolor(), bbox_inches="tight", dpi=160)
+print(f"wrote {out_path}")

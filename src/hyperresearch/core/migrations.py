@@ -28,7 +28,7 @@ def _migrate_v7_interim_note_type(conn: sqlite3.Connection) -> None:
     """Add 'interim' to the notes.type CHECK constraint.
 
     SQLite can't alter a CHECK constraint in place — we rebuild the table.
-    Layercake Layer 3 depth-investigator writes type='interim' notes, so
+    Hyperresearch step 3 depth-investigator writes type='interim' notes, so
     pre-v7 vaults would reject those on sync.
     """
     # Cheap pre-check: if the table already accepts 'interim', skip.
@@ -92,6 +92,72 @@ def _migrate_v7_interim_note_type(conn: sqlite3.Connection) -> None:
     """)
 
 
+def _migrate_v8_source_analysis_note_type(conn: sqlite3.Connection) -> None:
+    """Add 'source-analysis' to the notes.type CHECK constraint.
+
+    Same pattern as v7: SQLite can't alter a CHECK in place, so we rebuild
+    the table when the existing one rejects the new type. Pre-v8 vaults
+    would fail on sync once the source-analyst subagent starts writing
+    type='source-analysis' notes.
+    """
+    try:
+        with conn:
+            conn.execute("SAVEPOINT check_source_analysis_type")
+            try:
+                conn.execute(
+                    "INSERT INTO notes (id, title, path, type, created) "
+                    "VALUES ('__migrate_probe_v8__', 'probe', '__migrate_probe_v8__', "
+                    "'source-analysis', '1970-01-01T00:00:00Z')"
+                )
+                conn.execute("DELETE FROM notes WHERE id = '__migrate_probe_v8__'")
+                conn.execute("RELEASE check_source_analysis_type")
+                return  # already compatible
+            except sqlite3.IntegrityError:
+                conn.execute("ROLLBACK TO check_source_analysis_type")
+                conn.execute("RELEASE check_source_analysis_type")
+    except sqlite3.OperationalError:
+        pass
+
+    conn.executescript("""
+        CREATE TABLE notes_v8 (
+            id           TEXT PRIMARY KEY,
+            title        TEXT NOT NULL,
+            path         TEXT NOT NULL UNIQUE,
+            status       TEXT NOT NULL DEFAULT 'draft'
+                             CHECK (status IN ('draft','review','evergreen','stale','deprecated','archive')),
+            type         TEXT NOT NULL DEFAULT 'note'
+                             CHECK (type IN ('note','raw','index','moc','interim','source-analysis')),
+            tier         TEXT
+                             CHECK (tier IS NULL OR tier IN ('ground_truth','institutional','practitioner','commentary','unknown')),
+            content_type TEXT
+                             CHECK (content_type IS NULL OR content_type IN ('paper','docs','article','blog','forum','dataset','policy','code','book','transcript','review','unknown')),
+            source       TEXT,
+            parent       TEXT,
+            deprecated   INTEGER NOT NULL DEFAULT 0,
+            reviewed     TEXT,
+            expires      TEXT,
+            word_count   INTEGER NOT NULL DEFAULT 0,
+            summary      TEXT,
+            created      TEXT NOT NULL,
+            updated      TEXT,
+            file_mtime   REAL NOT NULL DEFAULT 0,
+            content_hash TEXT NOT NULL DEFAULT '',
+            synced_at    TEXT NOT NULL DEFAULT ''
+        );
+    """)
+    old_cols = {row[1] for row in conn.execute("PRAGMA table_info(notes)")}
+    new_cols = {row[1] for row in conn.execute("PRAGMA table_info(notes_v8)")}
+    shared = sorted(old_cols & new_cols)
+    col_list = ", ".join(shared)
+    conn.execute(
+        f"INSERT INTO notes_v8 ({col_list}) SELECT {col_list} FROM notes"
+    )
+    conn.executescript("""
+        DROP TABLE notes;
+        ALTER TABLE notes_v8 RENAME TO notes;
+    """)
+
+
 MIGRATIONS: dict[int, str | Callable[[sqlite3.Connection], None]] = {
     2: """
 CREATE TABLE IF NOT EXISTS tag_aliases (
@@ -135,6 +201,7 @@ CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
 """,
     6: _migrate_v6_tier_content_type,
     7: _migrate_v7_interim_note_type,
+    8: _migrate_v8_source_analysis_note_type,
 }
 
 

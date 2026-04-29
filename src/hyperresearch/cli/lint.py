@@ -18,7 +18,7 @@ RULES = {
     "missing-tags": "Notes without any tags",
     "missing-summary": "Notes without a summary",
     "uncurated": "Non-draft notes without tier or content_type classification",
-    "workflow": "Layercake artifacts missing (scaffold, loci, interim notes)",
+    "workflow": "Hyperresearch artifacts missing (scaffold, loci, interim notes)",
     "scaffold-prompt": "Scaffold notes missing the verbatim user prompt as first section (gospel rule)",
     "wrapper-report": "Final report missing required wrapper contract sections when a harness pinned the canonical query",
     "audit-gate": "Unresolved CRITICAL findings in research/audit_findings.json block synthesis save",
@@ -26,7 +26,7 @@ RULES = {
     "locus-coverage": "Loci identified in Layer 2 missing their interim-report notes (depth investigator skipped)",
     "patch-surgery": "Critical critic findings skipped by the patcher (Layer 6 regeneration guard tripped)",
     "instruction-coverage": "Atomic items from prompt-decomposition missing from the final report (draft drifted from user's ask)",
-    "extract-coverage": "Single-pass /research runs with fetched sources but no paired extract notes (analyst skipped)",
+    "extract-coverage": "Single-pass /research runs with fetched sources but no paired extract notes (reading loop skipped or source-analyst not delegated for long sources)",
     "orphaned-raw-files": "Files in research/raw/ with no matching note (disk leak from old note rm)",
     "singleton-tags": "Tags used by only one note",
     "broken-links": "Wiki-links that don't resolve",
@@ -274,7 +274,8 @@ def lint(
                     ("extract ratio", "extract-coverage"),
                     ("extract notes", "extract-coverage"),
                     ("fetch:extract", "extract-coverage"),
-                    ("analyst skipped", "extract-coverage"),
+                    ("analyst skipped", "extract-coverage"),  # legacy keyword
+                    ("source-analyst skipped", "extract-coverage"),
                     ("no extract", "extract-coverage"),
 
                     # patch-surgery (patcher didn't apply critical findings)
@@ -394,7 +395,22 @@ def lint(
         )
         prompt_path = vault.root / "research" / "prompt.txt"
         canonical_prompt: str | None = None
-        if prompt_path.exists():
+        # Check for new-style query files first, fall back to legacy prompt.txt
+        query_dir = vault.root / "research"
+        query_files = sorted(query_dir.glob("query-*.md"))
+        if query_files:
+            # Use the most recent query file (last alphabetically)
+            try:
+                raw = query_files[-1].read_text(encoding="utf-8-sig").replace("\r\n", "\n")
+                # Strip YAML frontmatter if present
+                if raw.startswith("---"):
+                    end = raw.find("\n---\n", 3)
+                    if end != -1:
+                        raw = raw[end + 5:]
+                canonical_prompt = raw.rstrip("\n")
+            except OSError:
+                canonical_prompt = None
+        if canonical_prompt is None and prompt_path.exists():
             try:
                 canonical_prompt = (
                     prompt_path.read_text(encoding="utf-8-sig")
@@ -498,7 +514,7 @@ def lint(
 
     if "wrapper-report" in rules_to_run:
         # The rule activates when either signals a wrapped harness context:
-        #   - research/prompt.txt exists (harness pinned the canonical query)
+        #   - research/prompt.txt or research/query-*.md exists (canonical query)
         #   - research/wrapper_contract.json exists (harness declared packaging)
         #
         # Required terminal sections are READ from wrapper_contract.json, not
@@ -508,6 +524,7 @@ def lint(
         # but still enforce scaffold-leak hygiene (always wrong regardless
         # of wrapper).
         prompt_path = vault.root / "research" / "prompt.txt"
+        query_files_exist = bool(sorted((vault.root / "research").glob("query-*.md")))
         contract_path = vault.root / "research" / "wrapper_contract.json"
         wrapper_contract: dict | None = None
         if contract_path.exists():
@@ -528,7 +545,7 @@ def lint(
                 })
                 wrapper_contract = None
 
-        if prompt_path.exists() or wrapper_contract is not None:
+        if prompt_path.exists() or query_files_exist or wrapper_contract is not None:
             report_path = vault.root / "research" / "notes" / "final_report.md"
             if not report_path.exists():
                 issues.append({
@@ -536,8 +553,8 @@ def lint(
                     "severity": "error",
                     "note_id": "<vault>",
                     "message": (
-                        "Wrapped research context detected (prompt.txt or "
-                        "wrapper_contract.json present) but "
+                        "Wrapped research context detected (prompt.txt, "
+                        "query-*.md, or wrapper_contract.json present) but "
                         "`research/notes/final_report.md` is missing. "
                         "The final report must exist before export."
                     ),
@@ -711,13 +728,13 @@ def lint(
                         ),
                     })
 
-            # Coverage / bouncing-loop heuristic: DOES NOT APPLY to layercake runs.
+            # Coverage / bouncing-loop heuristic: DOES NOT APPLY to hyperresearch runs.
             #
             # The ensemble architecture uses an analyst-driven bouncing reading
             # loop (seed → analyst proposes next → fetch with --suggested-by).
             # Under that pattern, 30-50% of sources should carry breadcrumbs.
             #
-            # Layercake's fetch pattern is different:
+            # Hyperresearch's fetch pattern is different:
             #   - Layer 1 width sweep: orchestrator plans ~30-80 URL queue
             #     from academic APIs + search; fetched as parallel seed batches.
             #     These are SEEDS by design, not bouncing-loop discoveries.
@@ -729,18 +746,18 @@ def lint(
             # The rooted-tree structural checks above (seeds exist, no dangling
             # breadcrumbs, reachability from seeds) still apply — they catch
             # fabricated provenance. The coverage ratio does not. Skip the
-            # ratio checks when the vault is a layercake run (loci.json exists).
-            is_layercake_run = (vault.root / "research" / "loci.json").exists()
+            # ratio checks when the vault is a hyperresearch run (loci.json exists).
+            is_hyperresearch_run = (vault.root / "research" / "loci.json").exists()
 
             non_seed_ratio = len(non_seeds) / max(len(source_rows), 1)
-            if is_layercake_run:
-                # Layercake: skip coverage checks. Structural invariants above
+            if is_hyperresearch_run:
+                # Hyperresearch: skip coverage checks. Structural invariants above
                 # were sufficient. If the architecture changes and the depth
                 # investigators need an analyst-driven loop, this can be
                 # revisited.
                 pass
             elif len(source_rows) > 5 and len(non_seeds) == 0:
-                # Non-layercake (ensemble / single-pass) runs: the bouncing
+                # Non-hyperresearch (ensemble / single-pass) runs: the bouncing
                 # loop must fire. Zero breadcrumbs on >5 sources = flat batch.
                 issues.append({
                     "rule": "provenance",
@@ -780,7 +797,7 @@ def lint(
                 })
 
     if "locus-coverage" in rules_to_run:
-        # Layercake Layer 2 produces `research/loci.json` (the deduped loci list
+        # Hyperresearch step 2 produces `research/loci.json` (the deduped loci list
         # the orchestrator commits to). Layer 3 must produce one interim note
         # per locus, tagged `locus-<locus-name>` with `type: interim`. This
         # rule catches depth investigators that failed or were skipped.
@@ -880,11 +897,11 @@ def lint(
         # spawned an analyst, AND it catches stub-padding attacks where the
         # agent mints hollow extract notes to pass numerical coverage.
         #
-        # Layercake runs use a different artifact shape (interim notes per
+        # Hyperresearch runs use a different artifact shape (interim notes per
         # locus, checked by `locus-coverage`). Skip this rule when
-        # `research/loci.json` exists — that signals a layercake run.
-        is_layercake_run = (vault.root / "research" / "loci.json").exists()
-        if not is_layercake_run:
+        # `research/loci.json` exists — that signals a hyperresearch run.
+        is_hyperresearch_run = (vault.root / "research" / "loci.json").exists()
+        if not is_hyperresearch_run:
             extract_min_words = 150
 
             source_count_row = conn.execute(
@@ -1013,7 +1030,7 @@ def lint(
                         f"{len(critical_skipped)} critical finding(s) skipped by patcher: "
                         f"{names}. The draft shipped with known-critical issues unresolved. "
                         "Inspect research/patch-log.json and either hand-craft Edits or "
-                        "re-spawn the critics with tighter suggested_patch entries."
+                        "re-spawn the critics with more specific recommendations."
                     ),
                 })
 
@@ -1188,7 +1205,7 @@ def lint(
     if "workflow" in rules_to_run:
         # Detect research sessions that skipped required process artifacts.
         #
-        # Layercake required artifacts when a final_report exists:
+        # Hyperresearch required artifacts when a final_report exists:
         #   - research/scaffold.md       (Layer 0 planning document)
         #   - research/loci.json         (Layer 2 deduped loci list, if depth ran)
         #   - interim notes              (Layer 3 depth investigator outputs)
@@ -1197,7 +1214,7 @@ def lint(
         #
         # The single-pass /research protocol also produces a scaffold note but
         # has no loci/interim/comparisons artifacts. This rule checks scaffold
-        # universally and layercake-specific artifacts only when loci.json exists.
+        # universally and hyperresearch-specific artifacts only when loci.json exists.
         def _count_by_tag(tag: str) -> int:
             row = conn.execute(
                 "SELECT COUNT(DISTINCT note_id) as c FROM tags WHERE tag = ?",
@@ -1236,7 +1253,7 @@ def lint(
                     ),
                 })
 
-            # Layercake-specific: if loci.json exists, the run was layercake and
+            # Hyperresearch-specific: if loci.json exists, the run was hyperresearch and
             # must have produced interim notes.
             if loci_json_exists and interim_count == 0:
                 issues.append({
@@ -1250,7 +1267,7 @@ def lint(
                     ),
                 })
 
-            # Layercake-specific: if loci.json has 2+ entries, Layer 3.5 must
+            # Hyperresearch-specific: if loci.json has 2+ entries, Layer 3.5 must
             # have produced research/comparisons.md. A single locus means
             # there's nothing to compare and the bridge step is legitimately
             # skipped; 2+ loci means the orchestrator needed to reconcile

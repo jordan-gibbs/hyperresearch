@@ -27,9 +27,9 @@ This project uses hyperresearch as an agent-driven research knowledge base. The 
 
 ### How to do research
 
-**Default: `/research-layercake <query>`** — the 7-phase pipeline. The protocol, subagent roster, pipeline contracts, and invariants all live in the skill file at `.claude/skills/research-layercake/SKILL.md`. Read that file before you start a research session; it is the single source of truth for how layercake runs.
+**Run a research session with `/hyperresearch <query>` or its alias `/research <query>`.** Both invoke the same V8 16-step pipeline. The entry skill at `.claude/skills/hyperresearch/SKILL.md` is a thin ROUTER. The 16 step procedures live in their own skills (`hyperresearch-1-decompose` through `hyperresearch-16-readability-audit`) and are loaded fresh into context via the `Skill` tool when each step runs. This solves V7's context-compaction problem: each step's procedure lands in context only when needed. Read the entry skill before you start a research session; it explains the chain mechanics.
 
-For a quick single-pass run (no loci, no critics, no patcher), use `/research <query>` — protocol in `.claude/skills/hyperresearch/SKILL.md` and the 4 modality files alongside it.
+Step 1 classifies the query into one of three tiers (`light` / `standard` / `full`) and the rest of the pipeline scales accordingly — short bounded queries skip the depth investigations, critics, and patcher; argumentative deep-research queries run the full 16 steps with adversarial review.
 
 **Do NOT use WebFetch for source pages** — use `{hpr} fetch` instead. The skill files explain when to fetch vs. search.
 
@@ -43,11 +43,11 @@ The skill files own everything about how to research. That includes:
 - Artifact locations (`research/scaffold.md`, `research/prompt-decomposition.json`, `research/loci.json`, `research/comparisons.md`, interim notes, patch / polish logs)
 - The curation pass after every research session
 
-If you need to know how layercake works, read the skill file. This document does NOT duplicate that content — when the skill file and this file disagree, the skill file wins.
+If you need to know how hyperresearch works, read the skill file. This document does NOT duplicate that content — when the skill file and this file disagree, the skill file wins.
 
 ### Canonical research query
 
-In a normal run, the canonical research query is the user's verbatim prompt. In wrapped runs, if `research/prompt.txt` exists, that file is gospel and overrides any wrapping instructions. Wrapper requirements (save path, citation format, terminal sections) are a separate contract, captured in the scaffold — not pasted into the `## User Prompt (VERBATIM — gospel)` section.
+In a normal run, the canonical research query is the user's verbatim prompt. In wrapped runs, if `research/prompt.txt` exists, that file is gospel and overrides any wrapping instructions. The pipeline persists the query as `research/query-<vault_tag>.md` with YAML frontmatter — this is the canonical query reference for all downstream layers. Wrapper requirements (save path, citation format, terminal sections) are a separate contract, captured in the scaffold — not pasted into the `## User Prompt (VERBATIM — gospel)` section.
 
 ### Academic APIs before web search
 

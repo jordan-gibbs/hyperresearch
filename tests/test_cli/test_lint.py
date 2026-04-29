@@ -811,7 +811,7 @@ def test_orphaned_raw_files_ignores_matched_raw(tmp_vault):
 
 
 # ---------------------------------------------------------------------------
-# locus-coverage (layercake Layer 3 — every locus must have an interim note)
+# locus-coverage (hyperresearch Layer 3 — every locus must have an interim note)
 # ---------------------------------------------------------------------------
 
 
@@ -891,7 +891,7 @@ def test_locus_coverage_noop_when_no_loci_json(tmp_vault):
 
 
 # ---------------------------------------------------------------------------
-# patch-surgery (layercake Layer 6 — patcher must not skip critical findings)
+# patch-surgery (hyperresearch Layer 6 — patcher must not skip critical findings)
 # ---------------------------------------------------------------------------
 
 
@@ -951,7 +951,7 @@ def test_patch_surgery_noop_when_no_patch_log(tmp_vault):
 
 
 # ---------------------------------------------------------------------------
-# workflow — comparisons.md gate for layercake runs with 2+ loci
+# workflow — comparisons.md gate for hyperresearch runs with 2+ loci
 # ---------------------------------------------------------------------------
 
 
@@ -960,7 +960,7 @@ def test_workflow_flags_missing_comparisons_when_multiple_loci(tmp_vault):
     insight-killing failure mode the cross-locus reconciliation step was
     added to prevent."""
     from hyperresearch.core.note import write_note
-    # Layercake final-report signal
+    # Hyperresearch final-report signal
     write_note(
         tmp_vault.notes_dir,
         "final_report",
@@ -1063,20 +1063,20 @@ def test_workflow_requires_comparisons_even_on_single_locus(tmp_vault):
 
 
 # ---------------------------------------------------------------------------
-# provenance — layercake-aware: skip breadcrumb coverage ratio checks when
-# research/loci.json exists (layercake's fetch pattern is not bouncing-loop)
+# provenance — hyperresearch-aware: skip breadcrumb coverage ratio checks when
+# research/loci.json exists (hyperresearch's fetch pattern is not bouncing-loop)
 # ---------------------------------------------------------------------------
 
 
-def test_provenance_skips_coverage_ratio_on_layercake_runs(tmp_vault):
-    """A layercake run with many flat-seed fetches should NOT fail provenance's
+def test_provenance_skips_coverage_ratio_on_hyperresearch_runs(tmp_vault):
+    """A hyperresearch run with many flat-seed fetches should NOT fail provenance's
     coverage-ratio check. Structural invariants (seeds exist, no dangling) still
     enforced."""
     # 15 source notes, ALL seeds (no --suggested-by breadcrumbs) — would be
     # an instant failure under the old ensemble provenance rule.
     for i in range(15):
         _write_source(tmp_vault, f"Source {i}", f"source-{i}")
-    # Add the layercake marker
+    # Add the hyperresearch marker
     _write_loci_json(tmp_vault, [
         {"name": "alpha", "one_line": "Q"},
         {"name": "beta",  "one_line": "Q"},
@@ -1090,16 +1090,16 @@ def test_provenance_skips_coverage_ratio_on_layercake_runs(tmp_vault):
         i for i in data.get("data", {}).get("issues", [])
         if i.get("rule") == "provenance" and i.get("severity") in ("error", "warning")
     ]
-    # No ratio-based errors on layercake runs
-    assert issues == [], f"expected no coverage issues on layercake, got: {issues}"
+    # No ratio-based errors on hyperresearch runs
+    assert issues == [], f"expected no coverage issues on hyperresearch, got: {issues}"
 
 
-def test_provenance_still_fires_coverage_check_on_non_layercake_runs(tmp_vault):
+def test_provenance_still_fires_coverage_check_on_non_hyperresearch_runs(tmp_vault):
     """Ensemble / single-pass runs (no loci.json) should still get the
     bouncing-loop coverage check — nothing about this fix changes that."""
     for i in range(15):
         _write_source(tmp_vault, f"Source {i}", f"source-{i}")
-    # NO loci.json → non-layercake run
+    # NO loci.json → non-hyperresearch run
     tmp_vault.auto_sync()
 
     _, out = _run_lint(tmp_vault, rule="provenance")
@@ -1304,7 +1304,7 @@ def test_instruction_coverage_flags_missing_format(tmp_vault):
 
 
 def test_instruction_coverage_noop_when_no_decomposition(tmp_vault):
-    """Non-layercake runs have no decomposition file — rule stays silent."""
+    """Non-hyperresearch runs have no decomposition file — rule stays silent."""
     _, out = _run_lint(tmp_vault, rule="instruction-coverage")
     import json
     data = json.loads(out)
@@ -1317,7 +1317,7 @@ def test_instruction_coverage_noop_when_no_decomposition(tmp_vault):
 
 # ---------------------------------------------------------------------------
 # extract-coverage — single-pass /research runs must have analyst-extract
-# notes per source. Skips on layercake runs (loci.json present).
+# notes per source. Skips on hyperresearch runs (loci.json present).
 # ---------------------------------------------------------------------------
 
 
@@ -1390,9 +1390,9 @@ def test_extract_coverage_rejects_stubs(tmp_vault):
     assert "20 stub notes" in issues[0]["message"]
 
 
-def test_extract_coverage_skips_on_layercake_runs(tmp_vault):
-    """Layercake runs produce loci.json. This rule is single-pass only —
-    it should stay silent on layercake vaults, where locus-coverage takes
+def test_extract_coverage_skips_on_hyperresearch_runs(tmp_vault):
+    """Hyperresearch runs produce loci.json. This rule is single-pass only —
+    it should stay silent on hyperresearch vaults, where locus-coverage takes
     over for quality gating."""
     for i in range(9):
         _write_source(tmp_vault, f"Source {i}", f"source-{i}")
@@ -1409,5 +1409,5 @@ def test_extract_coverage_skips_on_layercake_runs(tmp_vault):
         i for i in data.get("data", {}).get("issues", [])
         if i.get("rule") == "extract-coverage"
     ]
-    # Silent on layercake — locus-coverage handles this mode
+    # Silent on hyperresearch — locus-coverage handles this mode
     assert issues == []
