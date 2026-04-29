@@ -23,25 +23,13 @@
 
 ## Install
 
-**Once, globally** (recommended) — `/hyperresearch` becomes available in every Claude Code session anywhere:
-
 ```bash
 pip install hyperresearch && hyperresearch install --global
 ```
 
-The vault, `research/` folder, and project-level `CLAUDE.md` are created automatically in the project root the first time you type `/hyperresearch <query>` in a Claude Code session.
+Then `/hyperresearch <anything>` in any Claude Code session.
 
-**Per-project** (if you'd rather opt in explicitly per repo):
-
-```bash
-pip install hyperresearch
-cd your-project
-hyperresearch install
-```
-
-Then, in a fresh Claude Code session, type `/hyperresearch <anything>`.
-
-> **Python 3.11–3.13 only.** 3.14 isn't supported yet Use `pyenv install 3.13`, `uv venv -p 3.13 .venv`, or `py -3.13 -m venv .venv` to create a compatible environment.
+> Python 3.11–3.13. (3.14 not yet supported — use `pyenv install 3.13`, `uv venv -p 3.13`, or `py -3.13 -m venv .venv`.)
 
 ---
 
@@ -87,12 +75,12 @@ In your prompt, you can request one of two tiers and the rest of the pipeline sc
 
 | Agent | Model | Role |
 |---|---|---|
-| `hyperresearch-fetcher` | Haiku | URL fetching via crawl4ai; runs 8–12 in parallel per wave |
+| `hyperresearch-fetcher` | Sonnet | URL fetching via crawl4ai; runs 8–12 in parallel per wave |
 | `hyperresearch-source-analyst` | Sonnet (1M ctx) | End-to-end digest of any single long source >5000 words |
 | `hyperresearch-loci-analyst` | Sonnet | Reads the width corpus, returns 1–8 depth loci with rationale |
 | `hyperresearch-depth-investigator` | Sonnet | Investigates one locus, writes one interim note with a committed position |
 | `hyperresearch-corpus-critic` | Sonnet | "What source would overturn the current direction?" pre-draft gap analysis |
-| `hyperresearch-draft-orchestrator` | Sonnet | One per draft angle; reads its curated source list and writes one draft |
+| `hyperresearch-draft-orchestrator` | Opus | One per draft angle; reads its curated source list and writes one draft |
 | `hyperresearch-synthesizer` | Opus | Reads all 3 drafts, writes the final report (two-pass write, Read+Write locked) |
 | `hyperresearch-dialectic-critic` | Opus | Counter-evidence the draft missed |
 | `hyperresearch-depth-critic` | Opus | Shallow spots interim notes could fill |
