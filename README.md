@@ -24,12 +24,15 @@
 ## Install
 
 ```bash
-pip install hyperresearch && hyperresearch install --global
+cd your-project
+pip install hyperresearch && hyperresearch install
 ```
 
-Then `/hyperresearch <anything>` in any Claude Code session.
+Then `/hyperresearch <anything>` in Claude Code.
 
 > Python 3.11–3.13. (3.14 not yet supported — use `pyenv install 3.13`, `uv venv -p 3.13`, or `py -3.13 -m venv .venv`.)
+>
+> Power users: `hyperresearch install --global` makes `/hyperresearch` reachable from every Claude Code session anywhere, at the cost of ~15 lines in every session's system reminder. Per-project install (above) keeps unrelated CC sessions clean.
 
 ---
 
