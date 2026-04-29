@@ -2,15 +2,12 @@
 name: hyperresearch
 description: >
   Deep research via the HYPERRESEARCH V8 architecture — a tier-adaptive 16-step
-  pipeline (light / standard / full) that scales from a 3-minute $5 answer
-  to a 55-minute $60 adversarially-audited report. This entry skill is a
-  ROUTER. It does not contain step procedures — it tells you which Skill to
-  invoke for each step, in order. Each step's instructions live in its own
-  skill file (`hyperresearch-1-decompose` through `hyperresearch-16-readability-audit`) and
-  are loaded fresh into context when you invoke them. This solves the
-  context-compaction problem that V7 hit: instead of one 1200-line skill
-  that gets evicted by Layer 4, each step is a focused 50-150 line skill
-  that lands in context only when needed.
+  pipeline (light / full) that scales from a ~30-minute light-tier answer to
+  a 1.5–2.5 hour adversarially-audited report. This entry skill is a ROUTER.
+  It does not contain step procedures — it tells you which Skill to invoke
+  for each step, in order. Each step's instructions live in its own skill
+  file (`hyperresearch-1-decompose` through `hyperresearch-16-readability-audit`)
+  and are loaded fresh into context when you invoke them.
 ---
 
 # Hyperresearch V8 — multi-skill chain orchestrator
@@ -43,18 +40,18 @@ When you invoke a Skill, that skill's full procedure is loaded into your context
 |---|---|---|---|
 | 1 | `hyperresearch-1-decompose` | Canonical query → scaffold + decomposition + coverage matrix + tier classification | all |
 | 2 | `hyperresearch-2-width-sweep` | Multi-perspective search plan + parallel fetcher waves | all |
-| 3 | `hyperresearch-3-contradiction-graph` | Pair contradictions across the corpus into ranked fight clusters | std/full |
+| 3 | `hyperresearch-3-contradiction-graph` | Pair contradictions across the corpus into ranked fight clusters | full |
 | 4 | `hyperresearch-4-loci-analysis` | 2 loci-analysts → scored loci.json with source budgets | full |
 | 5 | `hyperresearch-5-depth-investigation` | K depth-investigators in parallel → interim notes with committed positions | full |
 | 6 | `hyperresearch-6-cross-locus-reconcile` | Reconcile committed positions → comparisons.md | full |
 | 7 | `hyperresearch-7-source-tensions` | Extract expert disagreements → source-tensions.json | full |
 | 8 | `hyperresearch-8-corpus-critic` | "What source would overturn this?" + targeted gap-fill fetch | full |
-| 9 | `hyperresearch-9-evidence-digest` | Top claims + verbatim quotes → evidence-digest.md | std/full |
+| 9 | `hyperresearch-9-evidence-digest` | Top claims + verbatim quotes → evidence-digest.md | full |
 | 10 | `hyperresearch-10-triple-draft` | Per-angle source curation + 3 parallel draft-orchestrators (3 angle-specific drafts) | all |
-| 11 | `hyperresearch-11-synthesize` | Synthesis plan + outline + spawn synthesizer subagent (two-pass write) → final_report.md | std/full |
-| 12 | `hyperresearch-12-critics` | 4 adversarial critics in parallel → findings JSONs | std/full |
-| 13 | `hyperresearch-13-gap-fetch` | Fetch sources for critic-identified vault gaps | std/full |
-| 14 | `hyperresearch-14-patcher` | Surgical Edit hunks applied to draft | std/full |
+| 11 | `hyperresearch-11-synthesize` | Synthesis plan + outline + spawn synthesizer subagent (two-pass write) → final_report.md | full |
+| 12 | `hyperresearch-12-critics` | 4 adversarial critics in parallel → findings JSONs | full |
+| 13 | `hyperresearch-13-gap-fetch` | Fetch sources for critic-identified vault gaps | full |
+| 14 | `hyperresearch-14-patcher` | Surgical Edit hunks applied to draft | full |
 | 15 | `hyperresearch-15-polish` | Hygiene + filler pass (Edit-based subagent) | all |
 | 16 | `hyperresearch-16-readability-audit` | Readability recommender writes JSON suggestions; orchestrator selectively applies via Edit | all |
 
@@ -62,15 +59,14 @@ When you invoke a Skill, that skill's full procedure is loaded into your context
 
 ## Tier routing
 
-Step 1 classifies the query into a `pipeline_tier` (`light` / `standard` / `full`). The tier is written to `research/prompt-decomposition.json`. After step 1, **read that file** to learn the tier, then sequence steps according to:
+Step 1 classifies the query into a `pipeline_tier` (`light` / `full`). The tier is written to `research/prompt-decomposition.json`. After step 1, **read that file** to learn the tier, then sequence steps according to:
 
 | Tier | Steps that run | Typical cost | Typical time |
 |------|---|---|---|
-| `light` | 1 → 2 → 10 (single draft) → 15 → 16 | ~$3–8 | ~3–8 min |
-| `standard` | 1 → 2 → 3 → 9 → 10 → 11 → 12 → 13 → 14 → 15 → 16 | ~$10–22 | ~10–22 min |
-| `full` | 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14 → 15 → 16 | ~$35–65 | ~25–60 min |
+| `light` | 1 → 2 → 10 (single draft) → 15 → 16 | ~$5–15 | ~30–40 min |
+| `full` | 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14 → 15 → 16 | ~$60–120 | ~1.5–2.5 hours |
 
-**RESPECT THE TIER GATE.** When step 1 classifies a query as `light` or `standard`, do NOT run the skipped steps "just to be thorough." The tier classification is a product decision: simple queries should produce fast, cheap, right-sized answers. Trust the classification. If you're uncertain, tier up — but never silently upgrade every query to `full`.
+**RESPECT THE TIER GATE.** When step 1 classifies a query as `light`, do NOT run the skipped steps "just to be thorough." The tier classification is a product decision: simple queries should produce fast, right-sized answers. Trust the classification. If you're uncertain, tier up — but never silently upgrade every query to `full`.
 
 ---
 
@@ -104,7 +100,7 @@ Before you invoke any step skill, do this:
    - **compare**: proportionate per-entity depth + a committed recommendation
    - **forecast**: predictive claims grounded in past + present, explicit time horizon
 
-5. **Write the scaffold.** Write `research/scaffold.md` with the same template `/research` uses (see `.claude/skills/hyperresearch/SKILL.md` Step 7). The scaffold is your private planning document — it MUST NOT appear anywhere in the final report. Include in scaffold:
+5. **Write the scaffold.** Write `research/scaffold.md` (your private planning document — it MUST NOT appear anywhere in the final report). Include in scaffold:
    - User Prompt (VERBATIM — gospel)
    - Run config (vault_tag, query_file_path, modality, wrapper requirements)
    - Modality classification rationale
@@ -194,7 +190,7 @@ for f in research/critic-findings-dialectic.json \
 done
 ```
 
-(Skip critic-findings-{dialectic,depth} if standard tier — only width + instruction critics ran.)
+(Light tier skips critics + patcher entirely — the critic-findings and patch-log files won't exist. That's expected; only `polish-log.json` is required for light.)
 
 Then run lint:
 ```bash
@@ -218,9 +214,9 @@ If any rule returns `error` severity issues, address them before declaring compl
 6. **Steps are sequential at the outermost level, parallel within.** You cannot start step N+1 before step N completes. Within a step, parallelism is mandatory when there are multiple subagents.
 7. **Canonical research query is gospel everywhere.** Every subagent gets the verbatim query.
 8. **Hygiene rules apply to the final report only.** Workspace artifacts (scaffold, loci JSONs, interim notes, comparisons.md, patch log) can look however they need to look.
-9. **NEVER skip a step that the tier gate says to run.** For `full` tier, ALL 16 steps run. For `standard`, the prescribed 11 steps run. For `light`, the prescribed 5 steps run.
-10. **Step 10 triple-draft ensemble is MANDATORY for `standard` and `full` tiers.** You MUST spawn 3 `hyperresearch-draft-orchestrator` subagents. Writing `research/notes/final_report.md` directly in step 10 (instead of going through the synthesizer in step 11) is a PIPELINE VIOLATION for these tiers.
-11. **Step 11 synthesis is MANDATORY for `standard` and `full` tiers.** The synthesizer subagent (Read+Write tool-locked) writes the final report from the 3 drafts. The orchestrator does NOT write the final report itself for these tiers.
+9. **NEVER skip a step that the tier gate says to run.** For `full` tier, ALL 16 steps run. For `light`, the prescribed 5 steps run.
+10. **Step 10 triple-draft ensemble is MANDATORY for `full` tier.** You MUST spawn 3 `hyperresearch-draft-orchestrator` subagents. Writing `research/notes/final_report.md` directly in step 10 (instead of going through the synthesizer in step 11) is a PIPELINE VIOLATION for these tiers.
+11. **Step 11 synthesis is MANDATORY for `full` tier.** The synthesizer subagent (Read+Write tool-locked) writes the final report from the 3 drafts. The orchestrator does NOT write the final report itself for these tiers.
 12. **Subagents read full source text.** Draft sub-orchestrators MUST batch-read every note in their `must_read_note_ids` list before writing. Fetchers MUST chase 3-8 primary sources via citation chains.
 13. **NEVER emit a bare text response while subagent tasks are in flight.**
 

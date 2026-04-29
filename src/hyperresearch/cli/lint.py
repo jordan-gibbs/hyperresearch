@@ -26,7 +26,7 @@ RULES = {
     "locus-coverage": "Loci identified in Layer 2 missing their interim-report notes (depth investigator skipped)",
     "patch-surgery": "Critical critic findings skipped by the patcher (Layer 6 regeneration guard tripped)",
     "instruction-coverage": "Atomic items from prompt-decomposition missing from the final report (draft drifted from user's ask)",
-    "extract-coverage": "Single-pass /research runs with fetched sources but no paired extract notes (reading loop skipped or source-analyst not delegated for long sources)",
+    "extract-coverage": "Light-tier runs with fetched sources but no paired extract notes (reading loop skipped or source-analyst not delegated for long sources)",
     "orphaned-raw-files": "Files in research/raw/ with no matching note (disk leak from old note rm)",
     "singleton-tags": "Tags used by only one note",
     "broken-links": "Wiki-links that don't resolve",

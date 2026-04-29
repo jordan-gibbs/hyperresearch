@@ -104,11 +104,10 @@ Read both before starting. The vault_tag is in the scaffold's "Run config" secti
 
    | Tier | When to use | Signal words / patterns |
    |------|-------------|------------------------|
-   | `"light"` | Query has a clear, bounded answer. Factual lookup, definition, simple explanation, short how-to, list/catalog, quick comparison. | "What is...", "How do I...", "List the...", "Define...", short prompts (<50 words), single clear question |
-   | `"standard"` | Moderate coverage across a topic. Survey, landscape overview, current-state report, multi-entity comparison, decision support. | "Overview of...", "Compare X and Y", "What's the current state of...", moderate-length prompts, 2-5 sub-questions |
+   | `"light"` | Query has a clear, bounded answer. Factual lookup, definition, simple explanation, short how-to, list/catalog, quick comparison, landscape overview, multi-entity survey. | "What is...", "How do I...", "List the...", "Define...", "Overview of...", "Compare X and Y", short-to-moderate prompts, single clear question or 2–5 sub-questions |
    | `"full"` | Deep analysis, synthesis of conflicting evidence, defended thesis, literature review, forecast with evidence chains. | "Analyze the impact of...", "Evaluate whether...", multi-paragraph prompts, explicit request for depth/rigor, research-grade questions, contested topics |
 
-   **Default is `"full"`.** When uncertain, tier up. The cost of running extra layers on a simple query is wasted money (~$30); the cost of running too few layers on a complex query is a bad report.
+   **Default is `"full"`.** When uncertain, tier up. Running the full pipeline on a simple query wastes money; running the light pipeline on a complex query produces a bad report.
 
    **`response_format`** — how the output is shaped:
 
@@ -120,8 +119,7 @@ Read both before starting. The vault_tag is in the scaffold's "Run config" secti
 
    **The two dimensions are independent.** Most common pairings:
    - `light` + `short` — factual lookup, definition, simple how-to
-   - `light` + `structured` — list/catalog, quick multi-entity comparison
-   - `standard` + `structured` — survey, landscape overview, decision matrix
+   - `light` + `structured` — list/catalog, quick multi-entity comparison, landscape overview
    - `full` + `argumentative` — deep analysis, literature review, forecast (the current default)
    - `full` + `structured` — comprehensive survey where adversarial depth still matters
 

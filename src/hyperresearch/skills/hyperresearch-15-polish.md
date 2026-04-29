@@ -86,7 +86,6 @@ If the escalation names a structural issue (e.g., "user asked for a ranked list;
 Before declaring the run complete, verify every expected pipeline artifact exists. **The required set depends on the tier:**
 
 - **light tier:** only `research/polish-log.json` is required (steps 12–14 are skipped, so no critic findings or patch log).
-- **standard tier:** require `research/critic-findings-width.json`, `research/critic-findings-instruction.json`, `research/patch-log.json`, `research/polish-log.json` (depth and dialectic critics did not run).
 - **full tier:** require all four critic findings + patch-log + polish-log:
 
 ```bash

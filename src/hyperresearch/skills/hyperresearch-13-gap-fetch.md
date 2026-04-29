@@ -6,12 +6,12 @@ description: >
   topic X" and the vault has zero sources on X, the patcher has nothing
   to cite. This step fetches the missing sources BEFORE patching so the
   patcher has ammunition. Capped at 5 gaps. Invoked via Skill tool from
-  the entry skill (standard / full tiers).
+  the entry skill (full tier).
 ---
 
 # Step 13 — Post-critic gap fetch (conditional)
 
-**Tier gate:** Run for `standard` and `full`. Skip for `light` (no critics = no findings).
+**Tier gate:** Run for `full`. Skip for `light` (no critics = no findings).
 
 **Goal:** critics identify gaps the draft missed, but the patcher can only work with evidence already in the vault. If a critic says "the draft ignored topic X" and the vault has zero sources on X, the patcher has nothing to cite. This step fills those gaps BEFORE patching.
 

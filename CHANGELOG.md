@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.1] - 2026-04-29
+
+### Surface cleanup
+
+- **`/research` alias retired.** Only `/hyperresearch` remains. The `research` skill dir is now in `_RETIRED_SKILL_DIRS` and is pruned automatically on the next `hyperresearch install`.
+- **`standard` tier removed.** Only `light` and `full` remain. Step 1's classifier folds the previous standard-tier signals (surveys, multi-entity comparisons, landscape overviews) into `light`. Mid-tier fan-out (3 critics, 60–100 URLs, 40–60 claims) is gone — the simplification is intentional.
+- **Time estimates re-calibrated.** Light: ~30–40 minutes (was 3–8 min). Full: ~1.5–2.5 hours (was 25–60 min). Numbers reflect realistic wall-clock times observed across recent runs, not theoretical floors.
+- **README tier table** drops the cost column.
+
 ## [0.8.0] - 2026-04-29
 
 ### Architecture — V8.3 deployment release

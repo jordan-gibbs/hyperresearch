@@ -1,7 +1,7 @@
 """Agent hook installer — installs the Claude Code PreToolUse hook, skills, and subagents.
 
 The hook reminds Claude Code to check the research base before doing raw web
-searches. The skills (`/research`, `/hyperresearch`) drive the research
+searches. The `/hyperresearch` skill drives the research
 protocol. The hyperresearch subagents (fetcher, loci-analyst, depth-investigator,
 four critics, patcher, polish-auditor) are Claude Code registered agents
 spawned via the Task tool.
@@ -1273,8 +1273,7 @@ Concretely:
 
 1. **Read all four findings files** (dialectic / depth / width / instruction).
    Merge into one flat list. Sort by severity: critical first, then major, then minor.
-   Read whichever findings files exist — on standard tier, only width
-   and instruction findings are present. Skip missing files silently.
+   Skip any missing files silently (defensive — full tier writes all four).
 
    **Pre-filter: `requires_orchestrator_restructure` findings go straight to escalation.**
    Any finding with `requires_orchestrator_restructure: true`
@@ -3218,6 +3217,7 @@ _RETIRED_AGENT_FILES: tuple[str, ...] = (
 _RETIRED_SKILL_DIRS: tuple[str, ...] = (
     "research-ensemble",
     "research-layercake",  # superseded by /hyperresearch alias
+    "research",            # /research alias retired in v0.8.1 — only /hyperresearch now
 )
 
 # V1 modality files — left over inside .claude/skills/hyperresearch/ on
@@ -3295,37 +3295,23 @@ def _read_skill_source(src_name: str) -> str | None:
 
 
 def _install_hyperresearch_skill(vault_root: Path) -> str | None:
-    """Install the entry skill as both /hyperresearch and /research.
+    """Install the entry skill at .claude/skills/hyperresearch/SKILL.md.
 
-    Two skill directories are written from the single `hyperresearch.md`
-    source. The /research copy has its `name:` frontmatter rewritten so
-    Claude Code registers it as an independent slash-command trigger.
-    Both directories contain identical step instructions — they are
-    aliases for the same V8 pipeline. The 16 step skills are installed
-    separately by `_install_hyperresearch_step_skills`.
+    Claude Code registers `/hyperresearch` as the slash-command trigger via
+    the skill's `name: hyperresearch` frontmatter. The 16 step skills are
+    installed separately by `_install_hyperresearch_step_skills`.
     """
-    source = _read_skill_source("hyperresearch.md")
-    if source is None:
+    content = _read_skill_source("hyperresearch.md")
+    if content is None:
         return None
 
-    aliases = [
-        ("hyperresearch", source),
-        ("research", source.replace("name: hyperresearch", "name: research", 1)),
-    ]
-
-    written: list[str] = []
-    for alias, content in aliases:
-        skill_dir = vault_root / ".claude" / "skills" / alias
-        skill_dir.mkdir(parents=True, exist_ok=True)
-        dest_path = skill_dir / "SKILL.md"
-        if dest_path.exists() and dest_path.read_text(encoding="utf-8") == content:
-            continue
-        dest_path.write_text(content, encoding="utf-8")
-        written.append(f"/{alias}")
-
-    if not written:
+    skill_dir = vault_root / ".claude" / "skills" / "hyperresearch"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = skill_dir / "SKILL.md"
+    if dest_path.exists() and dest_path.read_text(encoding="utf-8") == content:
         return None
-    return f"Claude Code: entry skill installed ({', '.join(written)} triggers)"
+    dest_path.write_text(content, encoding="utf-8")
+    return "Claude Code: .claude/skills/hyperresearch/SKILL.md (/hyperresearch trigger)"
 
 
 _HYPERRESEARCH_STEP_SKILLS = [

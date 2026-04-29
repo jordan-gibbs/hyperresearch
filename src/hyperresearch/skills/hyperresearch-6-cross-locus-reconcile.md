@@ -10,7 +10,7 @@ description: >
 
 # Step 6 — Cross-locus reconciliation
 
-**Tier gate:** SKIP entirely for `light` and `standard` tiers (no loci = no comparisons). Only `full` tier runs this step.
+**Tier gate:** SKIP entirely for `light` tier (no loci = no comparisons). Only `full` tier runs this step.
 
 **Goal:** before drafting, reconcile the committed positions from all depth investigators. Produce `research/comparisons.md` — a short document naming 3–5 places where the loci conflict or complicate each other.
 

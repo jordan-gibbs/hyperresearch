@@ -28,15 +28,14 @@ pip install hyperresearch
 hyperresearch install
 ```
 
-In Claude Code, type `/research <anything>` or `/hyperresearch <anything>` (they're aliases for the same pipeline). Step 1 classifies your query into one of three tiers and the rest of the pipeline scales accordingly:
+In Claude Code, type `/hyperresearch <anything>`. Step 1 classifies your query into one of two tiers and the rest of the pipeline scales accordingly:
 
-| Tier | Steps that run | Typical cost | Typical time |
-|---|---|---|---|
-| `light` | bounded factual queries — 1 → 2 → 10 → 15 → 16 | ~$3–8 | ~3–8 min |
-| `standard` | landscape surveys, multi-entity comparisons | ~$10–22 | ~10–22 min |
-| `full` | deep argumentative analysis with adversarial review | ~$35–65 | ~25–60 min |
+| Tier | Steps that run | Typical time |
+|---|---|---|
+| `light` | bounded factual queries, surveys, comparisons — 1 → 2 → 10 → 15 → 16 | ~30–40 min |
+| `full` | deep argumentative analysis with adversarial review — all 16 steps | ~1.5–2.5 hours |
 
-The single install command provisions a SQLite vault, auto-installs Chromium for headless browsing, generates `CLAUDE.md`, registers the entry skill at both `/research` and `/hyperresearch`, installs all 16 step skills, and wires the agent roster + PreToolUse hooks into `.claude/`.
+The single install command provisions a SQLite vault, auto-installs Chromium for headless browsing, generates `CLAUDE.md`, registers the `/hyperresearch` entry skill, installs all 16 step skills, and wires the agent roster + PreToolUse hooks into `.claude/`.
 
 ---
 
@@ -46,22 +45,22 @@ The entry skill is a thin **router**. It bootstraps the canonical research query
 
 | # | Step | What it does | Tiers |
 |---|---|---|---|
-| 1 | Decompose | Canonical query → atomic items + coverage matrix + tier classification | all |
-| 2 | Width sweep | Multi-perspective search plan + parallel fetcher waves (Haiku) | all |
-| 3 | Contradiction graph | Pair contradictions across the corpus into ranked clusters | std/full |
+| 1 | Decompose | Canonical query → atomic items + coverage matrix + tier classification | both |
+| 2 | Width sweep | Multi-perspective search plan + parallel fetcher waves (Haiku) | both |
+| 3 | Contradiction graph | Pair contradictions across the corpus into ranked clusters | full |
 | 4 | Loci analysis | Two parallel loci-analysts → scored loci with source budgets | full |
 | 5 | Depth investigation | K parallel depth-investigators → interim notes with committed positions | full |
 | 6 | Cross-locus reconcile | Reconcile committed positions → comparisons.md | full |
 | 7 | Source tensions | Extract expert disagreements → source-tensions.json | full |
 | 8 | Corpus critic | "What source would overturn this?" + targeted gap-fill fetch | full |
-| 9 | Evidence digest | Top claims + verbatim quotes → evidence-digest.md | std/full |
-| 10 | Triple draft | Per-angle source curation + 3 parallel draft sub-orchestrators | all |
-| 11 | Synthesize | Plan + outline + spawn synthesizer subagent → final_report.md | std/full |
-| 12 | Critics | 4 adversarial critics in parallel → findings JSONs | std/full |
-| 13 | Gap-fetch | Targeted fetch wave for critic-identified vault gaps | std/full |
-| 14 | Patcher | Surgical Edit hunks applied to draft (tool-locked Read+Edit) | std/full |
-| 15 | Polish | Hygiene + filler pass (tool-locked Read+Edit subagent) | all |
-| 16 | Readability audit | Recommender writes JSON suggestions; orchestrator selectively applies | all |
+| 9 | Evidence digest | Top claims + verbatim quotes → evidence-digest.md | full |
+| 10 | Triple draft | Per-angle source curation + 3 parallel draft sub-orchestrators (light: single draft) | both |
+| 11 | Synthesize | Plan + outline + spawn synthesizer subagent → final_report.md | full |
+| 12 | Critics | 4 adversarial critics in parallel → findings JSONs | full |
+| 13 | Gap-fetch | Targeted fetch wave for critic-identified vault gaps | full |
+| 14 | Patcher | Surgical Edit hunks applied to draft (tool-locked Read+Edit) | full |
+| 15 | Polish | Hygiene + filler pass (tool-locked Read+Edit subagent) | both |
+| 16 | Readability audit | Recommender writes JSON suggestions; orchestrator selectively applies | both |
 
 ### The two load-bearing invariants
 

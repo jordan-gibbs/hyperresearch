@@ -13,9 +13,9 @@ description: >
 
 # Step 10 — Triple-draft ensemble (curated lists, parallel writers)
 
-**⚠ CRITICAL ANTI-PATTERN: Writing a single draft for `standard` or `full` tier is a PIPELINE VIOLATION.** In V7 runs, context compaction caused the orchestrator to forget this step's procedure and write a single draft instead of spawning 3 sub-orchestrators. V8 fixes this by loading this skill fresh at the moment it's needed. **If you find yourself about to write `research/notes/final_report.md` directly without spawning 3 `hyperresearch-draft-orchestrator` subagents, STOP. Re-read this skill. Spawn the sub-orchestrators.** (Light tier is the ONE exception — see "Light tier" section below.)
+**⚠ CRITICAL ANTI-PATTERN: Writing a single draft for `full` tier is a PIPELINE VIOLATION.** In V7 runs, context compaction caused the orchestrator to forget this step's procedure and write a single draft instead of spawning 3 sub-orchestrators. V8 fixes this by loading this skill fresh at the moment it's needed. **If you find yourself about to write `research/notes/final_report.md` directly without spawning 3 `hyperresearch-draft-orchestrator` subagents, STOP. Re-read this skill. Spawn the sub-orchestrators.** (Light tier is the ONE exception — see "Light tier" section below.)
 
-**Tier gate:** Runs for ALL tiers. For `light` tier: write a single draft directly to `research/notes/final_report.md` and skip ahead to step 15 (polish). For `standard` and `full`: run the triple-draft ensemble below — step 11 (synthesizer) will turn the 3 drafts into the final report.
+**Tier gate:** Runs for ALL tiers. For `light` tier: write a single draft directly to `research/notes/final_report.md` and skip ahead to step 15 (polish). For `full`: run the triple-draft ensemble below — step 11 (synthesizer) will turn the 3 drafts into the final report.
 
 **Goal:** produce THREE independent angle-specific drafts (`draft-{a,b,c}.md`). Step 11 (synthesizer subagent) consumes all three and writes the final report.
 
@@ -26,7 +26,7 @@ description: >
 Read these inputs:
 - `research/scaffold.md` — vault_tag, modality, wrapper requirements
 - `research/prompt-decomposition.json` — atomic items, required_section_headings, response_format, citation_style, pipeline_tier
-- `research/temp/evidence-digest.md` — top claims + verbatim quotes — PRIMARY EVIDENCE LAYER (standard / full only; absent for light)
+- `research/temp/evidence-digest.md` — top claims + verbatim quotes — PRIMARY EVIDENCE LAYER (full only; absent for light)
 - `research/comparisons.md` (full tier) — cross-locus tensions
 - `research/temp/source-tensions.json` (full tier) — expert disagreements
 - `research/temp/coverage-gaps.md` (if exists) — items with weak source coverage
@@ -74,7 +74,7 @@ If `pipeline_tier == "light"`: SKIP step 10.1 — 10.3 below and follow this sec
 
 ---
 
-## Step 10.1 — Define 3 analytical angles (standard / full tier)
+## Step 10.1 — Define 3 analytical angles (full tier)
 
 Based on the evidence, tensions, and query, assign each sub-orchestrator a distinct angle. The angles should produce genuinely different drafts — not three versions of the same argument.
 
@@ -212,4 +212,4 @@ When all 3 sub-orchestrators return:
 Return to the entry skill (`hyperresearch`). Tier-based routing:
 
 - **light tier:** You already wrote `research/notes/final_report.md` directly. Skip steps 11-14 (no synthesis, no critics, no patcher) and invoke `Skill(skill: "hyperresearch-15-polish")`.
-- **standard / full tier:** Invoke `Skill(skill: "hyperresearch-11-synthesize")`.
+- **full tier:** Invoke `Skill(skill: "hyperresearch-11-synthesize")`.

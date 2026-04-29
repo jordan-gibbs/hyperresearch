@@ -21,33 +21,27 @@ from hyperresearch.core.hooks import (
 )
 
 # ---------------------------------------------------------------------------
-# Entry skill — installs at both /hyperresearch and /research
+# Entry skill — installs at /hyperresearch only (v0.8.1+)
 # ---------------------------------------------------------------------------
 
 
-def test_install_hyperresearch_skill_creates_both_aliases(tmp_vault):
-    """The entry skill installs at .claude/skills/hyperresearch/SKILL.md and
-    .claude/skills/research/SKILL.md so Claude Code registers BOTH
-    `/hyperresearch` and `/research` as slash-command triggers. Same content,
-    different `name:` frontmatter.
+def test_install_hyperresearch_skill_creates_skill_dir(tmp_vault):
+    """The entry skill installs at .claude/skills/hyperresearch/SKILL.md so
+    Claude Code registers `/hyperresearch` as the slash-command trigger.
+    The /research alias was retired in v0.8.1 — only /hyperresearch now.
     """
     result = _install_hyperresearch_skill(tmp_vault.root)
     assert result is not None
 
     hyper_path = tmp_vault.root / ".claude" / "skills" / "hyperresearch" / "SKILL.md"
-    research_path = tmp_vault.root / ".claude" / "skills" / "research" / "SKILL.md"
     assert hyper_path.exists()
-    assert research_path.exists()
+
+    # /research dir must NOT be created
+    research_path = tmp_vault.root / ".claude" / "skills" / "research" / "SKILL.md"
+    assert not research_path.exists()
 
     hyper_body = hyper_path.read_text(encoding="utf-8")
-    research_body = research_path.read_text(encoding="utf-8")
     assert "name: hyperresearch" in hyper_body
-    assert "name: research" in research_body
-    # Body content (everything after the name line) is identical
-    assert hyper_body.replace("name: hyperresearch", "") == research_body.replace(
-        "name: research", ""
-    )
-
     # Entry skill is the chain router — must reference step skills
     assert "hyperresearch-1-decompose" in hyper_body
     assert "hyperresearch-10-triple-draft" in hyper_body
@@ -382,9 +376,10 @@ def test_install_hooks_registers_full_hyperresearch_roster(tmp_vault):
         f"missing: {expected_agents - actual_agents}, extra: {actual_agents - expected_agents}"
     )
 
-    # Both entry-skill aliases registered (/hyperresearch and /research)
+    # Entry skill registered as /hyperresearch (the /research alias was
+    # retired in v0.8.1)
     assert (tmp_vault.root / ".claude" / "skills" / "hyperresearch" / "SKILL.md").exists()
-    assert (tmp_vault.root / ".claude" / "skills" / "research" / "SKILL.md").exists()
+    assert not (tmp_vault.root / ".claude" / "skills" / "research" / "SKILL.md").exists()
 
     # Hook settings written
     assert (tmp_vault.root / ".claude" / "settings.json").exists()

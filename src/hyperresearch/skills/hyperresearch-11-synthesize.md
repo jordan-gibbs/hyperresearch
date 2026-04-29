@@ -7,12 +7,12 @@ description: >
   tool-locked) that writes the final report in TWO passes — pass 1 rough
   integrated draft, pass 2 voice/redundancy/length cleanup. Skipped for
   light tier (which writes a single draft directly in step 10). Invoked
-  via Skill tool from the entry skill (standard / full tiers).
+  via Skill tool from the entry skill (full tier).
 ---
 
 # Step 11 — Synthesize the final report
 
-**Tier gate:** SKIP entirely for `light` tier — light tier wrote `research/notes/final_report.md` directly in step 10 and proceeds straight to step 15 (polish). For `standard` and `full`: run as documented below.
+**Tier gate:** SKIP entirely for `light` tier — light tier wrote `research/notes/final_report.md` directly in step 10 and proceeds straight to step 15 (polish). For `full`: run as documented below.
 
 **Goal:** turn the 3 angle-specific drafts from step 10 into ONE integrated final report at `research/notes/final_report.md`. The orchestrator preps the strategic brief; the synthesizer subagent writes the report in two passes (rough integrated draft, then voice/redundancy/length cleanup).
 
