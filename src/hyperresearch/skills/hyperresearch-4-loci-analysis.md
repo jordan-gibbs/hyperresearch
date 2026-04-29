@@ -11,7 +11,7 @@ description: >
 
 # Step 4 — Loci analysis (parallel, 2 analysts)
 
-**Tier gate:** SKIP entirely for `light` and `standard` tiers — proceed directly to step 9. Only `full` tier runs loci analysis.
+**Tier gate:** SKIP entirely for `light` tier — proceed directly to step 9. Only `full` tier runs loci analysis.
 
 **Goal:** identify 1–6 specific questions where depth investigation will pay off.
 

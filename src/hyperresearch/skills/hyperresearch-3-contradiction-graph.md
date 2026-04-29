@@ -11,7 +11,7 @@ description: >
 
 # Step 3 — Contradiction graph
 
-**Tier gate:** SKIP for `light`. Run for `standard` and `full`.
+**Tier gate:** SKIP for `light`. Run for `full`.
 
 **Goal:** before loci analysis, build an explicit graph of opposing claims. Loci should emerge from where the evidence actually forks, not from agent intuition about what seems interesting.
 
@@ -70,5 +70,4 @@ If no claims files exist (e.g., fetchers didn't produce them), skip this step en
 
 Return to the entry skill (`hyperresearch`). Tier-based routing:
 
-- **standard tier:** Skip steps 4–8. Invoke `Skill(skill: "hyperresearch-9-evidence-digest")`
 - **full tier:** Invoke `Skill(skill: "hyperresearch-4-loci-analysis")`

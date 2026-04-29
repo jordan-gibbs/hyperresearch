@@ -11,7 +11,7 @@ description: >
 
 # Step 5 — Depth investigation (parallel, K = len(loci))
 
-**Tier gate:** SKIP entirely for `light` and `standard` tiers. Only `full` tier runs depth investigation.
+**Tier gate:** SKIP entirely for `light` tier. Only `full` tier runs depth investigation.
 
 **Goal:** produce ONE `interim-{locus}.md` note per locus with dense synthesis that the draft sub-orchestrators (step 10) will draft from.
 

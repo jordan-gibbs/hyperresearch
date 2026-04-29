@@ -4,14 +4,14 @@ description: >
   Step 2 of the hyperresearch V8 pipeline. Multi-perspective search planning
   (breadth / depth / adversarial lenses) followed by parallel fetcher waves.
   Achieves comprehensive topical coverage with 40-100 curated sources for
-  standard/full tiers. Includes coverage check, evidence redundancy audit,
+  full tier. Includes coverage check, evidence redundancy audit,
   and source count gating. Invoked via Skill tool from the entry skill
   after step 1 completes.
 ---
 
 # Step 2 — Width sweep
 
-**Tier gate:** Runs for ALL tiers. For `light` tier: skip academic APIs, target 12–20 sources, limit to 2–3 fetcher batches. For `standard` and `full`: run the full procedure below.
+**Tier gate:** Runs for ALL tiers. For `light` tier: skip academic APIs, target 12–20 sources, limit to 2–3 fetcher batches. For `full`: run the full procedure below.
 
 **Goal:** achieve comprehensive topical coverage — every atomic item from the decomposition must have at least 3 supporting sources by the end of this step. Target 40–80 curated sources for `full` tier.
 
@@ -94,9 +94,9 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
 
 1. **Academic APIs first.** For topics with a research literature, hit Semantic Scholar / arXiv / OpenAlex / PubMed BEFORE web search. Academic APIs return citation-ranked canonical papers.
 
-2. **Web searches from the plan.** Execute ALL planned searches across all three lenses. Aim for **80–120 candidate URLs** before deduplication for `full` tier, 60–100 for `standard`.
+2. **Web searches from the plan.** Execute ALL planned searches across all three lenses. Aim for **80–120 candidate URLs** before deduplication for `full` tier.
 
-3. **Build and deduplicate the master URL queue.** Remove exact-URL duplicates. Remove obvious junk domains. The deduplicated queue should have **60–100 URLs** for `full` tier, 50–80 for `standard`.
+3. **Build and deduplicate the master URL queue.** Remove exact-URL duplicates. Remove obvious junk domains. The deduplicated queue should have **60–100 URLs** for `full` tier.
 
    **Wikipedia SOURCE HUB rule:** Include Wikipedia URLs in the queue — they're valuable for discovery — but treat them as SOURCE HUBS, not as citable sources. When a fetcher processes a Wikipedia article, it extracts the references/citations Wikipedia links to. Those primary sources go into Wave 2 (or the same wave if capacity permits). Wikipedia itself is NEVER cited in the final report.
 
@@ -106,7 +106,7 @@ Before spawning any fetchers, produce a **search plan** that maps the decomposit
 
 ## Step 2.3 — Utility scoring and selection
 
-**Tier gate:** SKIP for `light`. Run for `standard` and `full`.
+**Tier gate:** SKIP for `light`. Run for `full`.
 
 Before batching URLs, score each candidate URL on six dimensions (0–3 each, max composite 18):
 
@@ -199,7 +199,7 @@ After Wave 1 returns, run the coverage check before proceeding:
 
 ## Step 2.6 — Evidence redundancy audit
 
-**Tier gate:** SKIP for `light`. Run for `standard` and `full`.
+**Tier gate:** SKIP for `light`. Run for `full`.
 
 **Goal:** detect when N sources are really 1 source in N outfits.
 
@@ -222,7 +222,6 @@ After Wave 1 returns, run the coverage check before proceeding:
 | Tier | Minimum sources | Target sources | Fetchers per wave | Waves |
 |------|----------------|---------------|-------------------|-------|
 | `light` | 10 | 15–25 | 3–5 | 1–2 |
-| `standard` | 30 | 40–70 | 8–10 | 2 |
 | `full` | 45 | 55–80 | 8–12 | 2–3 |
 
 Substantive (non-deprecated) note counts. Quality over quantity — reference reports average ~65 sources. Beyond ~80, each additional source yields diminishing returns while degrading summarizer quality.
@@ -277,4 +276,4 @@ If you fall short after two waves, proceed anyway but ensure `coverage-gaps.md` 
 Return to the entry skill (`hyperresearch`). Tier-based routing:
 
 - **light tier:** Skip directly to step 10 — invoke `Skill(skill: "hyperresearch-10-triple-draft")` (light tier writes a single draft, not the ensemble)
-- **standard / full tier:** Invoke `Skill(skill: "hyperresearch-3-contradiction-graph")`
+- **full tier:** Invoke `Skill(skill: "hyperresearch-3-contradiction-graph")`

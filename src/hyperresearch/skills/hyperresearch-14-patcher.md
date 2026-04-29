@@ -6,12 +6,12 @@ description: >
   surgical Edit hunks against the synthesized final report. Zero
   regeneration. Pre-stubs the patch log because Edit cannot create files.
   Handles orchestrator-escalated structural restructures inline. Invoked
-  via Skill tool from the entry skill (standard / full tiers).
+  via Skill tool from the entry skill (full tier).
 ---
 
 # Step 14 — Patch pass
 
-**Tier gate:** SKIP entirely for `light` tier (no critics = no findings to patch). For `standard` and `full`: run as documented.
+**Tier gate:** SKIP entirely for `light` tier (no critics = no findings to patch). For `full`: run as documented.
 
 **Goal:** apply critic findings to the draft as surgical Edit hunks. Zero regeneration.
 

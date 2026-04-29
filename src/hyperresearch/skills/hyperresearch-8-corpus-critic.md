@@ -11,7 +11,7 @@ description: >
 
 # Step 8 — Pre-draft corpus critic (targeted gap-fill)
 
-**Tier gate:** `full` tier ONLY. Skip for `light` and `standard`.
+**Tier gate:** `full` tier ONLY. Skip for `light`.
 
 **Goal:** before drafting, ask "what source, if found, would overturn the current direction?" and run a targeted fetch wave to fill the most dangerous gaps. This is the highest-leverage intervention point in the pipeline — corrections applied before drafting cost nothing; corrections applied after drafting require patches and risk structural drift.
 

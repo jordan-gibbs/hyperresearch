@@ -12,7 +12,7 @@ description: >
 
 # Step 7 — Source tension extraction
 
-**Tier gate:** SKIP for `light` and `standard` tiers. Only `full` tier runs this step.
+**Tier gate:** SKIP for `light` tier. Only `full` tier runs this step.
 
 **Goal:** extract explicit expert disagreements from the corpus and comparisons into a structured artifact that step 10 MUST include as a dedicated section. This is the single highest-leverage move for the insight dimension.
 
