@@ -74,11 +74,11 @@ Step 1 classifies the query into a `pipeline_tier` (`light` / `full`). The tier 
 
 Before you invoke any step skill, do this:
 
-0. **Auto-init if no vault exists.** Check whether `.hyperresearch/` exists in the working directory. If not, the user installed hyperresearch globally (`hyperresearch install --global`) and this is the first `/hyperresearch` invocation in this project. Run:
-   ```bash
-   hyperresearch init . --json
-   ```
-   This creates the SQLite vault, the `research/` directory, and a project-level `CLAUDE.md` with the hyperresearch workflow blurb. If this fails because the binary isn't on PATH, tell the user to run `pip install hyperresearch` first. If `.hyperresearch/` already exists, skip this step.
+0. **Auto-init if missing.** Two checks for the first-run-after-global-install case:
+   - **Vault check.** If `.hyperresearch/` doesn't exist in the working directory, run `hyperresearch init . --json`. Creates the SQLite vault and `research/` directory.
+   - **Step-skills check.** If `.claude/skills/hyperresearch-1-decompose/SKILL.md` doesn't exist relative to the working directory, run `hyperresearch install --steps-only . --json`. Installs the 16 step skill files needed by `Skill(skill: "hyperresearch-N-...")` calls in later steps.
+
+   If either command fails because the binary isn't on PATH, tell the user to run `pip install hyperresearch` first. If both files already exist, both commands no-op cheaply — safe to run unconditionally.
 
 1. **Resolve the canonical research query.** Order of precedence:
    - If `research/prompt.txt` exists (legacy harness / wrapped run), read it. Its contents are the canonical research query. GOSPEL.

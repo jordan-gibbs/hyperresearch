@@ -2984,11 +2984,20 @@ def install_global_hooks(home: Path | None = None, hpr_path: str = "hyperresearc
         Claude Code session, only ones that have a hyperresearch vault)
       - Vault init (handled per-project, on first /hyperresearch invocation)
       - CLAUDE.md injection (per-project)
+      - **The 16 step skills**. Globally advertising 16 internal step
+        skills would add ~3K tokens of system-reminder noise to every
+        Claude Code session. Step skills install per-project, lazily,
+        when the entry-skill bootstrap calls `hyperresearch install
+        --steps-only .` on first /hyperresearch invocation. Sessions in
+        unrelated projects see zero step-skill noise.
 
     The result: pip install + this once, and `/hyperresearch` is available
-    in every Claude Code session anywhere on the machine. The actual
-    research artifacts (vault, research/, CLAUDE.md) materialize in the
+    in every Claude Code session anywhere on the machine. The vault,
+    research/, CLAUDE.md, and the 16 step skills all materialize in the
     project root where Claude Code is running, on first invocation.
+
+    Also prunes any hyperresearch-N-* step-skill dirs left in ~/.claude/skills/
+    by older versions (≤0.8.2 used to install step skills globally).
     """
     if home is None:
         home = Path.home()
@@ -2997,7 +3006,6 @@ def install_global_hooks(home: Path | None = None, hpr_path: str = "hyperresearc
 
     for installer in (
         lambda: _install_hyperresearch_skill(home),
-        lambda: _install_hyperresearch_step_skills(home),
         lambda: _install_researcher_agent(home, hpr_path),
         lambda: _install_loci_analyst_agent(home, hpr_path),
         lambda: _install_depth_investigator_agent(home, hpr_path),
@@ -3013,12 +3021,45 @@ def install_global_hooks(home: Path | None = None, hpr_path: str = "hyperresearc
         lambda: _install_draft_orchestrator_agent(home, hpr_path),
         lambda: _install_synthesizer_agent(home, hpr_path),
         lambda: _prune_retired_agents(home),
+        lambda: _prune_global_step_skills(home),
     ):
         result = installer()
         if result:
             actions.append(result)
 
     return actions
+
+
+def _prune_global_step_skills(home: Path) -> str | None:
+    """Remove hyperresearch-N-* step skill dirs from ~/.claude/skills/.
+
+    Used by install_global_hooks to clean up after older versions (≤0.8.2)
+    that installed step skills globally. Step skills now live per-project.
+    """
+    skills_root = home / ".claude" / "skills"
+    if not skills_root.is_dir():
+        return None
+
+    pruned: list[str] = []
+    for child in skills_root.iterdir():
+        if not child.is_dir():
+            continue
+        # Match hyperresearch-<digit>-* (the 16 step skills) but not
+        # the entry skill at .claude/skills/hyperresearch/
+        name = child.name
+        if not name.startswith("hyperresearch-"):
+            continue
+        suffix = name[len("hyperresearch-"):]
+        if not suffix or not suffix[0].isdigit():
+            continue
+        for f in child.iterdir():
+            f.unlink()
+        child.rmdir()
+        pruned.append(name)
+
+    if not pruned:
+        return None
+    return f"Pruned {len(pruned)} global step-skill dirs (now per-project): {', '.join(pruned[:3])}{'...' if len(pruned) > 3 else ''}"
 
 
 def _write_hook_script(vault_root: Path, hpr_path: str) -> Path:
