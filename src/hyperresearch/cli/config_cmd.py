@@ -125,7 +125,7 @@ def config_get(
 def config_agent_docs(
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
-    """Update CLAUDE.md with the latest hyperresearch blurb."""
+    """Update CLAUDE.md and AGENTS.md with the latest hyperresearch blurb."""
     from hyperresearch.core.agent_docs import inject_agent_docs
     from hyperresearch.core.vault import Vault
 
@@ -139,4 +139,4 @@ def config_agent_docs(
             for m in modified:
                 console.print(f"  [green]{m}[/]")
         else:
-            console.print("[dim]CLAUDE.md already up to date.[/]")
+            console.print("[dim]CLAUDE.md and AGENTS.md already up to date.[/]")

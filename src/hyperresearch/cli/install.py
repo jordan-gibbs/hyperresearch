@@ -14,11 +14,17 @@ def install(
     path: str = typer.Argument(".", help="Path to install in"),
     name: str = typer.Option("Research Base", "--name", "-n", help="Vault name"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
+    platform: str = typer.Option(
+        "ask",
+        "--platform",
+        "-p",
+        help="Harness integration(s) to install: claude, opencode, both. Default asks in interactive setup and uses both in non-interactive mode.",
+    ),
     global_install: bool = typer.Option(
         False,
         "--global",
         "-g",
-        help="Install Claude Code entry skill + agents to ~/.claude/ so /hyperresearch works in every Claude Code session anywhere. Skips vault init, CLAUDE.md, and the 16 step skills (those happen per-project on first /hyperresearch run).",
+        help="Install Claude Code entry skill + agents to ~/.claude/ so /hyperresearch works in every Claude Code session anywhere. Skips vault init, agent docs (CLAUDE.md/AGENTS.md), and the 16 step skills (those happen per-project on first /hyperresearch run).",
     ),
     steps_only: bool = typer.Option(
         False,
@@ -26,7 +32,7 @@ def install(
         help="Install only the 16 step skills to <PATH>/.claude/skills/. Used internally by the entry skill bootstrap on first /hyperresearch invocation in a project. Not normally invoked by users.",
     ),
 ) -> None:
-    """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
+    """Install hyperresearch: init vault + inject agent docs + install Claude Code hooks."""
     import sys
 
     from hyperresearch.core.hooks import (
@@ -57,7 +63,7 @@ def install(
         return
 
     # Global install path: only the user-level Claude Code entry skill +
-    # agents. No vault, no CLAUDE.md, no step skills — pure "make the
+    # agents. No vault, no agent docs, no step skills — pure "make the
     # slash command available everywhere" mode. Step skills install
     # per-project, lazily, when the entry skill bootstrap calls
     # `hyperresearch install --steps-only .` on first invocation.
@@ -101,8 +107,10 @@ def install(
     if is_new and is_interactive:
         from hyperresearch.cli.setup import setup
 
-        setup(path=path, json_output=False)
+        setup(path=path, json_output=False, platform=platform)
         return
+
+    selected_platforms = _resolve_platforms(platform, interactive=is_interactive)
 
     # Step 1: Init vault (skip if already exists)
     try:
@@ -110,7 +118,7 @@ def install(
         vault_action = "existing"
     except VaultError:
         try:
-            vault = Vault.init(root, name=name)
+            vault = Vault.init(root, name=name, platforms=selected_platforms)
             vault_action = "created"
         except VaultError as e:
             if json_output:
@@ -124,11 +132,11 @@ def install(
 
     hpr_path = _resolve_executable()
 
-    # Step 3: Always re-inject CLAUDE.md (updates blurb + path)
-    doc_actions = inject_agent_docs(root)
+    # Step 3: Always re-inject selected agent docs (updates blurb + path)
+    doc_actions = inject_agent_docs(root, platforms=selected_platforms)
 
-    # Step 4: Install Claude Code hook + skills + subagents
-    hook_actions = install_hooks(root, hpr_path=hpr_path)
+    # Step 4: Install selected hooks + skills + subagents
+    hook_actions = install_hooks(root, hpr_path=hpr_path, platforms=selected_platforms)
 
     # Step 3: Auto-configure crawl4ai if installed
     crawl4ai_status = _setup_crawl4ai(vault)
@@ -137,6 +145,7 @@ def install(
     data = {
         "vault_path": str(vault.root),
         "vault": vault_action,
+        "platforms": sorted(selected_platforms),
         "agent_docs": doc_actions,
         "hooks_installed": hook_actions,
         "crawl4ai": crawl4ai_status,
@@ -174,6 +183,23 @@ def install(
 
         console.print("\n[bold]Ready.[/] Agents will now check the research base before web searches.")
         console.print("[dim]Tip: Run 'hyperresearch setup' for interactive configuration (profile, stealth, etc.)[/]")
+
+
+def _resolve_platforms(platform: str, interactive: bool) -> set[str]:
+    from hyperresearch.core.platforms import normalize_platforms
+
+    if platform == "ask":
+        if interactive:
+            from hyperresearch.cli.setup import choose_platforms_interactive
+
+            return choose_platforms_interactive()
+        return normalize_platforms("both")
+
+    try:
+        return normalize_platforms(platform)
+    except ValueError as exc:
+        console.print(f"[red]Error:[/] {exc}")
+        raise typer.Exit(1) from exc
 
 
 def _setup_crawl4ai(vault) -> str:

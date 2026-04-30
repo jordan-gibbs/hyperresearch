@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterable
 from pathlib import Path
 
 from hyperresearch.core.config import VaultConfig
@@ -95,7 +96,12 @@ class Vault:
         self.close()
 
     @staticmethod
-    def init(root: Path, name: str = "Research Base", research_dir: str = "research") -> Vault:
+    def init(
+        root: Path,
+        name: str = "Research Base",
+        research_dir: str = "research",
+        platforms: str | Iterable[str] | None = None,
+    ) -> Vault:
         """Initialize a new vault at the given path."""
         root = root.resolve()
         hyperresearch_dir = root / HYPERRESEARCH_DIR
@@ -136,9 +142,9 @@ class Vault:
             "# {{ title }}\n\n"
         )
 
-        # Inject CLAUDE.md at vault root
+        # Inject agent docs (CLAUDE.md + AGENTS.md) at vault root
         from hyperresearch.core.agent_docs import inject_agent_docs
-        inject_agent_docs(root)
+        inject_agent_docs(root, platforms=platforms)
 
         return vault
 

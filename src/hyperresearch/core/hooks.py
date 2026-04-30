@@ -1,15 +1,17 @@
-"""Agent hook installer — installs the Claude Code PreToolUse hook, skills, and subagents.
+"""Agent hook installer — installs Claude-compatible hooks, skills, and subagents.
 
-The hook reminds Claude Code to check the research base before doing raw web
-searches. The `/hyperresearch` skill drives the research
-protocol. The hyperresearch subagents (fetcher, loci-analyst, depth-investigator,
-four critics, patcher, polish-auditor) are Claude Code registered agents
-spawned via the Task tool.
+The hook reminds Claude Code and OpenCode-compatible runners to check the
+research base before doing raw web searches. The `/hyperresearch` skill drives
+the research protocol. The hyperresearch subagents (fetcher, loci-analyst,
+depth-investigator, four critics, patcher, polish-auditor) are registered as
+Claude-compatible agents spawned via the Task tool.
 """
 
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Iterable
 from pathlib import Path
 
 # Scaffold-only section headers that must NEVER appear in a final_report draft.
@@ -2918,6 +2920,7 @@ const fs = require('fs');
 const path = require('path');
 
 const HPR = '{hpr_path}';
+const REMINDER_TOOLS = new Set(['websearch', 'webfetch', 'grep', 'glob']);
 
 // Check if a .hyperresearch directory exists (vault is initialized)
 function findVault() {{
@@ -2930,8 +2933,13 @@ function findVault() {{
     }}
 }}
 
-const vault = findVault();
-if (vault) {{
+function shouldEmitReminder(payload) {{
+    const toolName = String(payload?.tool_name ?? payload?.tool ?? '').toLowerCase();
+    if (!toolName) return true; // Unknown runner payload → preserve old behavior.
+    return REMINDER_TOOLS.has(toolName);
+}}
+
+function emitReminder() {{
     const msg = [
         'HYPERRESEARCH: A research knowledge base exists in this project.',
         '',
@@ -2948,11 +2956,93 @@ if (vault) {{
     ].join('\\n');
     process.stderr.write(msg + '\\n');
 }}
+
+const vault = findVault();
+if (!vault) process.exit(0);
+
+let input = '';
+let finalized = false;
+
+function finalize() {{
+    if (finalized) return;
+    finalized = true;
+    let payload = null;
+    try {{
+        payload = input.trim() ? JSON.parse(input) : null;
+    }} catch (_) {{
+        payload = null;
+    }}
+    if (shouldEmitReminder(payload)) emitReminder();
+}}
+
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', chunk => input += chunk);
+process.stdin.on('end', finalize);
+process.stdin.on('error', finalize);
+setTimeout(finalize, 150);
 """
 
 
-def install_hooks(vault_root: Path, hpr_path: str = "hyperresearch") -> list[str]:
-    """Install the Claude Code hook + skills + subagents. Returns list of actions taken.
+OPENCODE_PLUGIN_TEMPLATE = """\
+/**
+ * hyperresearch OpenCode plugin — nudges agents toward the persistent vault
+ * before external web work, and blocks raw WebFetch for source pages.
+ * Installed by: hyperresearch install
+ */
+const fs = require('fs');
+const path = require('path');
+
+const HPR = '{hpr_path}';
+
+function findVault(start) {{
+    let dir = start || process.cwd();
+    while (true) {{
+        if (fs.existsSync(path.join(dir, '.hyperresearch'))) return dir;
+        const parent = path.dirname(dir);
+        if (parent === dir) return null;
+        dir = parent;
+    }}
+}}
+
+function reminder() {{
+    return [
+        'HYPERRESEARCH: A research knowledge base exists in this project.',
+        'Before web search, check existing research with:',
+        '  ' + HPR + ' search "<your query>" -j',
+        'For source pages, do not use raw WebFetch. Use:',
+        '  ' + HPR + ' fetch "<url>" --tag <topic> -j',
+        'This saves full content, screenshots/assets where supported, and indexes sources for future sessions.',
+    ].join('\\n');
+}}
+
+export const HyperresearchOpenCodePlugin = async (ctx) => {{
+    const vault = findVault(ctx.directory || ctx.worktree || process.cwd());
+    if (!vault) return {{}};
+
+    return {{
+        'tool.definition': async (input, output) => {{
+            const tool = String(input?.toolID ?? '').toLowerCase();
+            if (tool === 'websearch' || tool === 'webfetch') {{
+                output.description = reminder() + '\\n\\n' + output.description;
+            }}
+        }},
+        'tool.execute.before': async (input) => {{
+            const tool = String(input?.tool ?? '').toLowerCase();
+            if (tool === 'webfetch') {{
+                throw new Error(reminder());
+            }}
+        }},
+    }};
+}};
+"""
+
+
+def install_hooks(
+    vault_root: Path,
+    hpr_path: str = "hyperresearch",
+    platforms: str | Iterable[str] | None = None,
+) -> list[str]:
+    """Install selected harness integrations, hooks, skills, and subagents.
 
     Hyperresearch roster (as of v7):
       fetcher (Layer 1, 3, 4), loci-analyst (Layer 2), depth-investigator (Layer 3),
@@ -2961,9 +3051,12 @@ def install_hooks(vault_root: Path, hpr_path: str = "hyperresearch") -> list[str
       dialectic-critic + depth-critic + width-critic + instruction-critic (Layer 5),
       patcher (Layer 6), polish-auditor (Layer 7).
     """
+    from hyperresearch.core.platforms import normalize_platforms
+
+    selected = normalize_platforms(platforms)
     actions = []
 
-    for installer in (
+    claude_installers = (
         lambda: _install_claude_hook(vault_root, hpr_path),
         lambda: _install_hyperresearch_skill(vault_root),
         lambda: _install_hyperresearch_step_skills(vault_root),
@@ -2982,7 +3075,22 @@ def install_hooks(vault_root: Path, hpr_path: str = "hyperresearch") -> list[str
         lambda: _install_draft_orchestrator_agent(vault_root, hpr_path),
         lambda: _install_synthesizer_agent(vault_root, hpr_path),
         lambda: _prune_retired_agents(vault_root),
-    ):
+    )
+
+    opencode_installers = (
+        lambda: _install_opencode_plugin(vault_root, hpr_path),
+        lambda: _install_opencode_hyperresearch_skill(vault_root),
+        lambda: _install_opencode_step_skills(vault_root),
+        lambda: _install_opencode_agents(vault_root, hpr_path),
+    )
+
+    installers = []
+    if "claude" in selected:
+        installers.extend(claude_installers)
+    if "opencode" in selected:
+        installers.extend(opencode_installers)
+
+    for installer in installers:
         result = installer()
         if result:
             actions.append(result)
@@ -3087,13 +3195,29 @@ def _write_hook_script(vault_root: Path, hpr_path: str) -> Path:
 
 
 def _install_claude_hook(vault_root: Path, hpr_path: str) -> str | None:
-    """Install PreToolUse hook into .claude/settings.json."""
-    hook_path = _write_hook_script(vault_root, hpr_path)
+    """Install the Claude-compatible PreToolUse hook settings.
 
+    Claude Code reads `.claude/settings.json`. Some OpenCode hook bridges and
+    compatibility layers prefer project-local `.claude/settings.local.json`, so
+    write both with the same command hook. The hook script itself accepts both
+    Claude's `tool_name` payload and OpenCode-style lowercase `tool` payloads.
+    """
+    hook_path = _write_hook_script(vault_root, hpr_path)
     settings_dir = vault_root / ".claude"
     settings_dir.mkdir(exist_ok=True)
-    settings_path = settings_dir / "settings.json"
 
+    changed_paths: list[str] = []
+    for settings_name in ("settings.json", "settings.local.json"):
+        settings_path = settings_dir / settings_name
+        if _ensure_pretool_hook(settings_path, hook_path):
+            changed_paths.append(f".claude/{settings_name}")
+
+    if not changed_paths:
+        return None
+    return f"Claude/OpenCode: {', '.join(changed_paths)} (PreToolUse hook)"
+
+
+def _ensure_pretool_hook(settings_path: Path, hook_path: Path) -> bool:
     settings = {}
     if settings_path.exists():
         try:
@@ -3106,12 +3230,12 @@ def _install_claude_hook(vault_root: Path, hpr_path: str) -> str | None:
 
     for entry in pre_tool:
         if isinstance(entry, dict):
-            for h in entry.get("hooks", []):
-                if "hyperresearch" in h.get("command", ""):
-                    return None
+            for hook in entry.get("hooks", []):
+                if isinstance(hook, dict) and "hyperresearch" in hook.get("command", ""):
+                    return False
 
     pre_tool.append({
-        "matcher": "Glob|Grep|WebSearch|WebFetch",
+        "matcher": "Glob|Grep|WebSearch|WebFetch|glob|grep|websearch|webfetch",
         "hooks": [{
             "type": "command",
             "command": f"node {hook_path.as_posix()}",
@@ -3119,7 +3243,165 @@ def _install_claude_hook(vault_root: Path, hpr_path: str) -> str | None:
     })
 
     settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
-    return "Claude Code: .claude/settings.json (PreToolUse hook)"
+    return True
+
+
+def _install_opencode_plugin(vault_root: Path, hpr_path: str) -> str | None:
+    """Install an OpenCode-native plugin hook into .opencode/plugins/."""
+    plugins_dir = vault_root / ".opencode" / "plugins"
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    plugin_path = plugins_dir / "hyperresearch-reminder.js"
+    js_path = hpr_path.replace("\\", "\\\\")
+    content = OPENCODE_PLUGIN_TEMPLATE.format(hpr_path=js_path)
+
+    if plugin_path.exists() and plugin_path.read_text(encoding="utf-8") == content:
+        return None
+
+    plugin_path.write_text(content, encoding="utf-8")
+    return "OpenCode: .opencode/plugins/hyperresearch-reminder.js (tool hooks)"
+
+
+def _install_opencode_agents(vault_root: Path, hpr_path: str) -> str | None:
+    """Render OpenCode-native subagents with concrete configured models."""
+    from hyperresearch.core.opencode_models import resolve_opencode_model_choices
+
+    model_choices = resolve_opencode_model_choices(vault_root)
+    opencode_agents_dir = vault_root / ".opencode" / "agents"
+    opencode_agents_dir.mkdir(parents=True, exist_ok=True)
+
+    changed: list[str] = []
+    for filename, content in _agent_sources(hpr_path):
+        opencode_content = _render_opencode_agent(content, model_choices)
+        opencode_agent_path = opencode_agents_dir / filename
+        if opencode_agent_path.exists() and opencode_agent_path.read_text(encoding="utf-8") == opencode_content:
+            continue
+        opencode_agent_path.write_text(opencode_content, encoding="utf-8")
+        changed.append(filename)
+
+    if not changed:
+        return None
+    return f"OpenCode: .opencode/agents/ ({len(changed)} model-configured agents)"
+
+
+def _agent_sources(hpr_path: str) -> list[tuple[str, str]]:
+    hpr_posix = hpr_path.replace("\\", "/")
+    return [
+        ("hyperresearch-fetcher.md", RESEARCHER_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-loci-analyst.md", LOCI_ANALYST_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-depth-investigator.md", DEPTH_INVESTIGATOR_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-source-analyst.md", SOURCE_ANALYST_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-corpus-critic.md", CORPUS_CRITIC_AGENT.replace("{hpr_path}", hpr_posix)),
+        ("hyperresearch-dialectic-critic.md", DIALECTIC_CRITIC_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-depth-critic.md", DEPTH_CRITIC_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-width-critic.md", WIDTH_CRITIC_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-instruction-critic.md", INSTRUCTION_CRITIC_AGENT),
+        ("hyperresearch-patcher.md", PATCHER_AGENT),
+        (
+            "hyperresearch-polish-auditor.md",
+            POLISH_AUDITOR_AGENT.format(
+                scaffold_only_sections=_render_scaffold_only_bullets(indent="- "),
+            ),
+        ),
+        ("hyperresearch-readability-recommender.md", READABILITY_REFORMATTER_AGENT),
+        ("hyperresearch-draft-orchestrator.md", DRAFT_ORCHESTRATOR_AGENT.replace("{hpr_path}", hpr_posix)),
+        ("hyperresearch-synthesizer.md", SYNTHESIZER_AGENT),
+    ]
+
+
+_OPENCODE_ALLOWED_COLORS: set[str] = {
+    "primary",
+    "secondary",
+    "accent",
+    "success",
+    "warning",
+    "error",
+    "info",
+}
+
+_OPENCODE_COLOR_ALIASES: dict[str, str] = {
+    "red": "error",
+    "orange": "warning",
+    "yellow": "warning",
+    "green": "success",
+    "teal": "info",
+    "cyan": "info",
+    "blue": "primary",
+    "purple": "secondary",
+    "magenta": "accent",
+}
+
+
+def _render_opencode_agent(content: str, model_choices) -> str:
+    frontmatter_match = re.match(r"^---\n(?P<frontmatter>.*?)\n---\n(?P<body>.*)$", content, re.DOTALL)
+    if not frontmatter_match:
+        return content
+
+    frontmatter = frontmatter_match.group("frontmatter")
+    body = frontmatter_match.group("body")
+    lines = frontmatter.splitlines()
+
+    rendered: list[str] = []
+    role = "sonnet"
+    tool_names: list[str] = []
+    has_mode = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("name:"):
+            continue
+        if stripped.startswith("model:"):
+            role = stripped.split(":", 1)[1].strip()
+            choice = model_choices.get(role) or model_choices["sonnet"]
+            rendered.append(f"model: {choice.model}")
+            if choice.variant:
+                rendered.append(f"variant: {choice.variant}")
+            continue
+        if stripped.startswith("tools:"):
+            tool_names = [part.strip() for part in stripped.split(":", 1)[1].split(",")]
+            continue
+        if stripped.startswith("color:"):
+            raw_color = stripped.split(":", 1)[1].strip().strip('"').strip("'")
+            lowered = raw_color.lower()
+            if lowered in _OPENCODE_ALLOWED_COLORS:
+                rendered.append(f"color: {lowered}")
+            elif re.fullmatch(r"#[0-9a-fA-F]{6}", raw_color):
+                rendered.append(f"color: {raw_color}")
+            else:
+                rendered.append(f"color: {_OPENCODE_COLOR_ALIASES.get(lowered, 'primary')}")
+            continue
+        if stripped.startswith("mode:"):
+            has_mode = True
+        rendered.append(line)
+
+    if not has_mode:
+        rendered.append("mode: subagent")
+
+    permission = _opencode_permission_block(tool_names)
+    if permission:
+        rendered.extend(permission)
+
+    return "---\n" + "\n".join(rendered).rstrip() + "\n---\n" + body
+
+
+def _opencode_permission_block(tool_names: list[str]) -> list[str]:
+    allowed: list[str] = []
+    tools = {tool.lower() for tool in tool_names}
+    if "read" in tools:
+        allowed.append("read")
+    if "write" in tools or "edit" in tools:
+        allowed.append("edit")
+    if "bash" in tools:
+        allowed.append("bash")
+    if "task" in tools:
+        allowed.append("task")
+
+    if not allowed:
+        return []
+
+    lines = ["permission:"]
+    for name in allowed:
+        lines.append(f"  {name}: allow")
+    return lines
 
 
 def _write_agent_file(
@@ -3435,19 +3717,39 @@ _HYPERRESEARCH_STEP_SKILLS = [
 
 
 def _install_hyperresearch_step_skills(vault_root: Path) -> str | None:
-    """Install the 16 V8 step skills, each as its own Claude Code skill directory.
+    result = _install_step_skills(vault_root / ".claude" / "skills")
+    if result is None:
+        return None
+    return f"Claude Code: .claude/skills/hyperresearch-N-*/SKILL.md ({result})"
 
-    Each step skill lives at `.claude/skills/hyperresearch-N-name/SKILL.md` and is
-    invocable via the Skill tool. The orchestrator (loaded via /hyperresearch)
-    invokes each step skill in sequence per the tier routing table. This
-    decomposition solves the V7 context-compaction problem: each step's
-    procedure is loaded fresh into context only at the moment it's needed.
 
-    Also prunes any stale `hyperresearch-*` skill directories (e.g. from a prior
-    V8 layout where steps were numbered differently) so the user doesn't see
-    obsolete entries in their skill list.
+def _install_opencode_hyperresearch_skill(vault_root: Path) -> str | None:
+    content = _read_skill_source("hyperresearch.md")
+    if content is None:
+        return None
+
+    skill_dir = vault_root / ".opencode" / "skills" / "hyperresearch"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = skill_dir / "SKILL.md"
+    if dest_path.exists() and dest_path.read_text(encoding="utf-8") == content:
+        return None
+    dest_path.write_text(content, encoding="utf-8")
+    return "OpenCode: .opencode/skills/hyperresearch/SKILL.md (/hyperresearch skill)"
+
+
+def _install_opencode_step_skills(vault_root: Path) -> str | None:
+    result = _install_step_skills(vault_root / ".opencode" / "skills")
+    if result is None:
+        return None
+    return f"OpenCode: .opencode/skills/hyperresearch-N-*/SKILL.md ({result})"
+
+
+def _install_step_skills(skills_root: Path) -> str | None:
+    """Install the 16 V8 step skills into a harness-specific skills root.
+
+    Each step skill lives at `<skills_root>/hyperresearch-N-name/SKILL.md` and is
+    invocable via the harness skill tool.
     """
-    skills_root = vault_root / ".claude" / "skills"
     skills_root.mkdir(parents=True, exist_ok=True)
 
     expected = set(_HYPERRESEARCH_STEP_SKILLS)
@@ -3492,4 +3794,4 @@ def _install_hyperresearch_step_skills(vault_root: Path) -> str | None:
         parts.append(f"{len(installed)} step skills: {', '.join(installed)}")
     if pruned:
         parts.append(f"pruned: {', '.join(pruned)}")
-    return f"Claude Code: .claude/skills/hyperresearch-N-*/SKILL.md ({'; '.join(parts)})"
+    return "; ".join(parts)

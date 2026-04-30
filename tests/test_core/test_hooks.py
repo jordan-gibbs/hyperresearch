@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import re
+import subprocess
+import textwrap
+
 from hyperresearch.core.hooks import (
     _RETIRED_AGENT_FILES,
     _RETIRED_SKILL_DIRS,
@@ -348,8 +353,70 @@ def test_prune_retired_agents_noop_on_clean_vault(tmp_vault):
 # ---------------------------------------------------------------------------
 
 
-def test_install_hooks_registers_full_hyperresearch_roster(tmp_vault):
+def test_install_hooks_can_target_opencode_only(tmp_path, monkeypatch):
+    from hyperresearch.core.vault import Vault
+
+    empty_opencode_config = tmp_path / "empty-opencode"
+    empty_opencode_config.mkdir()
+    monkeypatch.setenv("HYPERRESEARCH_OPENCODE_CONFIG_DIR", str(empty_opencode_config))
+
+    vault = Vault.init(tmp_path / "opencode-only", platforms="opencode")
+    actions = install_hooks(vault.root, "hyperresearch", platforms="opencode")
+
+    assert actions
+    assert (vault.root / "AGENTS.md").exists()
+    assert not (vault.root / "CLAUDE.md").exists()
+    assert not (vault.root / ".claude").exists()
+    assert (vault.root / ".opencode" / "plugins" / "hyperresearch-reminder.js").exists()
+    assert (vault.root / ".opencode" / "skills" / "hyperresearch" / "SKILL.md").exists()
+    assert (vault.root / ".opencode" / "agents" / "hyperresearch-fetcher.md").exists()
+
+
+def test_opencode_agent_colors_are_schema_compatible(tmp_path, monkeypatch):
+    from hyperresearch.core.vault import Vault
+
+    empty_opencode_config = tmp_path / "empty-opencode"
+    empty_opencode_config.mkdir()
+    monkeypatch.setenv("HYPERRESEARCH_OPENCODE_CONFIG_DIR", str(empty_opencode_config))
+
+    vault = Vault.init(tmp_path / "opencode-color-check", platforms="opencode")
+    install_hooks(vault.root, "hyperresearch", platforms="opencode")
+
+    allowed = {"primary", "secondary", "accent", "success", "warning", "error", "info"}
+    agents_dir = vault.root / ".opencode" / "agents"
+
+    for agent_file in agents_dir.glob("*.md"):
+        body = agent_file.read_text(encoding="utf-8")
+        color_lines = [line for line in body.splitlines() if line.startswith("color:")]
+        assert len(color_lines) == 1, f"expected exactly one color line in {agent_file.name}"
+
+        color = color_lines[0].split(":", 1)[1].strip().strip('"').strip("'")
+        assert color in allowed or re.fullmatch(r"#[0-9a-fA-F]{6}", color), (
+            f"invalid color '{color}' in {agent_file.name}"
+        )
+
+
+def test_install_hooks_can_target_claude_only(tmp_path):
+    from hyperresearch.core.vault import Vault
+
+    vault = Vault.init(tmp_path / "claude-only", platforms="claude")
+    actions = install_hooks(vault.root, "hyperresearch", platforms="claude")
+
+    assert actions
+    assert (vault.root / "CLAUDE.md").exists()
+    assert not (vault.root / "AGENTS.md").exists()
+    assert (vault.root / ".claude" / "settings.json").exists()
+    assert (vault.root / ".claude" / "skills" / "hyperresearch" / "SKILL.md").exists()
+    assert (vault.root / ".claude" / "agents" / "hyperresearch-fetcher.md").exists()
+    assert not (vault.root / ".opencode").exists()
+
+
+def test_install_hooks_registers_full_hyperresearch_roster(tmp_vault, tmp_path, monkeypatch):
     """install_hooks wires the hook, both entry-skill aliases, and the agent roster."""
+    empty_opencode_config = tmp_path / "empty-opencode"
+    empty_opencode_config.mkdir()
+    monkeypatch.setenv("HYPERRESEARCH_OPENCODE_CONFIG_DIR", str(empty_opencode_config))
+
     actions = install_hooks(tmp_vault.root, "hyperresearch")
     assert actions  # something happened
 
@@ -376,14 +443,92 @@ def test_install_hooks_registers_full_hyperresearch_roster(tmp_vault):
         f"missing: {expected_agents - actual_agents}, extra: {actual_agents - expected_agents}"
     )
 
+    opencode_agents_dir = tmp_vault.root / ".opencode" / "agents"
+    actual_opencode_agents = {p.name for p in opencode_agents_dir.iterdir() if p.is_file()}
+    assert expected_agents == actual_opencode_agents
+
+    opencode_fetcher = (opencode_agents_dir / "hyperresearch-fetcher.md").read_text(
+        encoding="utf-8"
+    )
+    assert "model: anthropic/claude-sonnet" in opencode_fetcher
+    assert "model: sonnet" not in opencode_fetcher
+    assert "mode: subagent" in opencode_fetcher
+    assert "permission:" in opencode_fetcher
+    assert "  bash: allow" in opencode_fetcher
+    assert "tools: Bash" not in opencode_fetcher
+
     # Entry skill registered as /hyperresearch (the /research alias was
     # retired in v0.8.1)
     assert (tmp_vault.root / ".claude" / "skills" / "hyperresearch" / "SKILL.md").exists()
     assert not (tmp_vault.root / ".claude" / "skills" / "research" / "SKILL.md").exists()
 
-    # Hook settings written
-    assert (tmp_vault.root / ".claude" / "settings.json").exists()
+    # Hook settings written for Claude Code and OpenCode-compatible hook bridges.
+    settings_path = tmp_vault.root / ".claude" / "settings.json"
+    local_settings_path = tmp_vault.root / ".claude" / "settings.local.json"
+    opencode_plugin_path = tmp_vault.root / ".opencode" / "plugins" / "hyperresearch-reminder.js"
+    assert settings_path.exists()
+    assert local_settings_path.exists()
+    assert opencode_plugin_path.exists()
     assert (tmp_vault.root / ".hyperresearch" / "hook.js").exists()
+
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    matcher = settings["hooks"]["PreToolUse"][0]["matcher"]
+    assert "WebSearch" in matcher
+    assert "websearch" in matcher
+
+    opencode_plugin = opencode_plugin_path.read_text(encoding="utf-8")
+    assert "tool.definition" in opencode_plugin
+    assert "tool.execute.before" in opencode_plugin
+
+
+def test_opencode_plugin_executes_tool_hooks(tmp_vault, tmp_path):
+    install_hooks(tmp_vault.root, "hyperresearch")
+    plugin_path = tmp_vault.root / ".opencode" / "plugins" / "hyperresearch-reminder.js"
+
+    runner = tmp_path / "run-opencode-plugin.mjs"
+    runner.write_text(
+        textwrap.dedent(
+            f"""
+            import {{ HyperresearchOpenCodePlugin }} from {plugin_path.as_uri()!r};
+
+            const hooks = await HyperresearchOpenCodePlugin({{
+              directory: {str(tmp_vault.root)!r},
+              worktree: {str(tmp_vault.root)!r},
+            }});
+
+            const definitionOutput = {{ description: 'original description' }};
+            await hooks['tool.definition']({{ toolID: 'webfetch' }}, definitionOutput);
+            if (!definitionOutput.description.includes('HYPERRESEARCH')) {{
+              throw new Error('tool.definition did not inject hyperresearch reminder');
+            }}
+
+            let blocked = false;
+            try {{
+              await hooks['tool.execute.before']({{ tool: 'webfetch' }}, {{ args: {{ url: 'https://example.com' }} }});
+            }} catch (error) {{
+              blocked = String(error.message).includes('hyperresearch fetch');
+            }}
+            if (!blocked) {{
+              throw new Error('tool.execute.before did not block raw webfetch');
+            }}
+
+            await hooks['tool.execute.before']({{ tool: 'read' }}, {{ args: {{ filePath: 'README.md' }} }});
+            console.log('opencode plugin hooks verified');
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bun", runner.as_posix()],
+        cwd=tmp_vault.root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "opencode plugin hooks verified" in result.stdout
 
 
 def test_install_hooks_second_run_is_noop(tmp_vault):
