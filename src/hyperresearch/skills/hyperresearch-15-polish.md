@@ -21,7 +21,7 @@ description: >
 ## Recover state
 
 Read these inputs:
-- `research/notes/final_report.md` — the patched draft from step 14 (or single-pass draft for light tier)
+- `research/notes/final_report_<vault_tag>.md` — the patched draft from step 14 (or single-pass draft for light tier)
 - `research/query-<vault_tag>.md` — canonical research query
 
 ---
@@ -56,12 +56,12 @@ prompt: |
   [Read, Edit].
 
   YOUR INPUTS:
-  - draft_path: research/notes/final_report.md
+  - draft_path: research/notes/final_report_<vault_tag>.md
   - polish_log_path: research/polish-log.json   (already stubbed)
 ```
 
 The polish auditor strips:
-- Pipeline reference leaks (`[[interim-*]]` wikilinks, `[I\d+]` references) — converted to proper citations or deleted depending on `citation_style`
+- **Pipeline reference leaks**: `[I\d+]` references, `[[interim-*]]` wiki-links pointing at workspace artifacts (NOT source notes), references to scaffold/comparisons/synthesis-plan files in prose. **Citation wiki-links** of the form `[[<source-note-id>]]` (where the target is a real source note in the vault, not an interim/scaffold workspace file) are PRESERVED when `citation_style == "wikilink"` — they are the citation system, not a leak. Strip wikilinks only when `citation_style` is `"inline"` or `"none"`.
 - Hygiene leaks (YAML frontmatter, scaffold sections, prompt echoes)
 - Filler phrases ("It is worth noting", "Importantly", etc.)
 - Redundant sentences / paragraphs that restate prior content
@@ -136,7 +136,7 @@ If any artifact is missing, the responsible step failed silently. Re-spawn the r
 
 ## Step 15.6 — Ship
 
-The final report lives at `research/notes/final_report.md`. The wrapper's required save path (if any) is a separate copy — handle per the wrapper contract.
+The final report lives at `research/notes/final_report_<vault_tag>.md`. The wrapper's required save path (if any) is a separate copy — handle per the wrapper contract.
 
 ---
 
@@ -145,7 +145,7 @@ The final report lives at `research/notes/final_report.md`. The wrapper's requir
 - `research/polish-log.json` populated
 - Final integrity gate passed (or stub-filled with documented failure)
 - Lint gate passed
-- `research/notes/final_report.md` is the final, shippable artifact
+- `research/notes/final_report_<vault_tag>.md` is the final, shippable artifact
 
 ---
 

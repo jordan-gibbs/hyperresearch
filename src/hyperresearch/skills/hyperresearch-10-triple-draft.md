@@ -13,9 +13,9 @@ description: >
 
 # Step 10 — Triple-draft ensemble (curated lists, parallel writers)
 
-**⚠ CRITICAL ANTI-PATTERN: Writing a single draft for `full` tier is a PIPELINE VIOLATION.** In V7 runs, context compaction caused the orchestrator to forget this step's procedure and write a single draft instead of spawning 3 sub-orchestrators. V8 fixes this by loading this skill fresh at the moment it's needed. **If you find yourself about to write `research/notes/final_report.md` directly without spawning 3 `hyperresearch-draft-orchestrator` subagents, STOP. Re-read this skill. Spawn the sub-orchestrators.** (Light tier is the ONE exception — see "Light tier" section below.)
+**⚠ CRITICAL ANTI-PATTERN: Writing a single draft for `full` tier is a PIPELINE VIOLATION.** In V7 runs, context compaction caused the orchestrator to forget this step's procedure and write a single draft instead of spawning 3 sub-orchestrators. V8 fixes this by loading this skill fresh at the moment it's needed. **If you find yourself about to write `research/notes/final_report_<vault_tag>.md` directly without spawning 3 `hyperresearch-draft-orchestrator` subagents, STOP. Re-read this skill. Spawn the sub-orchestrators.** (Light tier is the ONE exception — see "Light tier" section below.)
 
-**Tier gate:** Runs for ALL tiers. For `light` tier: write a single draft directly to `research/notes/final_report.md` and skip ahead to step 15 (polish). For `full`: run the triple-draft ensemble below — step 11 (synthesizer) will turn the 3 drafts into the final report.
+**Tier gate:** Runs for ALL tiers. For `light` tier: write a single draft directly to `research/notes/final_report_<vault_tag>.md` and skip ahead to step 15 (polish). For `full`: run the triple-draft ensemble below — step 11 (synthesizer) will turn the 3 drafts into the final report.
 
 **Goal:** produce THREE independent angle-specific drafts (`draft-{a,b,c}.md`). Step 11 (synthesizer subagent) consumes all three and writes the final report.
 
@@ -57,7 +57,7 @@ Read `response_format` and `citation_style` from `research/prompt-decomposition.
 
 If `pipeline_tier == "light"`: SKIP step 10.1 — 10.3 below and follow this section instead.
 
-**Light tier writes a single draft directly to `research/notes/final_report.md`.** No subagents, no triple-draft ensemble, no synthesizer.
+**Light tier writes a single draft directly to `research/notes/final_report_<vault_tag>.md`.** No subagents, no triple-draft ensemble, no synthesizer.
 
 1. **Read the vault directly.** Light tier has no `evidence-digest.md` (step 9 was skipped). Survey the vault: `$HPR search "" --tag <vault_tag> -j` and pick the 8–15 most relevant non-deprecated notes. Read each one (`$HPR note show <id1> <id2> ... -j`) before writing.
 
@@ -66,11 +66,14 @@ If `pipeline_tier == "light"`: SKIP step 10.1 — 10.3 below and follow this sec
    - Hit the length target from step 10.0's table for the chosen `response_format` (light typically pairs with `short` or `structured`).
    - Apply the modality calibration from the recover-state list above.
 
-3. **Citations.** If `citation_style == "inline"`: use numbered `[N]` citations and end the report with a `## Sources` section listing each cited note as `[N] Title. URL` (read each cited note's YAML frontmatter for title + URL). If `citation_style == "none"`: no inline citation markers, no Sources section.
+3. **Citations.** Three styles:
+   - `"wikilink"` (default for non-wrapped runs): every citation is a `[[<source-note-id>]]` marker pointing at the source note in the vault. No separate `## Sources` section. Each wikilink resolves to its source note's frontmatter (title + URL). This is the navigable-vault format.
+   - `"inline"` (benchmark + public deliverables): numbered `[N]` citations + a `## Sources` section listing each cited note as `[N] Title. URL` (read each cited note's YAML frontmatter for title + URL).
+   - `"none"`: no citation markers anywhere, no Sources section.
 
-4. **Hygiene.** No YAML frontmatter on the final report. No `[[wikilink]]` markers. No pipeline vocabulary in prose ("hyperresearch", "evidence digest", "comparisons.md", "committed reading", etc.). Step 15 (polish) is a backstop, not a license to leak.
+4. **Hygiene.** No YAML frontmatter on the final report. No pipeline vocabulary in prose ("hyperresearch", "evidence digest", "comparisons.md", "committed reading", etc.). When `citation_style == "wikilink"`, `[[<source-note-id>]]` markers ARE the citation system and must be preserved — only strip wikilinks that point at workspace artifacts (interim-*, scaffold, comparisons). Step 15 (polish) is a backstop, not a license to leak.
 
-5. **Exit and route.** Once `research/notes/final_report.md` is written, return to the entry skill and invoke `Skill(skill: "hyperresearch-15-polish")`. Light tier skips steps 11–14 entirely.
+5. **Exit and route.** Once `research/notes/final_report_<vault_tag>.md` is written, return to the entry skill and invoke `Skill(skill: "hyperresearch-15-polish")`. Light tier skips steps 11–14 entirely.
 
 ---
 
@@ -161,7 +164,7 @@ prompt: |
   - comparisons_path: research/comparisons.md
   - source_tensions_path: research/temp/source-tensions.json
   - response_format: "<short|structured|argumentative>"
-  - citation_style: "<inline|none>"
+  - citation_style: "<wikilink|inline|none>"
   - modality: "<collect|synthesize|compare|forecast>"
 
   Read every note on must_read_note_ids before writing. Do NOT survey
@@ -198,7 +201,7 @@ When all 3 sub-orchestrators return:
 ## Exit criterion
 
 **Light tier:**
-- `research/notes/final_report.md` exists, hits the length target from step 10.0, follows `required_section_headings`, and respects `citation_style`.
+- `research/notes/final_report_<vault_tag>.md` exists, hits the length target from step 10.0, follows `required_section_headings`, and respects `citation_style`.
 
 **Standard / full tier:**
 - All three drafts exist at `research/temp/draft-{a,b,c}.md`
@@ -211,5 +214,5 @@ When all 3 sub-orchestrators return:
 
 Return to the entry skill (`hyperresearch`). Tier-based routing:
 
-- **light tier:** You already wrote `research/notes/final_report.md` directly. Skip steps 11-14 (no synthesis, no critics, no patcher) and invoke `Skill(skill: "hyperresearch-15-polish")`.
+- **light tier:** You already wrote `research/notes/final_report_<vault_tag>.md` directly. Skip steps 11-14 (no synthesis, no critics, no patcher) and invoke `Skill(skill: "hyperresearch-15-polish")`.
 - **full tier:** Invoke `Skill(skill: "hyperresearch-11-synthesize")`.

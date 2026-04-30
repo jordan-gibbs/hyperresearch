@@ -167,8 +167,8 @@ Context compaction may eat parts of this conversation. If you're unsure what ste
    - Step 7: `research/temp/source-tensions.json`
    - Step 8: `research/corpus-critic-gaps.json`, `research/temp/corpus-critic-results.md`
    - Step 9: `research/temp/evidence-digest.md`
-   - Step 10: `research/temp/draft-{a,b,c}.md` (or `research/notes/final_report.md` for light tier single-pass)
-   - Step 11: `research/temp/synthesis-plan.md`, `research/temp/synthesis-outline.md`, `research/temp/synthesis-pass1.md`, `research/notes/final_report.md`
+   - Step 10: `research/temp/draft-{a,b,c}.md` (or `research/notes/final_report_<vault_tag>.md` for light tier single-pass)
+   - Step 11: `research/temp/synthesis-plan.md`, `research/temp/synthesis-outline.md`, `research/temp/synthesis-pass1.md`, `research/notes/final_report_<vault_tag>.md`
    - Step 12: `research/critic-findings-{dialectic,depth,width,instruction}.json`
    - Step 13: `research/temp/post-critic-fetch-log.md`
    - Step 14: `research/patch-log.json` (and edited final_report.md)
@@ -206,7 +206,7 @@ $HPR lint --rule scaffold-prompt --json
 $HPR lint --rule patch-surgery --json
 ```
 
-If any rule returns `error` severity issues, address them before declaring complete. Then ship: the final report lives at `research/notes/final_report.md`.
+If any rule returns `error` severity issues, address them before declaring complete. Then ship: the final report lives at `research/notes/final_report_<vault_tag>.md`.
 
 ---
 
@@ -221,7 +221,7 @@ If any rule returns `error` severity issues, address them before declaring compl
 7. **Canonical research query is gospel everywhere.** Every subagent gets the verbatim query.
 8. **Hygiene rules apply to the final report only.** Workspace artifacts (scaffold, loci JSONs, interim notes, comparisons.md, patch log) can look however they need to look.
 9. **NEVER skip a step that the tier gate says to run.** For `full` tier, ALL 16 steps run. For `light`, the prescribed 5 steps run.
-10. **Step 10 triple-draft ensemble is MANDATORY for `full` tier.** You MUST spawn 3 `hyperresearch-draft-orchestrator` subagents. Writing `research/notes/final_report.md` directly in step 10 (instead of going through the synthesizer in step 11) is a PIPELINE VIOLATION for these tiers.
+10. **Step 10 triple-draft ensemble is MANDATORY for `full` tier.** You MUST spawn 3 `hyperresearch-draft-orchestrator` subagents. Writing `research/notes/final_report_<vault_tag>.md` directly in step 10 (instead of going through the synthesizer in step 11) is a PIPELINE VIOLATION for these tiers.
 11. **Step 11 synthesis is MANDATORY for `full` tier.** The synthesizer subagent (Read+Write tool-locked) writes the final report from the 3 drafts. The orchestrator does NOT write the final report itself for these tiers.
 12. **Subagents read full source text.** Draft sub-orchestrators MUST batch-read every note in their `must_read_note_ids` list before writing. Fetchers MUST chase 3-8 primary sources via citation chains.
 13. **NEVER emit a bare text response while subagent tasks are in flight.**

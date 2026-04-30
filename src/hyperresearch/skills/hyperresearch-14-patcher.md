@@ -21,7 +21,7 @@ description: >
 
 Read these inputs:
 - `research/scaffold.md` — vault_tag
-- `research/notes/final_report.md` — the synthesized final report from step 11
+- `research/notes/final_report_<vault_tag>.md` — the synthesized final report from step 11
 - All `research/critic-findings-*.json` files (count depends on tier)
 - `research/temp/evidence-digest.md` — patcher's primary citation source
 - `research/query-<vault_tag>.md` — canonical research query
@@ -80,7 +80,7 @@ prompt: |
   You are TOOL-LOCKED to [Read, Edit] — you cannot Write.
 
   YOUR INPUTS:
-  - draft_path: research/notes/final_report.md
+  - draft_path: research/notes/final_report_<vault_tag>.md
   - findings_paths: [
       research/critic-findings-dialectic.json,    (full tier only)
       research/critic-findings-depth.json,        (full tier only)
@@ -123,7 +123,7 @@ The patcher populates `orchestrator_escalated` with findings where `requires_orc
 
 For each entry:
 1. Read the `issue` field to understand which H2 in the draft needs to move, be added, or be renamed.
-2. Apply the restructure via hand-written Edit calls on `research/notes/final_report.md`. You have Write and Edit access — the tool lock applies only to the patcher and polish auditor subagents.
+2. Apply the restructure via hand-written Edit calls on `research/notes/final_report_<vault_tag>.md`. You have Write and Edit access — the tool lock applies only to the patcher and polish auditor subagents.
 3. Preserve the body content within each H2 section — you are moving / renaming / inserting headings, not regenerating prose. If a new heading is added and its body needs fresh content, write a short evidence-grounded paragraph for it.
 4. Log changes in `research/orchestrator-restructure-log.md` (plain markdown, one bullet per change) so downstream lint rules can see this step happened.
 5. Never regenerate a whole section or the whole draft. The "patch not regenerate" invariant still binds you — broader tools but not broader license.
@@ -132,7 +132,7 @@ For each entry:
 
 ## Constraints
 
-- **Do not apply revisions yourself in step 14.2.** You MUST spawn the patcher subagent. Do NOT call Edit directly on `research/notes/final_report.md` — the patcher has the tool-lock invariants (surgical-edit discipline, conflict resolution, integrate-don't-caveat rule) baked into its prompt. Bypassing it defeats the entire adversarial-review architecture. If the patcher returns empty, re-spawn it once — don't fall back to doing the work yourself unless step 14.4 escalations require it.
+- **Do not apply revisions yourself in step 14.2.** You MUST spawn the patcher subagent. Do NOT call Edit directly on `research/notes/final_report_<vault_tag>.md` — the patcher has the tool-lock invariants (surgical-edit discipline, conflict resolution, integrate-don't-caveat rule) baked into its prompt. Bypassing it defeats the entire adversarial-review architecture. If the patcher returns empty, re-spawn it once — don't fall back to doing the work yourself unless step 14.4 escalations require it.
 
 - **Do not re-spawn the patcher on the same findings** unless you've modified the findings. The patcher's second run on identical input is a waste.
 
@@ -143,7 +143,7 @@ For each entry:
 - `research/patch-log.json` exists with `total_findings` set and at least one of `applied` / `skipped` / `conflicts` populated
 - All critical findings either applied or resolved by orchestrator
 - All `orchestrator_escalated` findings handled (with `research/orchestrator-restructure-log.md` if any structural restructures were applied)
-- `research/notes/final_report.md` has been edited (or no edits needed if findings were trivial)
+- `research/notes/final_report_<vault_tag>.md` has been edited (or no edits needed if findings were trivial)
 
 ---
 

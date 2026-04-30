@@ -12,9 +12,9 @@ description: >
 
 # Step 11 — Synthesize the final report
 
-**Tier gate:** SKIP entirely for `light` tier — light tier wrote `research/notes/final_report.md` directly in step 10 and proceeds straight to step 15 (polish). For `full`: run as documented below.
+**Tier gate:** SKIP entirely for `light` tier — light tier wrote `research/notes/final_report_<vault_tag>.md` directly in step 10 and proceeds straight to step 15 (polish). For `full`: run as documented below.
 
-**Goal:** turn the 3 angle-specific drafts from step 10 into ONE integrated final report at `research/notes/final_report.md`. The orchestrator preps the strategic brief; the synthesizer subagent writes the report in two passes (rough integrated draft, then voice/redundancy/length cleanup).
+**Goal:** turn the 3 angle-specific drafts from step 10 into ONE integrated final report at `research/notes/final_report_<vault_tag>.md`. The orchestrator preps the strategic brief; the synthesizer subagent writes the report in two passes (rough integrated draft, then voice/redundancy/length cleanup).
 
 **Why split orchestrator + synthesizer:** the orchestrator has been running for 30+ minutes and 200K+ tokens of context. Writing a coherent 5000-10000 word report at this point is the highest cognitive load step in the pipeline, and orchestrator context is full of stale subagent dispatch logic. The synthesizer is a fresh Opus session with `[Read, Write]` tool-lock, focused exclusively on producing the final report. This is the same architectural move that made the patcher and polish-auditor reliable.
 
@@ -124,7 +124,7 @@ Write `research/temp/synthesis-outline.md`. This is the per-section contract —
 <1-2 sentences: the committed reading, the strongest forward-looking implication>
 
 ## Sources
-<inline citation style only — N entries, deduplicated>
+<only emitted when citation_style == "inline" — N numbered entries, deduplicated. For "wikilink" style (default), the wiki-link markers in the body are self-resolving and no separate Sources section is needed.>
 ```
 
 The outline is short (50-200 words total). It's the structural anchor that prevents pass-1 sections from rambling.
@@ -175,14 +175,27 @@ prompt: |
   - source_tensions_path: research/temp/source-tensions.json
   - evidence_digest_path: research/temp/evidence-digest.md
   - pass1_output_path: research/temp/synthesis-pass1.md
-  - final_output_path: research/notes/final_report.md
+  - final_output_path: research/notes/final_report_<vault_tag>.md
   - response_format: "<short|structured|argumentative>"
-  - citation_style: "<inline|none>"
+  - citation_style: "<wikilink|inline|none>"
 
   Read everything. Write pass 1 to pass1_output_path. Then audit pass 1
   for redundancy, voice consistency, weak sections, and length, and
   write the cleaned pass 2 to final_output_path. Do not paste paragraphs
   from the input drafts — synthesize them in your own voice.
+
+  **Citation rendering:**
+  - If citation_style == "wikilink" (default): every citation is a
+    `[[note-id]]` marker pointing at the source note in the vault. No
+    separate `## Sources` section. The wiki-link IS the citation —
+    readers click through to the source note's frontmatter for title +
+    URL. Do NOT add numbered references.
+  - If citation_style == "inline": every citation is a `[N]` marker,
+    AND the report ends with a `## Sources` section listing each cited
+    source as `[N] Title. URL` (read each cited note's YAML frontmatter
+    for title + URL).
+  - If citation_style == "none": no citation markers anywhere, no
+    Sources section.
 ```
 
 **CRITICAL: never emit bare text while the synthesizer is running.** It will take 5-15 minutes (two passes). Use the wait time to think — append notes to `research/temp/orchestrator-notes.md` about what you'll watch for in step 12 (the critics) based on the synthesis plan you just wrote.
@@ -195,7 +208,7 @@ When the synthesizer returns:
 
 1. **Confirm both files exist:**
    - `research/temp/synthesis-pass1.md` (pass 1, rough integrated)
-   - `research/notes/final_report.md` (pass 2, final)
+   - `research/notes/final_report_<vault_tag>.md` (pass 2, final)
 
 2. **Read the synthesizer's report-back.** It tells you:
    - Word/character count
@@ -207,12 +220,12 @@ When the synthesizer returns:
 3. **Sanity checks on the final report:**
    - Length is in the target range for `response_format` (not 3x)
    - Has all H2s from `required_section_headings`
-   - Has `## Sources` section if `citation_style == "inline"`
+   - Citations match `citation_style`: `[[note-id]]` markers for `"wikilink"` (no Sources section); `[N]` markers + a `## Sources` section for `"inline"`; no markers for `"none"`
    - No YAML frontmatter, no scaffold leaks, no pipeline vocabulary
 
 If pass 2 is longer than pass 1 (positive delta), something went wrong — pass 2 is supposed to cut. Investigate before proceeding.
 
-If a sanity check fails, hand-craft an Edit on `research/notes/final_report.md` yourself to fix it. Do NOT re-spawn the synthesizer — that's regeneration, which violates the patch-not-regenerate invariant once we have a final draft.
+If a sanity check fails, hand-craft an Edit on `research/notes/final_report_<vault_tag>.md` yourself to fix it. Do NOT re-spawn the synthesizer — that's regeneration, which violates the patch-not-regenerate invariant once we have a final draft.
 
 ---
 
@@ -224,10 +237,10 @@ After this step, the final report is only modified by Edit hunks from the patche
 
 ## Exit criterion
 
-- `research/notes/final_report.md` exists, length in target range
+- `research/notes/final_report_<vault_tag>.md` exists, length in target range
 - `research/temp/synthesis-pass1.md` exists (debugging artifact)
 - All H2s from `required_section_headings` present
-- `## Sources` section exists if `citation_style == "inline"`
+- Citations match `citation_style` (wikilink → `[[note-id]]` no Sources section; inline → `[N]` + Sources section; none → no markers)
 - No YAML frontmatter, no pipeline vocabulary, no scaffold leaks
 
 ---

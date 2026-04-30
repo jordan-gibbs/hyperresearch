@@ -559,7 +559,7 @@ Everything prior to you has already happened: width sweep (Layer 1), loci
 analysis (Layer 2), depth investigation (Layer 3 — interim notes live in
 the vault with `type: interim`), cross-locus reconciliation (Layer 3.5 —
 `research/comparisons.md`), and the draft itself (Layer 4 —
-`research/notes/final_report.md`). All of it is available for you to read
+`research/notes/final_report_<vault_tag>.md`). All of it is available for you to read
 to verify your critiques are grounded in the evidence the pipeline
 actually gathered, not guesses.
 
@@ -573,7 +573,7 @@ actually gathered, not guesses.
   `research/query-<vault_tag>.md`). Read this file to re-ground yourself
   in the user's exact words whenever you're unsure whether a gap matters.
 - **draft_path**: path to the Layer 4 draft (typically
-  `research/notes/final_report.md`).
+  `research/notes/final_report_<vault_tag>.md`).
 - **output_path**: where to write your findings JSON (e.g.,
   `research/critic-findings-dialectic.json`).
 - **vault_tag**: the corpus tag, so you can search the vault for
@@ -688,7 +688,7 @@ rather than gesturing at it from a distance.
   `research/query-<vault_tag>.md`). Read this file to check whether a
   shallow spot matters — if the user's exact words ask about a topic,
   shallow treatment is major; if the topic is tangential, it's minor.
-- **draft_path**: `research/notes/final_report.md`
+- **draft_path**: `research/notes/final_report_<vault_tag>.md`
 - **output_path**: `research/critic-findings-depth.json`
 - **vault_tag**: corpus tag for searching the vault
 
@@ -792,7 +792,7 @@ because the orchestrator's structural choices buried them.
   `research/query-<vault_tag>.md`). Read this file and extract every
   noun phrase the user mentioned. A corpus cluster that covers a noun
   phrase from the query but is missing from the draft is a critical gap.
-- **draft_path**: `research/notes/final_report.md`
+- **draft_path**: `research/notes/final_report_<vault_tag>.md`
 - **output_path**: `research/critic-findings-width.json`
 - **vault_tag**: corpus tag
 
@@ -951,7 +951,7 @@ hand findings to the patcher (Layer 6). You do NOT modify the draft.
   Written in Layer 0 by the orchestrator. Contains the atomic items the
   prompt named: explicit sub-questions, required entities, required
   formats, required sections, time horizons, scope conditions.
-- **draft_path**: `research/notes/final_report.md`
+- **draft_path**: `research/notes/final_report_<vault_tag>.md`
 - **output_path**: `research/critic-findings-instruction.json`
 
 ## Procedure
@@ -1255,7 +1255,7 @@ Concretely:
   `research/query-<vault_tag>.md`). Read this file when in doubt about
   whether a finding serves the user's actual question.
 - **draft_path**: path to the Layer 4 draft (usually
-  `research/notes/final_report.md`).
+  `research/notes/final_report_<vault_tag>.md`).
 - **findings_paths**: list of four JSON paths, one per critic
   (dialectic, depth, width, instruction).
 - **patch_log_path**: path to a PRE-EXISTING empty-stub patch log
@@ -1303,8 +1303,9 @@ Concretely:
       must match the draft exactly — copy it verbatim from your Read output.
    d. Keep edits minimal. Insert a sentence, qualify a claim, add a
       specific number — don't rewrite paragraphs.
-   e. Integrate evidence as authoritative prose. Use `[N]` citation
-      markers if `citation_style` is `"inline"`, no markers if `"none"`.
+   e. Integrate evidence as authoritative prose. Match the existing
+      citation style: `[[<source-note-id>]]` markers for `"wikilink"`,
+      `[N]` markers for `"inline"`, no markers for `"none"`.
 
 6. **Populate the patch log via Edit.** Update the stub at `patch_log_path`
    with what you applied, skipped, and why.
@@ -1315,7 +1316,7 @@ Concretely:
 - **Never skip a `critical` finding without logging why.**
 - **Preserve Markdown structure.** Do not change heading levels,
   numbered-list numbering, or table column counts.
-- **Match citation style.** Use `[N]` if `citation_style` is `"inline"`, no markers if `"none"`.
+- **Match citation style.** `[[<source-note-id>]]` for `"wikilink"`, `[N]` for `"inline"`, no markers for `"none"`.
 
 ## Integrate, don't caveat
 
@@ -1477,7 +1478,7 @@ see any of these patterns in reader-facing prose:
 | `\\bdepth\\s+investigation\\b` | "the detailed analysis on <topic>" |
 | `(per\\|from)\\s+the\\s+scaffold` | Delete entirely; the substantive claim stands on its own |
 | `hyperresearch(\\s+final\\s+report)?` | Delete entirely — never expose the pipeline name to the reader |
-| `\\[?\\[?interim[-_]report[-_]` / `\\[I\\d+\\]` | If `citation_style` is `"inline"`: convert to the matching `[N]` numeric citation from the Sources list. If `"none"`: delete entirely. |
+| `\\[?\\[?interim[-_]report[-_]` / `\\[I\\d+\\]` | Workspace-artifact references (NOT source-note wikilinks). `"wikilink"` mode: replace the interim wikilink with the `[[<source-note-id>]]` of the most relevant source the interim cited (read the interim note's frontmatter / first cited source). `"inline"`: convert to matching `[N]`. `"none"`: delete entirely. |
 
 **Special case for `\\bloci\\b` as a free-standing word:** some domains
 (molecular biology, law, neuroscience) use "locus/loci" as legitimate
@@ -1499,7 +1500,8 @@ locus", "legal locus"), leave it alone.
   Rewrite: "On the trajectory question, the evidence commits: the post-2015 decline stalled."
 
 - Original: "[I4] [[interim-report-sihuan-zhongshen-dialectic]]"
-  Rewrite (inline mode): convert to the matching numeric citation, e.g., "[18]".
+  Rewrite (wikilink mode): replace with the source-note wikilink the interim was citing, e.g., `[[sihuan-q3-2024-results]]`.
+  Rewrite (inline mode): convert to the matching numeric citation, e.g., `[18]`.
   Rewrite (none mode): delete the reference entirely.
 
 Each inline-scaffold fix is a **critical** polish edit. The denylist
@@ -1508,11 +1510,20 @@ on the fly.
 
 ### 1c. Pipeline reference cleanup
 
-Any inline `[[interim-*]]` wikilink or `[I\\d+]` reference is a
-pipeline leak — these are internal note IDs, not reader-facing
-citations. Convert or delete based on `citation_style`:
+`[[interim-*]]` wikilinks and `[I\\d+]` references point at workspace
+artifacts, not reader-facing source notes. They are pipeline leaks.
+Convert or delete based on `citation_style`:
+- `"wikilink"`: replace with the `[[<source-note-id>]]` of the source
+  note the interim was citing (read the interim's frontmatter for the
+  first / most-relevant cited source)
 - `"inline"`: convert to matching `[N]` from the Sources list
 - `"none"`: delete entirely
+
+**Reader-facing `[[<source-note-id>]]` wikilinks** (where the target
+is a real source note in the vault, not an interim/scaffold artifact)
+are PRESERVED when `citation_style == "wikilink"` — they are the
+citation system, not a leak. Strip them ONLY when the style is
+`"inline"` (convert to `[N]`) or `"none"` (delete).
 
 Leave all reader-facing `[N]` citations and the Sources section
 intact — they are product features, not polish targets.
@@ -1724,7 +1735,7 @@ all three. Your draft is an INPUT to the synthesis, not the final output.
 - **comparisons_path**: `research/comparisons.md` (if exists).
 - **source_tensions_path**: `research/temp/source-tensions.json` (if exists).
 - **response_format**: `"short"` / `"structured"` / `"argumentative"`.
-- **citation_style**: `"inline"` / `"none"`.
+- **citation_style**: `"wikilink"` / `"inline"` / `"none"`.
 - **modality**: `"collect"` / `"synthesize"` / `"compare"` / `"forecast"`.
 
 ## Phase 1: Read the artifacts
@@ -1790,7 +1801,7 @@ Write your complete draft to `output_path`. Your draft must:
   answered, every entity addressed, every required format honored.
 - **Use numbered hierarchical headings** (e.g., `## I. Title`, `### A. Sub`).
 - **Include an executive summary** that directly answers the question first.
-- **Include a `## Sources` section** if citation_style is "inline".
+- **Include a `## Sources` section** ONLY if citation_style is `"inline"`. For `"wikilink"` (default), the wiki-link markers in the body self-resolve — no separate Sources section. For `"none"`, no markers anywhere.
 
 ### Angle-specific requirements (YOUR DIFFERENTIATOR)
 
@@ -1805,8 +1816,9 @@ Write your complete draft to `output_path`. Your draft must:
 
 ### Quality rules
 
-- **Citation density:** Aim for 2+ citations per 1000 characters for
-  inline citation style.
+- **Citation density:** Aim for 2+ citations per 1000 characters
+  regardless of style (`[[<source-note-id>]]` for wikilink,
+  `[N]` for inline).
 - **Interpretive density:** For every 2-3 factual claims, include at
   least one interpretive beat that draws a conclusion the sources didn't.
 - **No pipeline vocabulary** in prose (no "locus", "tension N",
@@ -1826,9 +1838,9 @@ Write your complete draft to `output_path`. Your draft must:
 
 ### Source attribution
 
-If `citation_style` is `"inline"`: use `[N]` citations with a `## Sources`
-section at the end. Number deterministically — first cited = [1], etc.
-If `"none"`: no citation markers, no Sources section.
+- `"wikilink"` (default): every citation is a `[[<source-note-id>]]` marker pointing at the source note in the vault. No separate Sources section. Each wiki-link resolves to its source note's frontmatter (title + URL). Use the actual note ID from `must_read_note_ids` — copy IDs verbatim.
+- `"inline"`: `[N]` citations with a `## Sources` section at the end. Number deterministically — first cited = [1], etc. Read each cited note's YAML frontmatter for title + URL.
+- `"none"`: no citation markers anywhere, no Sources section.
 
 ## Reporting back
 
@@ -1879,7 +1891,7 @@ You are step 11 of the hyperresearch V8 pipeline. Step 10 spawned 3
 one angle-specific draft (`draft-a.md`, `draft-b.md`, `draft-c.md`). The
 main orchestrator wrote a synthesis plan and outline (steps 11.3 and
 11.4). You consume all of that and produce the final report at
-`research/notes/final_report.md`.
+`research/notes/final_report_<vault_tag>.md`.
 
 After you: step 12 (4 adversarial critics) reads your final report and
 produces findings. The patcher (step 14) applies findings as Edit hunks.
@@ -1920,7 +1932,7 @@ mental model; writing the final report is a fresh act.
   claims with verbatim quotes and source IDs.
 - **pass1_output_path**: `research/temp/synthesis-pass1.md` — where
   you write the rough integrated draft (pass 1).
-- **final_output_path**: `research/notes/final_report.md` — where you
+- **final_output_path**: `research/notes/final_report_<vault_tag>.md` — where you
   write the cleaned-up final report (pass 2).
 
 ## Phase 1: Read everything
@@ -2071,13 +2083,11 @@ If pass 1 is under target, EXPAND. Specifically:
 
 ### Citation discipline
 
-- Renumber `[N]` from `[1]` deterministically in order of first appearance
-  in the final draft
-- Build a single `## Sources` section at the end with one entry per cited
-  source (deduplicated). Format: `[1] Author(s). "Title." *Publication*,
-  Year. URL`
-- Aim for 2+ citations per 1000 characters for `inline` style
-- For `none` style: no `[N]` markers, no `## Sources` section
+Three citation styles. Match `citation_style` from the decomposition:
+
+- **`"wikilink"`** (default for non-wrapped runs): every citation is a `[[<source-note-id>]]` marker pointing at the source note in the vault. No separate `## Sources` section. Each wiki-link self-resolves to the source note's frontmatter (title + URL). Aim for 2+ citations per 1000 characters. Copy note IDs verbatim from the input drafts and the evidence digest.
+- **`"inline"`** (benchmark + public deliverables): `[N]` citations renumbered from `[1]` deterministically in order of first appearance, AND a single `## Sources` section at the end with one entry per cited source (deduplicated). Format: `[1] Author(s). "Title." *Publication*, Year. URL`. Aim for 2+ citations per 1000 characters.
+- **`"none"`**: no citation markers anywhere, no Sources section.
 
 ### Hygiene
 
@@ -2085,7 +2095,11 @@ The final draft MUST NOT contain:
 - YAML frontmatter
 - Pipeline vocabulary ("Locus N", "Tension N", "comparisons.md",
   "committed reading", "width corpus", "depth investigation",
-  "hyperresearch", "synthesis plan", "synthesis outline", `[[wikilinks]]`)
+  "hyperresearch", "synthesis plan", "synthesis outline")
+- Workspace-artifact wiki-links (`[[interim-*]]`, `[[scaffold]]`,
+  `[[comparisons]]`). Source-note wiki-links (`[[<source-note-id>]]`)
+  ARE the citation system when `citation_style == "wikilink"` and must
+  be preserved.
 - Scaffold sections, prompt echoes, or meta-discussion of the pipeline
 - Filler phrases (see length section)
 
@@ -2199,7 +2213,7 @@ apply. You are advisory.
 ## Inputs (from the orchestrator)
 
 - **research_query**: verbatim user question. GOSPEL.
-- **draft_path**: `research/notes/final_report.md` — the polished report.
+- **draft_path**: `research/notes/final_report_<vault_tag>.md` — the polished report.
 - **recommendations_path**: `research/readability-recommendations.json`
   — where you Write your output (the file does not yet exist; you
   create it).

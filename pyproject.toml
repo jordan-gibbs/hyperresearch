@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hyperresearch"
-version = "0.8.4"
+version = "0.8.5"
 description = "Claude Code harness for disciplined, adversarially-audited deep research with full provenance."
 readme = "README.md"
 license = "MIT"

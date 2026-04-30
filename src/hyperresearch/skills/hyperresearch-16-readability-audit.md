@@ -26,7 +26,7 @@ description: >
 
 Read these inputs:
 - `research/scaffold.md` — vault_tag
-- `research/notes/final_report.md` — the polished final report from step 15
+- `research/notes/final_report_<vault_tag>.md` — the polished final report from step 15
 
 ---
 
@@ -45,7 +45,7 @@ prompt: |
 
   PIPELINE POSITION: You are step 16 of the hyperresearch V8 pipeline —
   the final analytical pass. The final report at
-  research/notes/final_report.md has been drafted (step 10),
+  research/notes/final_report_<vault_tag>.md has been drafted (step 10),
   synthesized (step 11), critiqued (step 12), gap-filled (step 13),
   patched (step 14), and polish-audited (step 15). Your job: write
   JSON recommendations for paragraph rhythm, list/table conversions,
@@ -54,7 +54,7 @@ prompt: |
   reads your recommendations and decides which to apply.
 
   YOUR INPUTS:
-  - draft_path: research/notes/final_report.md
+  - draft_path: research/notes/final_report_<vault_tag>.md
   - recommendations_path: research/readability-recommendations.json
 
   Write recommendations as a JSON array per the schema in your agent
@@ -108,7 +108,7 @@ You are not obligated to apply every recommendation. Use these heuristics:
 
 For each recommendation you decide to apply:
 
-1. Use the Edit tool on `research/notes/final_report.md`
+1. Use the Edit tool on `research/notes/final_report_<vault_tag>.md`
 2. `old_string` = the recommendation's `current` field (exactly as the recommender wrote it)
 3. `new_string` = the recommendation's `recommended` field
 
@@ -152,7 +152,7 @@ This is the audit trail. If a future review finds a readability problem we shoul
 
 - `research/readability-recommendations.json` exists
 - `research/readability-decisions.json` exists with at least one entry in `applied` or all `skipped`
-- `research/notes/final_report.md` reflects the applied recommendations
+- `research/notes/final_report_<vault_tag>.md` reflects the applied recommendations
 - The final report's structure (H2 list, executive summary, conclusion) is unchanged from step 15's output (this step does not restructure)
 
 ---
