@@ -3294,6 +3294,29 @@ def _agent_sources(hpr_path: str) -> list[tuple[str, str]]:
     ]
 
 
+_OPENCODE_ALLOWED_COLORS: set[str] = {
+    "primary",
+    "secondary",
+    "accent",
+    "success",
+    "warning",
+    "error",
+    "info",
+}
+
+_OPENCODE_COLOR_ALIASES: dict[str, str] = {
+    "red": "error",
+    "orange": "warning",
+    "yellow": "warning",
+    "green": "success",
+    "teal": "info",
+    "cyan": "info",
+    "blue": "primary",
+    "purple": "secondary",
+    "magenta": "accent",
+}
+
+
 def _render_opencode_agent(content: str, model_choices) -> str:
     frontmatter_match = re.match(r"^---\n(?P<frontmatter>.*?)\n---\n(?P<body>.*)$", content, re.DOTALL)
     if not frontmatter_match:
@@ -3321,6 +3344,16 @@ def _render_opencode_agent(content: str, model_choices) -> str:
             continue
         if stripped.startswith("tools:"):
             tool_names = [part.strip() for part in stripped.split(":", 1)[1].split(",")]
+            continue
+        if stripped.startswith("color:"):
+            raw_color = stripped.split(":", 1)[1].strip().strip('"').strip("'")
+            lowered = raw_color.lower()
+            if lowered in _OPENCODE_ALLOWED_COLORS:
+                rendered.append(f"color: {lowered}")
+            elif re.fullmatch(r"#[0-9a-fA-F]{6}", raw_color):
+                rendered.append(f"color: {raw_color}")
+            else:
+                rendered.append(f"color: {_OPENCODE_COLOR_ALIASES.get(lowered, 'primary')}")
             continue
         if stripped.startswith("mode:"):
             has_mode = True

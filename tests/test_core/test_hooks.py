@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import textwrap
 
@@ -369,6 +370,30 @@ def test_install_hooks_can_target_opencode_only(tmp_path, monkeypatch):
     assert (vault.root / ".opencode" / "plugins" / "hyperresearch-reminder.js").exists()
     assert (vault.root / ".opencode" / "skills" / "hyperresearch" / "SKILL.md").exists()
     assert (vault.root / ".opencode" / "agents" / "hyperresearch-fetcher.md").exists()
+
+
+def test_opencode_agent_colors_are_schema_compatible(tmp_path, monkeypatch):
+    from hyperresearch.core.vault import Vault
+
+    empty_opencode_config = tmp_path / "empty-opencode"
+    empty_opencode_config.mkdir()
+    monkeypatch.setenv("HYPERRESEARCH_OPENCODE_CONFIG_DIR", str(empty_opencode_config))
+
+    vault = Vault.init(tmp_path / "opencode-color-check", platforms="opencode")
+    install_hooks(vault.root, "hyperresearch", platforms="opencode")
+
+    allowed = {"primary", "secondary", "accent", "success", "warning", "error", "info"}
+    agents_dir = vault.root / ".opencode" / "agents"
+
+    for agent_file in agents_dir.glob("*.md"):
+        body = agent_file.read_text(encoding="utf-8")
+        color_lines = [line for line in body.splitlines() if line.startswith("color:")]
+        assert len(color_lines) == 1, f"expected exactly one color line in {agent_file.name}"
+
+        color = color_lines[0].split(":", 1)[1].strip().strip('"').strip("'")
+        assert color in allowed or re.fullmatch(r"#[0-9a-fA-F]{6}", color), (
+            f"invalid color '{color}' in {agent_file.name}"
+        )
 
 
 def test_install_hooks_can_target_claude_only(tmp_path):
