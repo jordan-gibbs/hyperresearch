@@ -1,10 +1,9 @@
-"""Agent documentation integration — inject the hyperresearch blurb into CLAUDE.md.
+"""Agent documentation integration — inject hyperresearch docs into agent rule files.
 
-hyperresearch is a Claude Code harness. This module writes/updates CLAUDE.md
-at the vault root so Claude Code auto-loads the research workflow on every
-session. Pre-existing AGENTS.md / GEMINI.md / .github/copilot-instructions.md
-files (from older hyperresearch vaults or other tools) are left alone — we
-don't delete user content, but we no longer generate them either.
+hyperresearch writes/updates project-level instructions for both Claude Code
+and OpenCode by maintaining matching sections in CLAUDE.md and AGENTS.md at
+the vault root. Pre-existing GEMINI.md / .github/copilot-instructions.md files
+(from older vaults or other tools) are left alone.
 """
 
 from __future__ import annotations
@@ -27,7 +26,7 @@ This project uses hyperresearch as an agent-driven research knowledge base. The 
 
 ### How to do research
 
-**Run a research session with `/hyperresearch <query>`.** This invokes the V8 16-step pipeline. The entry skill at `.claude/skills/hyperresearch/SKILL.md` is a thin ROUTER. The 16 step procedures live in their own skills (`hyperresearch-1-decompose` through `hyperresearch-16-readability-audit`) and are loaded fresh into context via the `Skill` tool when each step runs. This solves V7's context-compaction problem: each step's procedure lands in context only when needed. Read the entry skill before you start a research session; it explains the chain mechanics.
+**Run a research session with `/hyperresearch <query>`.** This invokes the V8 16-step pipeline. The entry skill at `.claude/skills/hyperresearch/SKILL.md` is a thin ROUTER (OpenCode can load this via its Claude-compat skill path). The 16 step procedures live in their own skills (`hyperresearch-1-decompose` through `hyperresearch-16-readability-audit`) and are loaded fresh into context via the `Skill` tool when each step runs. This solves V7's context-compaction problem: each step's procedure lands in context only when needed. Read the entry skill before you start a research session; it explains the chain mechanics.
 
 Step 1 classifies the query into one of two tiers (`light` or `full`) and the rest of the pipeline scales accordingly — short bounded queries skip the depth investigations, critics, and patcher (~30-40 min); argumentative deep-research queries run all 16 steps with adversarial review (~1.5-2.5 hours).
 
@@ -149,13 +148,10 @@ def _resolve_executable() -> str:
 
 
 def inject_agent_docs(vault_root: Path) -> list[str]:
-    """Inject hyperresearch docs into CLAUDE.md at the vault root.
+    """Inject hyperresearch docs into CLAUDE.md and AGENTS.md at vault root.
 
-    Always writes/updates CLAUDE.md. Does NOT touch AGENTS.md, GEMINI.md,
-    or .github/copilot-instructions.md — hyperresearch is a Claude Code
-    harness now, not a multi-platform tool. Pre-existing non-Claude doc
-    files are left untouched (we don't delete user content), but no new
-    ones are created.
+    Both files are maintained so the same project instructions are available
+    to Claude Code and OpenCode.
     """
     hpr_path = _resolve_executable()
     # Use forward slashes — bash on Windows eats backslashes
@@ -169,9 +165,10 @@ def inject_agent_docs(vault_root: Path) -> list[str]:
     )
 
     modified: list[str] = []
-    result = _inject_into_file(vault_root / "CLAUDE.md", blurb, "CLAUDE.md")
-    if result:
-        modified.append(result)
+    for filename in ("CLAUDE.md", "AGENTS.md"):
+        result = _inject_into_file(vault_root / filename, blurb, filename)
+        if result:
+            modified.append(result)
     return modified
 
 

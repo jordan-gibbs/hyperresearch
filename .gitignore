@@ -22,9 +22,13 @@ draco-bench/
 # in src/hyperresearch/skills/ (skills) and src/hyperresearch/core/hooks.py
 # (agent templates).
 .claude/
+.opencode/
 CLAUDE.md
 AGENTS.md
 GEMINI.md
+
+# Keep the repository-level OpenCode guide tracked.
+!/AGENTS.md
 
 # Per-vault research output
 research/

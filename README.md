@@ -13,7 +13,7 @@
 
 ---
 
-**Hyperresearch turns Claude Code into a deep research agent. and currently leads the DeepResearch-Bench RACE leaderboard (benchmarked internally).** A tier-adaptive 16-step pipeline produces adversarially-audited reports with full source provenance. Every fetched source lands in a persistent, searchable vault that compounds across sessions.
+**Hyperresearch turns Claude Code and OpenCode into a deep research agent and currently leads the DeepResearch-Bench RACE leaderboard (benchmarked internally).** A tier-adaptive 16-step pipeline produces adversarially-audited reports with full source provenance. Every fetched source lands in a persistent, searchable vault that compounds across sessions.
 
 <p align="center">
   <img src="assets/benchmark.png" alt="DeepResearch-Bench top-5 — hyperresearch leads the chart ahead of Grep Deep Research, Cellcog Max, nvidia-aiq, Gemini Deep Research, and OpenAI Deep Research" width="780">
@@ -28,7 +28,9 @@ cd your-project
 pip install hyperresearch && hyperresearch install
 ```
 
-Then `/hyperresearch <anything>` in Claude Code.
+Then `/hyperresearch <anything>` in Claude Code or OpenCode.
+
+Install writes `CLAUDE.md` and `AGENTS.md`, plus a Claude-compatible `PreToolUse` reminder hook in `.claude/settings.json` / `.claude/settings.local.json` and an OpenCode-native plugin in `.opencode/plugins/hyperresearch-reminder.js`. OpenCode gets the same research-base nudge before web/search tools and blocks raw WebFetch for source pages.
 
 > Python 3.11–3.13. (3.14 not yet supported — use `pyenv install 3.13`, `uv venv -p 3.13`, or `py -3.13 -m venv .venv`.)
 >
@@ -164,7 +166,7 @@ After the academic sweep, run web searches for context, news, non-academic angle
 ## Requirements
 
 - Python 3.11+
-- [Claude Code](https://claude.com/claude-code)
+- [Claude Code](https://claude.com/claude-code) or [OpenCode](https://opencode.ai/)
 
 ---
 

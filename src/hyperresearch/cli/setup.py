@@ -137,7 +137,7 @@ def setup(
     vault.config.name = vault_name
     vault.config.save(vault.config_path)
 
-    # Inject CLAUDE.md
+    # Inject agent docs (CLAUDE.md + AGENTS.md)
     hpr_path = _resolve_executable()
     doc_actions = inject_agent_docs(root)
     for action in doc_actions:

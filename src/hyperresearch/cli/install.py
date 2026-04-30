@@ -18,7 +18,7 @@ def install(
         False,
         "--global",
         "-g",
-        help="Install Claude Code entry skill + agents to ~/.claude/ so /hyperresearch works in every Claude Code session anywhere. Skips vault init, CLAUDE.md, and the 16 step skills (those happen per-project on first /hyperresearch run).",
+        help="Install Claude Code entry skill + agents to ~/.claude/ so /hyperresearch works in every Claude Code session anywhere. Skips vault init, agent docs (CLAUDE.md/AGENTS.md), and the 16 step skills (those happen per-project on first /hyperresearch run).",
     ),
     steps_only: bool = typer.Option(
         False,
@@ -26,7 +26,7 @@ def install(
         help="Install only the 16 step skills to <PATH>/.claude/skills/. Used internally by the entry skill bootstrap on first /hyperresearch invocation in a project. Not normally invoked by users.",
     ),
 ) -> None:
-    """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
+    """Install hyperresearch: init vault + inject agent docs + install Claude Code hooks."""
     import sys
 
     from hyperresearch.core.hooks import (
@@ -57,7 +57,7 @@ def install(
         return
 
     # Global install path: only the user-level Claude Code entry skill +
-    # agents. No vault, no CLAUDE.md, no step skills — pure "make the
+    # agents. No vault, no agent docs, no step skills — pure "make the
     # slash command available everywhere" mode. Step skills install
     # per-project, lazily, when the entry skill bootstrap calls
     # `hyperresearch install --steps-only .` on first invocation.
@@ -124,7 +124,7 @@ def install(
 
     hpr_path = _resolve_executable()
 
-    # Step 3: Always re-inject CLAUDE.md (updates blurb + path)
+    # Step 3: Always re-inject agent docs (CLAUDE.md + AGENTS.md; updates blurb + path)
     doc_actions = inject_agent_docs(root)
 
     # Step 4: Install Claude Code hook + skills + subagents

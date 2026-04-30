@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+import textwrap
+
 from hyperresearch.core.hooks import (
     _RETIRED_AGENT_FILES,
     _RETIRED_SKILL_DIRS,
@@ -381,9 +385,73 @@ def test_install_hooks_registers_full_hyperresearch_roster(tmp_vault):
     assert (tmp_vault.root / ".claude" / "skills" / "hyperresearch" / "SKILL.md").exists()
     assert not (tmp_vault.root / ".claude" / "skills" / "research" / "SKILL.md").exists()
 
-    # Hook settings written
-    assert (tmp_vault.root / ".claude" / "settings.json").exists()
+    # Hook settings written for Claude Code and OpenCode-compatible hook bridges.
+    settings_path = tmp_vault.root / ".claude" / "settings.json"
+    local_settings_path = tmp_vault.root / ".claude" / "settings.local.json"
+    opencode_plugin_path = tmp_vault.root / ".opencode" / "plugins" / "hyperresearch-reminder.js"
+    assert settings_path.exists()
+    assert local_settings_path.exists()
+    assert opencode_plugin_path.exists()
     assert (tmp_vault.root / ".hyperresearch" / "hook.js").exists()
+
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    matcher = settings["hooks"]["PreToolUse"][0]["matcher"]
+    assert "WebSearch" in matcher
+    assert "websearch" in matcher
+
+    opencode_plugin = opencode_plugin_path.read_text(encoding="utf-8")
+    assert "tool.definition" in opencode_plugin
+    assert "tool.execute.before" in opencode_plugin
+
+
+def test_opencode_plugin_executes_tool_hooks(tmp_vault, tmp_path):
+    install_hooks(tmp_vault.root, "hyperresearch")
+    plugin_path = tmp_vault.root / ".opencode" / "plugins" / "hyperresearch-reminder.js"
+
+    runner = tmp_path / "run-opencode-plugin.mjs"
+    runner.write_text(
+        textwrap.dedent(
+            f"""
+            import {{ HyperresearchOpenCodePlugin }} from {plugin_path.as_uri()!r};
+
+            const hooks = await HyperresearchOpenCodePlugin({{
+              directory: {str(tmp_vault.root)!r},
+              worktree: {str(tmp_vault.root)!r},
+            }});
+
+            const definitionOutput = {{ description: 'original description' }};
+            await hooks['tool.definition']({{ toolID: 'webfetch' }}, definitionOutput);
+            if (!definitionOutput.description.includes('HYPERRESEARCH')) {{
+              throw new Error('tool.definition did not inject hyperresearch reminder');
+            }}
+
+            let blocked = false;
+            try {{
+              await hooks['tool.execute.before']({{ tool: 'webfetch' }}, {{ args: {{ url: 'https://example.com' }} }});
+            }} catch (error) {{
+              blocked = String(error.message).includes('hyperresearch fetch');
+            }}
+            if (!blocked) {{
+              throw new Error('tool.execute.before did not block raw webfetch');
+            }}
+
+            await hooks['tool.execute.before']({{ tool: 'read' }}, {{ args: {{ filePath: 'README.md' }} }});
+            console.log('opencode plugin hooks verified');
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bun", runner.as_posix()],
+        cwd=tmp_vault.root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "opencode plugin hooks verified" in result.stdout
 
 
 def test_install_hooks_second_run_is_noop(tmp_vault):

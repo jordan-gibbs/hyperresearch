@@ -136,7 +136,7 @@ class Vault:
             "# {{ title }}\n\n"
         )
 
-        # Inject CLAUDE.md at vault root
+        # Inject agent docs (CLAUDE.md + AGENTS.md) at vault root
         from hyperresearch.core.agent_docs import inject_agent_docs
         inject_agent_docs(root)
 

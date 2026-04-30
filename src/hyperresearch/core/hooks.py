@@ -1,10 +1,10 @@
-"""Agent hook installer — installs the Claude Code PreToolUse hook, skills, and subagents.
+"""Agent hook installer — installs Claude-compatible hooks, skills, and subagents.
 
-The hook reminds Claude Code to check the research base before doing raw web
-searches. The `/hyperresearch` skill drives the research
-protocol. The hyperresearch subagents (fetcher, loci-analyst, depth-investigator,
-four critics, patcher, polish-auditor) are Claude Code registered agents
-spawned via the Task tool.
+The hook reminds Claude Code and OpenCode-compatible runners to check the
+research base before doing raw web searches. The `/hyperresearch` skill drives
+the research protocol. The hyperresearch subagents (fetcher, loci-analyst,
+depth-investigator, four critics, patcher, polish-auditor) are registered as
+Claude-compatible agents spawned via the Task tool.
 """
 
 from __future__ import annotations
@@ -2904,6 +2904,7 @@ const fs = require('fs');
 const path = require('path');
 
 const HPR = '{hpr_path}';
+const REMINDER_TOOLS = new Set(['websearch', 'webfetch', 'grep', 'glob']);
 
 // Check if a .hyperresearch directory exists (vault is initialized)
 function findVault() {{
@@ -2916,8 +2917,13 @@ function findVault() {{
     }}
 }}
 
-const vault = findVault();
-if (vault) {{
+function shouldEmitReminder(payload) {{
+    const toolName = String(payload?.tool_name ?? payload?.tool ?? '').toLowerCase();
+    if (!toolName) return true; // Unknown runner payload → preserve old behavior.
+    return REMINDER_TOOLS.has(toolName);
+}}
+
+function emitReminder() {{
     const msg = [
         'HYPERRESEARCH: A research knowledge base exists in this project.',
         '',
@@ -2934,11 +2940,89 @@ if (vault) {{
     ].join('\\n');
     process.stderr.write(msg + '\\n');
 }}
+
+const vault = findVault();
+if (!vault) process.exit(0);
+
+let input = '';
+let finalized = false;
+
+function finalize() {{
+    if (finalized) return;
+    finalized = true;
+    let payload = null;
+    try {{
+        payload = input.trim() ? JSON.parse(input) : null;
+    }} catch (_) {{
+        payload = null;
+    }}
+    if (shouldEmitReminder(payload)) emitReminder();
+}}
+
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', chunk => input += chunk);
+process.stdin.on('end', finalize);
+process.stdin.on('error', finalize);
+setTimeout(finalize, 150);
+"""
+
+
+OPENCODE_PLUGIN_TEMPLATE = """\
+/**
+ * hyperresearch OpenCode plugin — nudges agents toward the persistent vault
+ * before external web work, and blocks raw WebFetch for source pages.
+ * Installed by: hyperresearch install
+ */
+const fs = require('fs');
+const path = require('path');
+
+const HPR = '{hpr_path}';
+
+function findVault(start) {{
+    let dir = start || process.cwd();
+    while (true) {{
+        if (fs.existsSync(path.join(dir, '.hyperresearch'))) return dir;
+        const parent = path.dirname(dir);
+        if (parent === dir) return null;
+        dir = parent;
+    }}
+}}
+
+function reminder() {{
+    return [
+        'HYPERRESEARCH: A research knowledge base exists in this project.',
+        'Before web search, check existing research with:',
+        '  ' + HPR + ' search "<your query>" -j',
+        'For source pages, do not use raw WebFetch. Use:',
+        '  ' + HPR + ' fetch "<url>" --tag <topic> -j',
+        'This saves full content, screenshots/assets where supported, and indexes sources for future sessions.',
+    ].join('\\n');
+}}
+
+export const HyperresearchOpenCodePlugin = async (ctx) => {{
+    const vault = findVault(ctx.directory || ctx.worktree || process.cwd());
+    if (!vault) return {{}};
+
+    return {{
+        'tool.definition': async (input, output) => {{
+            const tool = String(input?.toolID ?? '').toLowerCase();
+            if (tool === 'websearch' || tool === 'webfetch') {{
+                output.description = reminder() + '\\n\\n' + output.description;
+            }}
+        }},
+        'tool.execute.before': async (input) => {{
+            const tool = String(input?.tool ?? '').toLowerCase();
+            if (tool === 'webfetch') {{
+                throw new Error(reminder());
+            }}
+        }},
+    }};
+}};
 """
 
 
 def install_hooks(vault_root: Path, hpr_path: str = "hyperresearch") -> list[str]:
-    """Install the Claude Code hook + skills + subagents. Returns list of actions taken.
+    """Install the Claude/OpenCode-compatible hook + skills + subagents.
 
     Hyperresearch roster (as of v7):
       fetcher (Layer 1, 3, 4), loci-analyst (Layer 2), depth-investigator (Layer 3),
@@ -2951,6 +3035,7 @@ def install_hooks(vault_root: Path, hpr_path: str = "hyperresearch") -> list[str
 
     for installer in (
         lambda: _install_claude_hook(vault_root, hpr_path),
+        lambda: _install_opencode_plugin(vault_root, hpr_path),
         lambda: _install_hyperresearch_skill(vault_root),
         lambda: _install_hyperresearch_step_skills(vault_root),
         lambda: _install_researcher_agent(vault_root, hpr_path),
@@ -3073,13 +3158,29 @@ def _write_hook_script(vault_root: Path, hpr_path: str) -> Path:
 
 
 def _install_claude_hook(vault_root: Path, hpr_path: str) -> str | None:
-    """Install PreToolUse hook into .claude/settings.json."""
-    hook_path = _write_hook_script(vault_root, hpr_path)
+    """Install the Claude-compatible PreToolUse hook settings.
 
+    Claude Code reads `.claude/settings.json`. Some OpenCode hook bridges and
+    compatibility layers prefer project-local `.claude/settings.local.json`, so
+    write both with the same command hook. The hook script itself accepts both
+    Claude's `tool_name` payload and OpenCode-style lowercase `tool` payloads.
+    """
+    hook_path = _write_hook_script(vault_root, hpr_path)
     settings_dir = vault_root / ".claude"
     settings_dir.mkdir(exist_ok=True)
-    settings_path = settings_dir / "settings.json"
 
+    changed_paths: list[str] = []
+    for settings_name in ("settings.json", "settings.local.json"):
+        settings_path = settings_dir / settings_name
+        if _ensure_pretool_hook(settings_path, hook_path):
+            changed_paths.append(f".claude/{settings_name}")
+
+    if not changed_paths:
+        return None
+    return f"Claude/OpenCode: {', '.join(changed_paths)} (PreToolUse hook)"
+
+
+def _ensure_pretool_hook(settings_path: Path, hook_path: Path) -> bool:
     settings = {}
     if settings_path.exists():
         try:
@@ -3092,12 +3193,12 @@ def _install_claude_hook(vault_root: Path, hpr_path: str) -> str | None:
 
     for entry in pre_tool:
         if isinstance(entry, dict):
-            for h in entry.get("hooks", []):
-                if "hyperresearch" in h.get("command", ""):
-                    return None
+            for hook in entry.get("hooks", []):
+                if isinstance(hook, dict) and "hyperresearch" in hook.get("command", ""):
+                    return False
 
     pre_tool.append({
-        "matcher": "Glob|Grep|WebSearch|WebFetch",
+        "matcher": "Glob|Grep|WebSearch|WebFetch|glob|grep|websearch|webfetch",
         "hooks": [{
             "type": "command",
             "command": f"node {hook_path.as_posix()}",
@@ -3105,7 +3206,22 @@ def _install_claude_hook(vault_root: Path, hpr_path: str) -> str | None:
     })
 
     settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
-    return "Claude Code: .claude/settings.json (PreToolUse hook)"
+    return True
+
+
+def _install_opencode_plugin(vault_root: Path, hpr_path: str) -> str | None:
+    """Install an OpenCode-native plugin hook into .opencode/plugins/."""
+    plugins_dir = vault_root / ".opencode" / "plugins"
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    plugin_path = plugins_dir / "hyperresearch-reminder.js"
+    js_path = hpr_path.replace("\\", "\\\\")
+    content = OPENCODE_PLUGIN_TEMPLATE.format(hpr_path=js_path)
+
+    if plugin_path.exists() and plugin_path.read_text(encoding="utf-8") == content:
+        return None
+
+    plugin_path.write_text(content, encoding="utf-8")
+    return "OpenCode: .opencode/plugins/hyperresearch-reminder.js (tool hooks)"
 
 
 def _write_agent_file(
