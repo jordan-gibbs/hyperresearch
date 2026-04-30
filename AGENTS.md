@@ -13,7 +13,7 @@ python3.12 -m venv .venv
 - `hyperresearch install --platform claude` should create only Claude Code docs/hooks/skills/agents.
 - `hyperresearch install --platform opencode` should create only OpenCode docs/plugins/skills/agents.
 - `hyperresearch install --platform both` should create both harness integrations.
-- Interactive setup uses a comma-separated checklist (`1,2` by default) for platform selection.
+- Interactive setup asks separate yes/no questions for Claude Code and OpenCode platform selection.
 
 ## Fast verification loop
 Run these before claiming completion:

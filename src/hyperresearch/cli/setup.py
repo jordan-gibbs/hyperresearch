@@ -198,28 +198,27 @@ def choose_platforms_interactive() -> set[str]:
     console.print()
     console.print(Rule("[bold]Agent Integrations", style="cyan"))
     console.print()
-    console.print("  Choose which harness integrations to install:")
-    console.print("  [bold]1[/] Claude Code  [dim]— CLAUDE.md, .claude/settings, .claude/skills, .claude/agents[/]")
-    console.print("  [bold]2[/] OpenCode     [dim]— AGENTS.md, .opencode/plugins, .opencode/skills, .opencode/agents[/]")
+    console.print("  Select the harness integrations to install:")
+    console.print("  [dim]Claude Code:[/] CLAUDE.md, .claude/settings, .claude/skills, .claude/agents")
+    console.print("  [dim]OpenCode:[/] AGENTS.md, .opencode/plugins, .opencode/skills, .opencode/agents")
     console.print()
-    raw = Prompt.ask("  Install integrations (comma-separated)", default="1,2")
 
-    mapping = {"1": "claude", "2": "opencode", "claude": "claude", "opencode": "opencode"}
-    selected: list[str] = []
-    for item in (part.strip().lower() for part in raw.split(",")):
-        if not item:
-            continue
-        mapped = mapping.get(item)
-        if mapped and mapped not in selected:
-            selected.append(mapped)
+    while True:
+        install_claude = Confirm.ask("  Install Claude Code integration?", default=True)
+        install_opencode = Confirm.ask("  Install OpenCode integration?", default=True)
 
-    if not selected:
-        console.print("  [yellow]No valid integration selected; defaulting to both.[/]")
-        selected = ["claude", "opencode"]
+        selected: list[str] = []
+        if install_claude:
+            selected.append("claude")
+        if install_opencode:
+            selected.append("opencode")
 
-    from hyperresearch.core.platforms import normalize_platforms
+        if selected:
+            from hyperresearch.core.platforms import normalize_platforms
 
-    return normalize_platforms(selected)
+            return normalize_platforms(selected)
+
+        console.print("  [yellow]Select at least one integration.[/]")
 
 
 def _normalize_platform_option(platform: str) -> set[str]:
