@@ -352,8 +352,12 @@ def test_prune_retired_agents_noop_on_clean_vault(tmp_vault):
 # ---------------------------------------------------------------------------
 
 
-def test_install_hooks_registers_full_hyperresearch_roster(tmp_vault):
+def test_install_hooks_registers_full_hyperresearch_roster(tmp_vault, tmp_path, monkeypatch):
     """install_hooks wires the hook, both entry-skill aliases, and the agent roster."""
+    empty_opencode_config = tmp_path / "empty-opencode"
+    empty_opencode_config.mkdir()
+    monkeypatch.setenv("HYPERRESEARCH_OPENCODE_CONFIG_DIR", str(empty_opencode_config))
+
     actions = install_hooks(tmp_vault.root, "hyperresearch")
     assert actions  # something happened
 
@@ -379,6 +383,20 @@ def test_install_hooks_registers_full_hyperresearch_roster(tmp_vault):
     assert expected_agents == actual_agents, (
         f"missing: {expected_agents - actual_agents}, extra: {actual_agents - expected_agents}"
     )
+
+    opencode_agents_dir = tmp_vault.root / ".opencode" / "agents"
+    actual_opencode_agents = {p.name for p in opencode_agents_dir.iterdir() if p.is_file()}
+    assert expected_agents == actual_opencode_agents
+
+    opencode_fetcher = (opencode_agents_dir / "hyperresearch-fetcher.md").read_text(
+        encoding="utf-8"
+    )
+    assert "model: anthropic/claude-sonnet" in opencode_fetcher
+    assert "model: sonnet" not in opencode_fetcher
+    assert "mode: subagent" in opencode_fetcher
+    assert "permission:" in opencode_fetcher
+    assert "  bash: allow" in opencode_fetcher
+    assert "tools: Bash" not in opencode_fetcher
 
     # Entry skill registered as /hyperresearch (the /research alias was
     # retired in v0.8.1)

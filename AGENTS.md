@@ -35,4 +35,5 @@ Run these before claiming completion:
 - Project agent docs are maintained in both `CLAUDE.md` and `AGENTS.md` by `inject_agent_docs`.
 - The research-reminder hook is installed into both `.claude/settings.json` and `.claude/settings.local.json`; the hook accepts Claude-style `tool_name` and OpenCode-style lowercase `tool` payloads.
 - An OpenCode-native plugin is installed at `.opencode/plugins/hyperresearch-reminder.js` and uses `tool.definition` / `tool.execute.before` hooks.
+- OpenCode-native agents are rendered under `.opencode/agents/` with concrete models resolved from active OpenCode config files; flat-rate providers win when they expose the same underlying model.
 - Pipeline skills and subagent definitions are installed under `.claude/` (OpenCode reads these through Claude-compat paths).

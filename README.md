@@ -30,7 +30,7 @@ pip install hyperresearch && hyperresearch install
 
 Then `/hyperresearch <anything>` in Claude Code or OpenCode.
 
-Install writes `CLAUDE.md` and `AGENTS.md`, plus a Claude-compatible `PreToolUse` reminder hook in `.claude/settings.json` / `.claude/settings.local.json` and an OpenCode-native plugin in `.opencode/plugins/hyperresearch-reminder.js`. OpenCode gets the same research-base nudge before web/search tools and blocks raw WebFetch for source pages.
+Install writes `CLAUDE.md` and `AGENTS.md`, plus a Claude-compatible `PreToolUse` reminder hook in `.claude/settings.json` / `.claude/settings.local.json` and an OpenCode-native plugin in `.opencode/plugins/hyperresearch-reminder.js`. It also renders OpenCode-native subagents in `.opencode/agents/` with concrete models resolved from the active OpenCode config; if the same model is available through a flat-rate provider, that provider is preferred. OpenCode gets the same research-base nudge before web/search tools and blocks raw WebFetch for source pages.
 
 > Python 3.11–3.13. (3.14 not yet supported — use `pyenv install 3.13`, `uv venv -p 3.13`, or `py -3.13 -m venv .venv`.)
 >

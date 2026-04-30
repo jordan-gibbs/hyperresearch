@@ -10,6 +10,7 @@ Claude-compatible agents spawned via the Task tool.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 # Scaffold-only section headers that must NEVER appear in a final_report draft.
@@ -3052,6 +3053,7 @@ def install_hooks(vault_root: Path, hpr_path: str = "hyperresearch") -> list[str
         lambda: _install_corpus_critic_agent(vault_root, hpr_path),
         lambda: _install_draft_orchestrator_agent(vault_root, hpr_path),
         lambda: _install_synthesizer_agent(vault_root, hpr_path),
+        lambda: _install_opencode_agents(vault_root),
         lambda: _prune_retired_agents(vault_root),
     ):
         result = installer()
@@ -3222,6 +3224,96 @@ def _install_opencode_plugin(vault_root: Path, hpr_path: str) -> str | None:
 
     plugin_path.write_text(content, encoding="utf-8")
     return "OpenCode: .opencode/plugins/hyperresearch-reminder.js (tool hooks)"
+
+
+def _install_opencode_agents(vault_root: Path) -> str | None:
+    """Render OpenCode-native subagents with concrete configured models."""
+    from hyperresearch.core.opencode_models import resolve_opencode_model_choices
+
+    claude_agents_dir = vault_root / ".claude" / "agents"
+    if not claude_agents_dir.is_dir():
+        return None
+
+    model_choices = resolve_opencode_model_choices(vault_root)
+    opencode_agents_dir = vault_root / ".opencode" / "agents"
+    opencode_agents_dir.mkdir(parents=True, exist_ok=True)
+
+    changed: list[str] = []
+    for claude_agent_path in sorted(claude_agents_dir.glob("*.md")):
+        content = claude_agent_path.read_text(encoding="utf-8")
+        opencode_content = _render_opencode_agent(content, model_choices)
+        opencode_agent_path = opencode_agents_dir / claude_agent_path.name
+        if opencode_agent_path.exists() and opencode_agent_path.read_text(encoding="utf-8") == opencode_content:
+            continue
+        opencode_agent_path.write_text(opencode_content, encoding="utf-8")
+        changed.append(claude_agent_path.name)
+
+    if not changed:
+        return None
+    return f"OpenCode: .opencode/agents/ ({len(changed)} model-configured agents)"
+
+
+def _render_opencode_agent(content: str, model_choices) -> str:
+    frontmatter_match = re.match(r"^---\n(?P<frontmatter>.*?)\n---\n(?P<body>.*)$", content, re.DOTALL)
+    if not frontmatter_match:
+        return content
+
+    frontmatter = frontmatter_match.group("frontmatter")
+    body = frontmatter_match.group("body")
+    lines = frontmatter.splitlines()
+
+    rendered: list[str] = []
+    role = "sonnet"
+    tool_names: list[str] = []
+    has_mode = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("name:"):
+            continue
+        if stripped.startswith("model:"):
+            role = stripped.split(":", 1)[1].strip()
+            choice = model_choices.get(role) or model_choices["sonnet"]
+            rendered.append(f"model: {choice.model}")
+            if choice.variant:
+                rendered.append(f"variant: {choice.variant}")
+            continue
+        if stripped.startswith("tools:"):
+            tool_names = [part.strip() for part in stripped.split(":", 1)[1].split(",")]
+            continue
+        if stripped.startswith("mode:"):
+            has_mode = True
+        rendered.append(line)
+
+    if not has_mode:
+        rendered.append("mode: subagent")
+
+    permission = _opencode_permission_block(tool_names)
+    if permission:
+        rendered.extend(permission)
+
+    return "---\n" + "\n".join(rendered).rstrip() + "\n---\n" + body
+
+
+def _opencode_permission_block(tool_names: list[str]) -> list[str]:
+    allowed: list[str] = []
+    tools = {tool.lower() for tool in tool_names}
+    if "read" in tools:
+        allowed.append("read")
+    if "write" in tools or "edit" in tools:
+        allowed.append("edit")
+    if "bash" in tools:
+        allowed.append("bash")
+    if "task" in tools:
+        allowed.append("task")
+
+    if not allowed:
+        return []
+
+    lines = ["permission:"]
+    for name in allowed:
+        lines.append(f"  {name}: allow")
+    return lines
 
 
 def _write_agent_file(
