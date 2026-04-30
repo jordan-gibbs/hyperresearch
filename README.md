@@ -28,7 +28,7 @@ cd your-project
 pip install hyperresearch && hyperresearch install
 ```
 
-Interactive setup asks which harness integrations to install, with separate yes/no prompts for Claude Code and OpenCode:
+Interactive setup asks which harness integrations to install with a terminal checklist: use Tab/arrow keys to move, Space to toggle Claude Code or OpenCode, and Enter to confirm.
 
 - Claude Code (`CLAUDE.md`, `.claude/settings*`, `.claude/skills`, `.claude/agents`)
 - OpenCode (`AGENTS.md`, `.opencode/plugins`, `.opencode/skills`, `.opencode/agents`)

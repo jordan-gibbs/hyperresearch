@@ -195,29 +195,86 @@ def setup(
 
 
 def choose_platforms_interactive() -> set[str]:
+    """Interactive checklist for selecting harness integrations."""
+    from hyperresearch.core.platforms import normalize_platforms
+
+    try:
+        return normalize_platforms(_run_platform_checklist())
+    except Exception:
+        # Curses can fail in constrained terminals (for example, dumb TERM or
+        # redirected stdio). Fall back to plain prompts rather than blocking install.
+        console.print()
+        console.print("[yellow]Interactive checklist unavailable; using plain prompts.[/]")
+        return normalize_platforms(_choose_platforms_prompt_fallback())
+
+
+def _run_platform_checklist() -> set[str]:
+    import curses
+
+    choices = [
+        ("claude", "Claude Code", "CLAUDE.md, .claude/settings, .claude/skills, .claude/agents"),
+        ("opencode", "OpenCode", "AGENTS.md, .opencode/plugins, .opencode/skills, .opencode/agents"),
+    ]
+    selected = {"claude", "opencode"}
+
+    def draw(stdscr, cursor: int, warning: str = "") -> None:
+        stdscr.clear()
+        try:
+            curses.curs_set(0)
+        except curses.error:
+            pass
+        stdscr.addstr(0, 0, "Agent Integrations")
+        stdscr.addstr(2, 0, "Tab/↑/↓ move • Space toggle • Enter confirm")
+        if warning:
+            stdscr.addstr(3, 0, warning)
+        for index, (value, label, description) in enumerate(choices):
+            marker = "[x]" if value in selected else "[ ]"
+            line = f"{marker} {label:<12} — {description}"
+            attrs = curses.A_REVERSE if index == cursor else curses.A_NORMAL
+            stdscr.addstr(5 + index, 0, line, attrs)
+        stdscr.refresh()
+
+    def run(stdscr) -> set[str]:
+        cursor = 0
+        warning = ""
+        while True:
+            draw(stdscr, cursor, warning)
+            key = stdscr.getch()
+            warning = ""
+            if key in (curses.KEY_UP, curses.KEY_BTAB):
+                cursor = (cursor - 1) % len(choices)
+            elif key in (curses.KEY_DOWN, ord("\t")):
+                cursor = (cursor + 1) % len(choices)
+            elif key == ord(" "):
+                value = choices[cursor][0]
+                if value in selected:
+                    selected.remove(value)
+                else:
+                    selected.add(value)
+            elif key in (curses.KEY_ENTER, 10, 13):
+                if selected:
+                    return set(selected)
+                warning = "Select at least one integration."
+            elif key in (27, ord("q")):
+                raise KeyboardInterrupt
+
+    return curses.wrapper(run)
+
+
+def _choose_platforms_prompt_fallback() -> set[str]:
     console.print()
     console.print(Rule("[bold]Agent Integrations", style="cyan"))
     console.print()
-    console.print("  Select the harness integrations to install:")
-    console.print("  [dim]Claude Code:[/] CLAUDE.md, .claude/settings, .claude/skills, .claude/agents")
-    console.print("  [dim]OpenCode:[/] AGENTS.md, .opencode/plugins, .opencode/skills, .opencode/agents")
-    console.print()
-
     while True:
         install_claude = Confirm.ask("  Install Claude Code integration?", default=True)
         install_opencode = Confirm.ask("  Install OpenCode integration?", default=True)
-
-        selected: list[str] = []
+        selected = set()
         if install_claude:
-            selected.append("claude")
+            selected.add("claude")
         if install_opencode:
-            selected.append("opencode")
-
+            selected.add("opencode")
         if selected:
-            from hyperresearch.core.platforms import normalize_platforms
-
-            return normalize_platforms(selected)
-
+            return selected
         console.print("  [yellow]Select at least one integration.[/]")
 
 
