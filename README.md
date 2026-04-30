@@ -28,6 +28,20 @@ cd your-project
 pip install hyperresearch && hyperresearch install
 ```
 
+Interactive setup asks which harness integrations to install:
+
+- Claude Code (`CLAUDE.md`, `.claude/settings*`, `.claude/skills`, `.claude/agents`)
+- OpenCode (`AGENTS.md`, `.opencode/plugins`, `.opencode/skills`, `.opencode/agents`)
+- both
+
+For non-interactive installs, pass the platform explicitly:
+
+```bash
+hyperresearch install --platform claude
+hyperresearch install --platform opencode
+hyperresearch install --platform both
+```
+
 Then `/hyperresearch <anything>` in Claude Code or OpenCode.
 
 Install writes `CLAUDE.md` and `AGENTS.md`, plus a Claude-compatible `PreToolUse` reminder hook in `.claude/settings.json` / `.claude/settings.local.json` and an OpenCode-native plugin in `.opencode/plugins/hyperresearch-reminder.js`. It also renders OpenCode-native subagents in `.opencode/agents/` with concrete models resolved from the active OpenCode config; if the same model is available through a flat-rate provider, that provider is preferred. OpenCode gets the same research-base nudge before web/search tools and blocks raw WebFetch for source pages.

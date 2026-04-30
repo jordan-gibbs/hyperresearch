@@ -9,6 +9,7 @@ the vault root. Pre-existing GEMINI.md / .github/copilot-instructions.md files
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from pathlib import Path
 
 HYPERRESEARCH_SECTION_MARKER = "<!-- hyperresearch:start -->"
@@ -147,12 +148,14 @@ def _resolve_executable() -> str:
     return "hyperresearch"
 
 
-def inject_agent_docs(vault_root: Path) -> list[str]:
-    """Inject hyperresearch docs into CLAUDE.md and AGENTS.md at vault root.
+def inject_agent_docs(vault_root: Path, platforms: str | Iterable[str] | None = None) -> list[str]:
+    """Inject hyperresearch docs into selected agent rule files.
 
-    Both files are maintained so the same project instructions are available
-    to Claude Code and OpenCode.
+    Claude Code uses ``CLAUDE.md`` and OpenCode uses ``AGENTS.md``.
     """
+    from hyperresearch.core.platforms import normalize_platforms
+
+    selected = normalize_platforms(platforms)
     hpr_path = _resolve_executable()
     # Use forward slashes — bash on Windows eats backslashes
     hpr_path = hpr_path.replace("\\", "/")
@@ -165,7 +168,12 @@ def inject_agent_docs(vault_root: Path) -> list[str]:
     )
 
     modified: list[str] = []
-    for filename in ("CLAUDE.md", "AGENTS.md"):
+    targets = []
+    if "claude" in selected:
+        targets.append("CLAUDE.md")
+    if "opencode" in selected:
+        targets.append("AGENTS.md")
+    for filename in targets:
         result = _inject_into_file(vault_root / filename, blurb, filename)
         if result:
             modified.append(result)

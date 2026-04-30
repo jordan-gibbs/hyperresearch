@@ -9,6 +9,12 @@ python3.12 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
 ```
 
+## Install platform behavior
+- `hyperresearch install --platform claude` should create only Claude Code docs/hooks/skills/agents.
+- `hyperresearch install --platform opencode` should create only OpenCode docs/plugins/skills/agents.
+- `hyperresearch install --platform both` should create both harness integrations.
+- Interactive setup uses a comma-separated checklist (`1,2` by default) for platform selection.
+
 ## Fast verification loop
 Run these before claiming completion:
 

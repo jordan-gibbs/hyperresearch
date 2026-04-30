@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from pathlib import Path
 
 # Scaffold-only section headers that must NEVER appear in a final_report draft.
@@ -3022,8 +3023,12 @@ export const HyperresearchOpenCodePlugin = async (ctx) => {{
 """
 
 
-def install_hooks(vault_root: Path, hpr_path: str = "hyperresearch") -> list[str]:
-    """Install the Claude/OpenCode-compatible hook + skills + subagents.
+def install_hooks(
+    vault_root: Path,
+    hpr_path: str = "hyperresearch",
+    platforms: str | Iterable[str] | None = None,
+) -> list[str]:
+    """Install selected harness integrations, hooks, skills, and subagents.
 
     Hyperresearch roster (as of v7):
       fetcher (Layer 1, 3, 4), loci-analyst (Layer 2), depth-investigator (Layer 3),
@@ -3032,11 +3037,13 @@ def install_hooks(vault_root: Path, hpr_path: str = "hyperresearch") -> list[str
       dialectic-critic + depth-critic + width-critic + instruction-critic (Layer 5),
       patcher (Layer 6), polish-auditor (Layer 7).
     """
+    from hyperresearch.core.platforms import normalize_platforms
+
+    selected = normalize_platforms(platforms)
     actions = []
 
-    for installer in (
+    claude_installers = (
         lambda: _install_claude_hook(vault_root, hpr_path),
-        lambda: _install_opencode_plugin(vault_root, hpr_path),
         lambda: _install_hyperresearch_skill(vault_root),
         lambda: _install_hyperresearch_step_skills(vault_root),
         lambda: _install_researcher_agent(vault_root, hpr_path),
@@ -3053,9 +3060,23 @@ def install_hooks(vault_root: Path, hpr_path: str = "hyperresearch") -> list[str
         lambda: _install_corpus_critic_agent(vault_root, hpr_path),
         lambda: _install_draft_orchestrator_agent(vault_root, hpr_path),
         lambda: _install_synthesizer_agent(vault_root, hpr_path),
-        lambda: _install_opencode_agents(vault_root),
         lambda: _prune_retired_agents(vault_root),
-    ):
+    )
+
+    opencode_installers = (
+        lambda: _install_opencode_plugin(vault_root, hpr_path),
+        lambda: _install_opencode_hyperresearch_skill(vault_root),
+        lambda: _install_opencode_step_skills(vault_root),
+        lambda: _install_opencode_agents(vault_root, hpr_path),
+    )
+
+    installers = []
+    if "claude" in selected:
+        installers.extend(claude_installers)
+    if "opencode" in selected:
+        installers.extend(opencode_installers)
+
+    for installer in installers:
         result = installer()
         if result:
             actions.append(result)
@@ -3226,31 +3247,51 @@ def _install_opencode_plugin(vault_root: Path, hpr_path: str) -> str | None:
     return "OpenCode: .opencode/plugins/hyperresearch-reminder.js (tool hooks)"
 
 
-def _install_opencode_agents(vault_root: Path) -> str | None:
+def _install_opencode_agents(vault_root: Path, hpr_path: str) -> str | None:
     """Render OpenCode-native subagents with concrete configured models."""
     from hyperresearch.core.opencode_models import resolve_opencode_model_choices
-
-    claude_agents_dir = vault_root / ".claude" / "agents"
-    if not claude_agents_dir.is_dir():
-        return None
 
     model_choices = resolve_opencode_model_choices(vault_root)
     opencode_agents_dir = vault_root / ".opencode" / "agents"
     opencode_agents_dir.mkdir(parents=True, exist_ok=True)
 
     changed: list[str] = []
-    for claude_agent_path in sorted(claude_agents_dir.glob("*.md")):
-        content = claude_agent_path.read_text(encoding="utf-8")
+    for filename, content in _agent_sources(hpr_path):
         opencode_content = _render_opencode_agent(content, model_choices)
-        opencode_agent_path = opencode_agents_dir / claude_agent_path.name
+        opencode_agent_path = opencode_agents_dir / filename
         if opencode_agent_path.exists() and opencode_agent_path.read_text(encoding="utf-8") == opencode_content:
             continue
         opencode_agent_path.write_text(opencode_content, encoding="utf-8")
-        changed.append(claude_agent_path.name)
+        changed.append(filename)
 
     if not changed:
         return None
     return f"OpenCode: .opencode/agents/ ({len(changed)} model-configured agents)"
+
+
+def _agent_sources(hpr_path: str) -> list[tuple[str, str]]:
+    hpr_posix = hpr_path.replace("\\", "/")
+    return [
+        ("hyperresearch-fetcher.md", RESEARCHER_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-loci-analyst.md", LOCI_ANALYST_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-depth-investigator.md", DEPTH_INVESTIGATOR_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-source-analyst.md", SOURCE_ANALYST_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-corpus-critic.md", CORPUS_CRITIC_AGENT.replace("{hpr_path}", hpr_posix)),
+        ("hyperresearch-dialectic-critic.md", DIALECTIC_CRITIC_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-depth-critic.md", DEPTH_CRITIC_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-width-critic.md", WIDTH_CRITIC_AGENT.format(hpr_path=hpr_posix)),
+        ("hyperresearch-instruction-critic.md", INSTRUCTION_CRITIC_AGENT),
+        ("hyperresearch-patcher.md", PATCHER_AGENT),
+        (
+            "hyperresearch-polish-auditor.md",
+            POLISH_AUDITOR_AGENT.format(
+                scaffold_only_sections=_render_scaffold_only_bullets(indent="- "),
+            ),
+        ),
+        ("hyperresearch-readability-recommender.md", READABILITY_REFORMATTER_AGENT),
+        ("hyperresearch-draft-orchestrator.md", DRAFT_ORCHESTRATOR_AGENT.replace("{hpr_path}", hpr_posix)),
+        ("hyperresearch-synthesizer.md", SYNTHESIZER_AGENT),
+    ]
 
 
 def _render_opencode_agent(content: str, model_choices) -> str:
@@ -3629,19 +3670,39 @@ _HYPERRESEARCH_STEP_SKILLS = [
 
 
 def _install_hyperresearch_step_skills(vault_root: Path) -> str | None:
-    """Install the 16 V8 step skills, each as its own Claude Code skill directory.
+    result = _install_step_skills(vault_root / ".claude" / "skills")
+    if result is None:
+        return None
+    return f"Claude Code: .claude/skills/hyperresearch-N-*/SKILL.md ({result})"
 
-    Each step skill lives at `.claude/skills/hyperresearch-N-name/SKILL.md` and is
-    invocable via the Skill tool. The orchestrator (loaded via /hyperresearch)
-    invokes each step skill in sequence per the tier routing table. This
-    decomposition solves the V7 context-compaction problem: each step's
-    procedure is loaded fresh into context only at the moment it's needed.
 
-    Also prunes any stale `hyperresearch-*` skill directories (e.g. from a prior
-    V8 layout where steps were numbered differently) so the user doesn't see
-    obsolete entries in their skill list.
+def _install_opencode_hyperresearch_skill(vault_root: Path) -> str | None:
+    content = _read_skill_source("hyperresearch.md")
+    if content is None:
+        return None
+
+    skill_dir = vault_root / ".opencode" / "skills" / "hyperresearch"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = skill_dir / "SKILL.md"
+    if dest_path.exists() and dest_path.read_text(encoding="utf-8") == content:
+        return None
+    dest_path.write_text(content, encoding="utf-8")
+    return "OpenCode: .opencode/skills/hyperresearch/SKILL.md (/hyperresearch skill)"
+
+
+def _install_opencode_step_skills(vault_root: Path) -> str | None:
+    result = _install_step_skills(vault_root / ".opencode" / "skills")
+    if result is None:
+        return None
+    return f"OpenCode: .opencode/skills/hyperresearch-N-*/SKILL.md ({result})"
+
+
+def _install_step_skills(skills_root: Path) -> str | None:
+    """Install the 16 V8 step skills into a harness-specific skills root.
+
+    Each step skill lives at `<skills_root>/hyperresearch-N-name/SKILL.md` and is
+    invocable via the harness skill tool.
     """
-    skills_root = vault_root / ".claude" / "skills"
     skills_root.mkdir(parents=True, exist_ok=True)
 
     expected = set(_HYPERRESEARCH_STEP_SKILLS)
@@ -3686,4 +3747,4 @@ def _install_hyperresearch_step_skills(vault_root: Path) -> str | None:
         parts.append(f"{len(installed)} step skills: {', '.join(installed)}")
     if pruned:
         parts.append(f"pruned: {', '.join(pruned)}")
-    return f"Claude Code: .claude/skills/hyperresearch-N-*/SKILL.md ({'; '.join(parts)})"
+    return "; ".join(parts)

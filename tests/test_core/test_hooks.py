@@ -352,6 +352,40 @@ def test_prune_retired_agents_noop_on_clean_vault(tmp_vault):
 # ---------------------------------------------------------------------------
 
 
+def test_install_hooks_can_target_opencode_only(tmp_path, monkeypatch):
+    from hyperresearch.core.vault import Vault
+
+    empty_opencode_config = tmp_path / "empty-opencode"
+    empty_opencode_config.mkdir()
+    monkeypatch.setenv("HYPERRESEARCH_OPENCODE_CONFIG_DIR", str(empty_opencode_config))
+
+    vault = Vault.init(tmp_path / "opencode-only", platforms="opencode")
+    actions = install_hooks(vault.root, "hyperresearch", platforms="opencode")
+
+    assert actions
+    assert (vault.root / "AGENTS.md").exists()
+    assert not (vault.root / "CLAUDE.md").exists()
+    assert not (vault.root / ".claude").exists()
+    assert (vault.root / ".opencode" / "plugins" / "hyperresearch-reminder.js").exists()
+    assert (vault.root / ".opencode" / "skills" / "hyperresearch" / "SKILL.md").exists()
+    assert (vault.root / ".opencode" / "agents" / "hyperresearch-fetcher.md").exists()
+
+
+def test_install_hooks_can_target_claude_only(tmp_path):
+    from hyperresearch.core.vault import Vault
+
+    vault = Vault.init(tmp_path / "claude-only", platforms="claude")
+    actions = install_hooks(vault.root, "hyperresearch", platforms="claude")
+
+    assert actions
+    assert (vault.root / "CLAUDE.md").exists()
+    assert not (vault.root / "AGENTS.md").exists()
+    assert (vault.root / ".claude" / "settings.json").exists()
+    assert (vault.root / ".claude" / "skills" / "hyperresearch" / "SKILL.md").exists()
+    assert (vault.root / ".claude" / "agents" / "hyperresearch-fetcher.md").exists()
+    assert not (vault.root / ".opencode").exists()
+
+
 def test_install_hooks_registers_full_hyperresearch_roster(tmp_vault, tmp_path, monkeypatch):
     """install_hooks wires the hook, both entry-skill aliases, and the agent roster."""
     empty_opencode_config = tmp_path / "empty-opencode"

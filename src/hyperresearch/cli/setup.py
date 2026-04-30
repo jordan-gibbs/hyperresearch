@@ -18,12 +18,20 @@ console = Console()
 def setup(
     path: str = typer.Argument(".", help="Path to set up"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output (non-interactive)"),
+    platform: str = typer.Option(
+        "ask",
+        "--platform",
+        "-p",
+        help="Harness integration(s) to install: claude, opencode, both. Default asks interactively.",
+    ),
 ) -> None:
     """Interactive setup — configure hyperresearch step by step."""
     if json_output or not sys.stdin.isatty():
         import subprocess
 
         cmd = [sys.executable, "-m", "hyperresearch", "install", path]
+        if platform != "ask":
+            cmd.extend(["--platform", platform])
         if json_output:
             cmd.append("--json")
         raise typer.Exit(subprocess.call(cmd))
@@ -43,6 +51,7 @@ def setup(
     )
 
     vault_name = "Research Base"
+    platforms = choose_platforms_interactive() if platform == "ask" else _normalize_platform_option(platform)
 
     # ── Step 1: Web Provider ──────────────────────────────────────
     console.print()
@@ -126,7 +135,7 @@ def setup(
         vault = Vault.discover(root)
         console.print(f"  [dim]Vault:[/] {vault.root}")
     except VaultError:
-        vault = Vault.init(root, name=vault_name)
+        vault = Vault.init(root, name=vault_name, platforms=platforms)
         console.print(f"  [green]Vault created:[/] {vault.root}")
 
     # Write config — magic always on when crawl4ai is used
@@ -139,12 +148,12 @@ def setup(
 
     # Inject agent docs (CLAUDE.md + AGENTS.md)
     hpr_path = _resolve_executable()
-    doc_actions = inject_agent_docs(root)
+    doc_actions = inject_agent_docs(root, platforms=platforms)
     for action in doc_actions:
         console.print(f"  [green]Docs:[/] {action}")
 
     # Install Claude Code hook + skills + subagents
-    hook_actions = install_hooks(root, hpr_path=hpr_path)
+    hook_actions = install_hooks(root, hpr_path=hpr_path, platforms=platforms)
     for action in hook_actions:
         console.print(f"  [green]Hook:[/] {action}")
     if not hook_actions:
@@ -164,7 +173,7 @@ def setup(
     summary.add_row("Provider", f"[bold]{provider}[/]")
     summary.add_row("Profile", f"[bold]{profile_desc}[/]")
     summary.add_row("Stealth", "[bold]on[/]" if magic else "[dim]off[/]")
-    summary.add_row("Platform", "[bold]Claude Code[/]")
+    summary.add_row("Platforms", f"[bold]{', '.join(sorted(platforms))}[/]")
     summary.add_row("CLI", f"[dim]{hpr_path}[/]")
 
     console.print(
@@ -183,6 +192,44 @@ def setup(
 
 
 # ── Helpers ─────────────────────────────────────────────────────
+
+
+def choose_platforms_interactive() -> set[str]:
+    console.print()
+    console.print(Rule("[bold]Agent Integrations", style="cyan"))
+    console.print()
+    console.print("  Choose which harness integrations to install:")
+    console.print("  [bold]1[/] Claude Code  [dim]— CLAUDE.md, .claude/settings, .claude/skills, .claude/agents[/]")
+    console.print("  [bold]2[/] OpenCode     [dim]— AGENTS.md, .opencode/plugins, .opencode/skills, .opencode/agents[/]")
+    console.print()
+    raw = Prompt.ask("  Install integrations (comma-separated)", default="1,2")
+
+    mapping = {"1": "claude", "2": "opencode", "claude": "claude", "opencode": "opencode"}
+    selected: list[str] = []
+    for item in (part.strip().lower() for part in raw.split(",")):
+        if not item:
+            continue
+        mapped = mapping.get(item)
+        if mapped and mapped not in selected:
+            selected.append(mapped)
+
+    if not selected:
+        console.print("  [yellow]No valid integration selected; defaulting to both.[/]")
+        selected = ["claude", "opencode"]
+
+    from hyperresearch.core.platforms import normalize_platforms
+
+    return normalize_platforms(selected)
+
+
+def _normalize_platform_option(platform: str) -> set[str]:
+    from hyperresearch.core.platforms import normalize_platforms
+
+    try:
+        return normalize_platforms(platform)
+    except ValueError as exc:
+        console.print(f"[red]Error:[/] {exc}")
+        raise typer.Exit(1) from exc
 
 
 def _pick_existing_profile(profiles: list[str]) -> str:

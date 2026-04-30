@@ -68,6 +68,18 @@ def test_agent_docs_created(tmp_path: Path):
     assert "hyperresearch" in agents_content
 
 
+def test_init_can_target_opencode_docs_only(tmp_path: Path):
+    vault = Vault.init(tmp_path / "kb-opencode", platforms="opencode")
+    assert not (vault.root / "CLAUDE.md").exists()
+    assert (vault.root / "AGENTS.md").exists()
+
+
+def test_init_can_target_claude_docs_only(tmp_path: Path):
+    vault = Vault.init(tmp_path / "kb-claude", platforms="claude")
+    assert (vault.root / "CLAUDE.md").exists()
+    assert not (vault.root / "AGENTS.md").exists()
+
+
 def test_init_creates_claude_and_agents_md_only(tmp_path: Path):
     """Vault.init writes CLAUDE.md + AGENTS.md, but not other agent files."""
     vault = Vault.init(tmp_path / "kb-agent-docs")
