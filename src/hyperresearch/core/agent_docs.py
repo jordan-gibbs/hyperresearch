@@ -21,7 +21,7 @@ HYPERRESEARCH_BLURB = """
 
 **CLI path: `{hpr}`** — use this exact path for every hyperresearch command. It may not be on your system PATH.
 
-**Paths in this document are relative to your current working directory**, not to the CLI binary's location. Use `research/notes/final_report.md` (not a prefix with the binary path) when you save files.
+**Paths in this document are relative to your current working directory**, not to the CLI binary's location. Use `research/notes/final_report_<vault_tag>.md` (not a prefix with the binary path) when you save files.
 
 This project uses hyperresearch as an agent-driven research knowledge base. The `research/` directory contains markdown notes collected from web sources and original research. Append `--json` to any command for structured output.
 

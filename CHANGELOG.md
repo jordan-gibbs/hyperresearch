@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.5] - 2026-04-29
+
+### Reports self-title; wikilinks become the default citation system
+
+Two related changes that fix the "I lost my last report" foot-gun and make the vault genuinely navigable:
+
+- **Final reports now write to `research/notes/final_report_<vault_tag>.md`.** Every run self-titles by the canonical query slug (e.g., `final_report_rl-exploration.md`). No more overwrites — running `/hyperresearch` on a new topic in the same project leaves the previous report untouched. Persistent personal research wiki, no surprise data loss.
+- **Wiki-link citations are the new default citation style.** Every citation in the body is `[[<source-note-id>]]` pointing at the source note in the vault. No separate `## Sources` section needed — each wiki-link self-resolves to the source note's frontmatter (title + URL). For users in their own vault this means every citation is one click away from the raw source. The `inline` (`[N]` + Sources section) and `none` styles are still selectable; the benchmark wrapper continues to set `"inline"` via `wrapper_contract.json` so RACE evaluators can read numbered references.
+- **Polish auditor updated**: only strips wiki-links pointing at workspace artifacts (`[[interim-*]]`, `[[scaffold]]`, `[[comparisons]]`). Source-note wiki-links are preserved as the citation system when style is `"wikilink"`.
+- **Lint rules updated**: `wrapper-report`, `patch-surgery`, and `instruction-coverage` rules glob for `final_report*.md` and validate the most recent. Pre-0.8.5 bare `final_report.md` still works.
+
 ## [0.8.4] - 2026-04-29
 
 ### Polish + release plumbing

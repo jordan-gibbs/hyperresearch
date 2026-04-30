@@ -21,7 +21,7 @@ description: >
 Read these inputs:
 - `research/scaffold.md` — vault_tag
 - `research/prompt-decomposition.json` — pipeline_tier, atomic items
-- `research/notes/final_report.md` — merged draft from step 10
+- `research/notes/final_report_<vault_tag>.md` — merged draft from step 10
 - `research/query-<vault_tag>.md` — canonical research query
 
 ---
@@ -45,11 +45,11 @@ Read these inputs:
 
      PIPELINE POSITION: You are step 12 (<critic-name> critic) of the
      hyperresearch V8 pipeline. Step 11 (synthesizer) produced the final report at
-     research/notes/final_report.md. After you return, step 13 may run a
+     research/notes/final_report_<vault_tag>.md. After you return, step 13 may run a
      gap-fetch wave, then step 14 (patcher) applies findings as Edit hunks.
 
      YOUR INPUTS:
-     - draft_path: research/notes/final_report.md
+     - draft_path: research/notes/final_report_<vault_tag>.md
      - output_path: research/critic-findings-<critic-name>.json
      - vault_tag: <vault_tag>
      - decomposition_path: research/prompt-decomposition.json   (instruction-critic only)

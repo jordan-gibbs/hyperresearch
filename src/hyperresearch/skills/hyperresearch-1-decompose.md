@@ -90,7 +90,7 @@ Read both before starting. The vault_tag is in the scaffold's "Run config" secti
   "scope_conditions": ["urban rail specifically, not mainline"],
   "pipeline_tier": "full",
   "response_format": "argumentative",
-  "citation_style": "inline"
+  "citation_style": "wikilink"
 }
 ```
 
@@ -127,8 +127,11 @@ Read both before starting. The vault_tag is in the scaffold's "Run config" secti
 
    | Style | When to use | Output |
    |-------|-------------|--------|
-   | `"inline"` | **Default.** User wants a verifiable research report. | `[N]` inline citations + formatted `## Sources` list. |
-   | `"none"` | Polished expert-analysis with no visible citation apparatus. | No `[N]` markers, no Sources section. |
+   | `"wikilink"` | **Default.** Personal use in a vault — every citation is a clickable wiki-link back to the raw source note in `research/notes/`. | `[[note-id]]` markers inline. No separate Sources section (each link self-resolves to the source note's frontmatter title + URL). |
+   | `"inline"` | Public deliverable, benchmark wrappers, or verifiable research report for someone outside the vault. | `[N]` inline citations + a formatted `## Sources` list at the end. |
+   | `"none"` | Polished expert-analysis with no visible citation apparatus. | No citation markers, no Sources section. |
+
+   **Wrapper override:** if `research/wrapper_contract.json` exists and specifies `citation_style`, it overrides the default. The benchmark harness sets `"inline"` via wrapper_contract so RACE evaluators can read numbered references; everything else gets the wikilink default.
 
 8. **Coverage matrix self-audit.** Re-read the verbatim query. Walk through it phrase by phrase and extract every **significant noun phrase, proper noun, technical term, and category name**. For each:
    - Does it map to at least one atomic item in the decomposition?

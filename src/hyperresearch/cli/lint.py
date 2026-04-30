@@ -191,7 +191,7 @@ def lint(
                                     f"[{c.get('id','?')}] {c.get('description','?')[:80]}"
                                     for c in unresolved[:5]
                                 )
-                                + ". Apply the fixes in research/notes/final_report.md, "
+                                + ". Apply the fixes in research/notes/final_report_<vault_tag>.md, "
                                 + "mark each finding with `fixed_at: <ISO>` in "
                                 + "research/audit_findings.json, and re-run the conformance "
                                 + "auditor to verify."
@@ -546,7 +546,18 @@ def lint(
                 wrapper_contract = None
 
         if prompt_path.exists() or query_files_exist or wrapper_contract is not None:
-            report_path = vault.root / "research" / "notes" / "final_report.md"
+            # Reports are now named final_report_<vault_tag>.md. Glob to find
+            # any matching report; fall back to the legacy bare name for
+            # back-compat with pre-0.8.5 runs.
+            notes_dir = vault.root / "research" / "notes"
+            report_candidates = sorted(
+                notes_dir.glob("final_report*.md"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            ) if notes_dir.exists() else []
+            report_path = report_candidates[0] if report_candidates else (
+                notes_dir / "final_report.md"
+            )
             if not report_path.exists():
                 issues.append({
                     "rule": "wrapper-report",
@@ -555,7 +566,7 @@ def lint(
                     "message": (
                         "Wrapped research context detected (prompt.txt, "
                         "query-*.md, or wrapper_contract.json present) but "
-                        "`research/notes/final_report.md` is missing. "
+                        "no `research/notes/final_report*.md` file is present. "
                         "The final report must exist before export."
                     ),
                 })
@@ -1060,11 +1071,13 @@ def lint(
                     except (json.JSONDecodeError, OSError):
                         pass
 
-            final_report = vault.root / "research" / "notes" / "final_report.md"
+            notes_dir = vault.root / "research" / "notes"
+            report_matches = sorted(notes_dir.glob("final_report*.md")) if notes_dir.exists() else []
+            final_report_exists = bool(report_matches)
             if (
                 total_logged == 0
                 and critic_totals > 0
-                and final_report.exists()
+                and final_report_exists
             ):
                 issues.append({
                     "rule": "patch-surgery",
@@ -1099,7 +1112,15 @@ def lint(
         # audit. This lint rule is the final post-patch gate that catches
         # items the critic flagged but the patcher couldn't apply.
         decomp_path = vault.root / "research" / "prompt-decomposition.json"
-        final_report = vault.root / "research" / "notes" / "final_report.md"
+        notes_dir = vault.root / "research" / "notes"
+        report_candidates = sorted(
+            notes_dir.glob("final_report*.md"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        ) if notes_dir.exists() else []
+        final_report = report_candidates[0] if report_candidates else (
+            notes_dir / "final_report.md"
+        )
         if decomp_path.exists() and final_report.exists():
             try:
                 decomp = json.loads(decomp_path.read_text(encoding="utf-8"))
