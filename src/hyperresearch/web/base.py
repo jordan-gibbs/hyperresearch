@@ -161,4 +161,9 @@ def get_provider(
         except ImportError:
             raise ImportError("crawl4ai provider requires: pip install hyperresearch[crawl4ai]")
 
-    raise ValueError(f"Unknown web provider: {name!r}. Available: builtin, crawl4ai")
+    if name == "exa":
+        from hyperresearch.web.exa_provider import ExaProvider
+
+        return ExaProvider()
+
+    raise ValueError(f"Unknown web provider: {name!r}. Available: builtin, crawl4ai, exa")
