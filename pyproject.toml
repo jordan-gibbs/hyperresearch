@@ -35,7 +35,8 @@ dependencies = [
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.6"]
-all = ["hyperresearch[mcp]"]
+exa = ["exa-py>=2.0.0"]
+all = ["hyperresearch[mcp,exa]"]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
