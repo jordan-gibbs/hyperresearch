@@ -1,0 +1,16 @@
+# Project policy for translating Claude Code agent model labels to Codex models.
+#
+# This is not an official equivalence table. It is the Hyperresearch adapter
+# policy used when generating `.codex/agents/*.toml` from bundled Claude Code
+# subagent definitions.
+#
+# Official Codex docs checked: 2026-05-07.
+opus:
+  model: gpt-5.5
+  model_reasoning_effort: xhigh
+sonnet:
+  model: gpt-5.4
+  model_reasoning_effort: high
+haiku:
+  model: gpt-5.4-mini
+  model_reasoning_effort: medium

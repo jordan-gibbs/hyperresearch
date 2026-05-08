@@ -72,3 +72,11 @@ def test_init_only_creates_claude_md(tmp_path: Path):
     assert not (vault.root / "AGENTS.md").exists()
     assert not (vault.root / "GEMINI.md").exists()
     assert not (vault.root / ".github" / "copilot-instructions.md").exists()
+
+
+def test_init_can_skip_agent_docs(tmp_path: Path):
+    """Codex-only install can initialize a vault without writing Claude docs."""
+    vault = Vault.init(tmp_path / "kb-no-docs", inject_docs=False)
+    assert vault.is_initialized
+    assert not (vault.root / "CLAUDE.md").exists()
+    assert not (vault.root / "AGENTS.md").exists()

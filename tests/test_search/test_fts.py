@@ -30,6 +30,14 @@ def test_search_with_tag_filter(seeded_vault):
     assert all("rust" in r["tags"] for r in results)
 
 
+def test_empty_query_lists_notes_with_tag_filter(seeded_vault):
+    filters = SearchFilters(tags=["concurrency"])
+    results = search_fts(seeded_vault.db, "", filters=filters, limit=10)
+    ids = {r["id"] for r in results}
+    assert {"python-async-patterns", "rust-ownership", "concurrency"} <= ids
+    assert all("concurrency" in r["tags"] for r in results)
+
+
 def test_search_with_status_filter(seeded_vault):
     filters = SearchFilters(status="draft")
     results = search_fts(seeded_vault.db, "orphan", filters=filters)

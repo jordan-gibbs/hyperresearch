@@ -17,6 +17,35 @@ from hyperresearch.core.patterns import (
     is_valid_wiki_link_target,
 )
 
+_TEMP_WORKFLOW_ARTIFACT_NAMES = {
+    "corpus-critic-results.md",
+    "coverage-gaps.md",
+    "coverage-matrix.md",
+    "draft-a-source-list.md",
+    "draft-a.md",
+    "draft-angles.md",
+    "draft-b-source-list.md",
+    "draft-b.md",
+    "draft-c-source-list.md",
+    "draft-c.md",
+    "evidence-digest.md",
+    "orchestrator-notes.md",
+    "orchestrator-progress.md",
+    "post-critic-fetch-log.md",
+    "redundancy-audit.md",
+    "scored-urls.md",
+    "search-plan.md",
+    "synthesis-conflicts.md",
+    "synthesis-outline.md",
+    "synthesis-pass1.md",
+    "synthesis-plan.md",
+}
+
+_TEMP_WORKFLOW_ARTIFACT_PREFIXES = (
+    "interim-report-",
+    "source-analysis-",
+)
+
 
 @dataclass
 class SyncPlan:
@@ -42,6 +71,39 @@ def _should_exclude(rel_path: str, exclude_parts: list[str]) -> bool:
     return first in exclude_parts
 
 
+def _has_frontmatter(path: Path) -> bool:
+    """Return whether a markdown file starts with a YAML frontmatter fence."""
+    try:
+        head = path.read_bytes()[:4]
+    except OSError:
+        return False
+    return head.startswith(b"---\n") or head.startswith(b"---\r")
+
+
+def _is_temp_workflow_artifact(vault, md_file: Path) -> bool:
+    """Identify temp markdown that is workflow staging, not a synced note.
+
+    `research/temp/` also holds intentional temporary notes such as broken-link
+    stubs. Those are written with frontmatter and should stay synced so wiki
+    links resolve. Hyperresearch workflow staging files, however, are addressed
+    directly by path and should not be enriched/promoted as notes.
+    """
+    try:
+        rel_to_temp = md_file.relative_to(vault.temp_dir)
+    except ValueError:
+        return False
+
+    if len(rel_to_temp.parts) != 1:
+        return False
+
+    name = rel_to_temp.name
+    if name in _TEMP_WORKFLOW_ARTIFACT_NAMES:
+        return True
+    if name.startswith(_TEMP_WORKFLOW_ARTIFACT_PREFIXES):
+        return True
+    return not _has_frontmatter(md_file)
+
+
 def compute_sync_plan(vault, force: bool = False) -> SyncPlan:
     """Compare disk state against DB state. Returns a plan."""
     plan = SyncPlan()
@@ -64,6 +126,8 @@ def compute_sync_plan(vault, force: bool = False) -> SyncPlan:
         # Skip staging files at the research/ root. Real notes live in
         # research/notes/** or research/index/**.
         if md_file.parent == kb_dir:
+            continue
+        if _is_temp_workflow_artifact(vault, md_file):
             continue
         rel = md_file.relative_to(vault.root).as_posix()
         disk_files[rel] = md_file.stat().st_mtime

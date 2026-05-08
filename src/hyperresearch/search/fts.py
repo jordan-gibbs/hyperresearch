@@ -62,6 +62,9 @@ def search_fts(
     ranking: dict | None = None,
 ) -> list[dict]:
     """Execute a full-text search against the notes_fts table."""
+    if not query.strip():
+        return _list_notes(conn, filters=filters, limit=limit, offset=offset, include_index=include_index)
+
     fts_query = preprocess_query(query)
 
     filter_clause = ""
@@ -139,4 +142,58 @@ def search_fts(
                 r["score"] *= penalize_stale
         results.sort(key=lambda x: x["score"], reverse=True)
 
+    return results
+
+
+def _list_notes(
+    conn: sqlite3.Connection,
+    *,
+    filters: SearchFilters | None,
+    limit: int,
+    offset: int,
+    include_index: bool,
+) -> list[dict]:
+    """List notes with structured filters when there is no FTS query."""
+    filter_clause = ""
+    filter_params: list = []
+    if filters:
+        where, filter_params = filters.to_sql("n")
+        if where != "1=1":
+            filter_clause = f"WHERE {where}"
+
+    index_clause = "" if include_index else "n.type != 'index'"
+    if index_clause:
+        filter_clause = f"{filter_clause} AND {index_clause}" if filter_clause else f"WHERE {index_clause}"
+
+    sql = f"""
+        SELECT
+            n.id, n.title, n.path, n.status, n.type, n.tier, n.content_type,
+            n.created, n.updated, n.word_count, n.summary,
+            (SELECT GROUP_CONCAT(t.tag, ',') FROM tags t WHERE t.note_id = n.id) as tag_list
+        FROM notes n
+        {filter_clause}
+        ORDER BY COALESCE(n.updated, n.created) DESC, n.id ASC
+        LIMIT ? OFFSET ?
+    """
+
+    rows = conn.execute(sql, [*filter_params, limit, offset]).fetchall()
+    results = []
+    for row in rows:
+        tag_list = row["tag_list"].split(",") if row["tag_list"] else []
+        results.append({
+            "id": row["id"],
+            "title": row["title"],
+            "path": row["path"],
+            "status": row["status"],
+            "type": row["type"],
+            "tier": row["tier"],
+            "content_type": row["content_type"],
+            "tags": tag_list,
+            "created": row["created"],
+            "updated": row["updated"],
+            "word_count": row["word_count"],
+            "summary": row["summary"],
+            "score": 0.0,
+            "snippet": row["summary"] or "",
+        })
     return results

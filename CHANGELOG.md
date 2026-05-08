@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.9.0] - 2026-05-08
+
+### Codex adapter for the Claude workflow
+
+This release adds first-class Codex project installation while keeping the
+existing Claude Code workflow and Python CLI backend as the source of truth.
+
+- **`hyperresearch install --codex`** initializes a vault without installing
+  Claude Code hooks, skills, or agents. It writes Codex-facing guidance to
+  `AGENTS.md`, generates `.agents/skills/hyperresearch/SKILL.md`, generates
+  the 16 step skills under `.agents/skills/`, and writes the custom-agent
+  roster under `.codex/agents/`.
+- **Codex artifacts regenerate from the bundled Claude definitions.** The
+  Claude skill markdown and Claude subagent definitions remain the parent
+  workflow source; the Codex installer adds an adapter preamble and mechanical
+  translations for Skill calls, Task/subagent usage, TodoWrite progress, and
+  backend CLI paths.
+- **Codex hooks are generated as project-local guardrails.**
+  `.codex/config.toml`, `.codex/hooks.json`, and
+  `.codex/hooks/hyperresearch_pre_tool_use.py` add SessionStart vault guidance
+  and Bash PreToolUse reminders for direct source-page fetches. Codex loads
+  these hooks only after the project is trusted, so install output and
+  generated `AGENTS.md` now explain the trust requirement.
+- **Codex custom-agent models are data-driven.** `codex_model_map.yaml` maps
+  Claude model labels such as Opus/Sonnet/Haiku to Codex model settings when
+  `.codex/agents/*.toml` files are generated.
+- **Workflow scratch files stay out of the vault index.** Known
+  `research/temp/` staging markdown such as progress logs, draft scratch,
+  evidence digests, and synthesis plans are skipped by sync so they do not
+  become searchable notes or get rewritten by repair. Frontmatter-backed temp
+  stubs and real notes still sync for link resolution.
+- **Filtered empty searches now work.** Commands such as
+  `hyperresearch search "" --tag <tag> --json` list structured results without
+  passing an empty string through SQLite FTS5 `MATCH`.
+- **Packaging and dogfood smoke passed.** Built wheel/sdist artifacts include
+  the Codex model map and bundled skill sources; a uv-installed wheel was used
+  to run `install --codex` and a minimal `codex exec --sandbox workspace-write`
+  backend smoke.
+
+### Compatibility notes
+
+- Default `hyperresearch install`, `hyperresearch install --global`, and
+  `hyperresearch install --steps-only` remain Claude Code paths.
+- The bundled Claude skill files and Claude subagent definitions are unchanged
+  in this release.
+- Codex tool-lock parity is a prompt/sandbox/hook/lint contract rather than an
+  exact equivalent of Claude Code's tool allowlists.
+
 ## [0.8.5] - 2026-04-29
 
 ### Reports self-title; wikilinks become the default citation system

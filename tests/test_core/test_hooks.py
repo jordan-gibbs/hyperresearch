@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from hyperresearch.core.agent_docs import inject_codex_agent_docs
 from hyperresearch.core.hooks import (
     _RETIRED_AGENT_FILES,
     _RETIRED_SKILL_DIRS,
@@ -61,6 +62,25 @@ def test_install_hyperresearch_skill_idempotent(tmp_vault):
     assert first is not None
     second = _install_hyperresearch_skill(tmp_vault.root)
     assert second is None
+
+
+def test_inject_codex_agent_docs_managed_block_idempotent(tmp_vault):
+    agents_path = tmp_vault.root / "AGENTS.md"
+    agents_path.write_text("# Existing instructions\n\nKeep this line.\n", encoding="utf-8")
+
+    first = inject_codex_agent_docs(tmp_vault.root)
+    assert first == ["AGENTS.md (appended)"]
+    body = agents_path.read_text(encoding="utf-8")
+    assert "Keep this line." in body
+    assert "<!-- hyperresearch-codex:start -->" in body
+    assert "hyperresearch for Codex" in body
+    assert "hyperresearch ... --json" in body
+    assert "MCP is available" in body
+
+    second = inject_codex_agent_docs(tmp_vault.root)
+    assert second is None or second == []
+    body2 = agents_path.read_text(encoding="utf-8")
+    assert body2.count("<!-- hyperresearch-codex:start -->") == 1
 
 
 def test_install_hyperresearch_step_skills_creates_all_16(tmp_vault):

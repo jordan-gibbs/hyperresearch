@@ -25,8 +25,13 @@ def install(
         "--steps-only",
         help="Install only the 16 step skills to <PATH>/.claude/skills/. Used internally by the entry skill bootstrap on first /hyperresearch invocation in a project. Not normally invoked by users.",
     ),
+    codex: bool = typer.Option(
+        False,
+        "--codex",
+        help="Install Codex-facing project guidance without installing Claude Code hooks, skills, or agents.",
+    ),
 ) -> None:
-    """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
+    """Install hyperresearch integrations."""
     import sys
 
     from hyperresearch.core.hooks import (
@@ -110,7 +115,7 @@ def install(
         vault_action = "existing"
     except VaultError:
         try:
-            vault = Vault.init(root, name=name)
+            vault = Vault.init(root, name=name, inject_docs=not codex)
             vault_action = "created"
         except VaultError as e:
             if json_output:
@@ -120,9 +125,61 @@ def install(
             raise typer.Exit(1)
 
     # Step 2: Resolve the hyperresearch executable path
-    from hyperresearch.core.agent_docs import _resolve_executable, inject_agent_docs
+    from hyperresearch.core.agent_docs import (
+        _resolve_executable,
+        inject_agent_docs,
+        inject_codex_agent_docs,
+    )
 
     hpr_path = _resolve_executable()
+
+    if codex:
+        from hyperresearch.core.codex import install_codex_workflow
+
+        doc_actions = inject_codex_agent_docs(root)
+        workflow_actions = install_codex_workflow(root, hpr_path=hpr_path)
+        trust_hint = _codex_trust_hint(root)
+        data = {
+            "vault_path": str(vault.root),
+            "vault": vault_action,
+            "codex_agent_docs": doc_actions,
+            "codex_workflow": workflow_actions,
+            "codex_trust": trust_hint,
+            "hooks_installed": [],
+            "crawl4ai": "skipped",
+        }
+
+        if json_output:
+            output(success(data, vault=str(vault.root)), json_mode=True)
+        else:
+            if vault_action == "created":
+                console.print(f"[green]Vault created:[/] {vault.root}")
+            else:
+                console.print(f"[dim]Vault exists:[/] {vault.root}")
+            if doc_actions:
+                console.print("[green]Codex docs:[/]")
+                for action in doc_actions:
+                    console.print(f"  {action}")
+            else:
+                console.print("[dim]Codex docs already installed.[/]")
+            if workflow_actions:
+                console.print("[green]Codex workflow:[/]")
+                for action in workflow_actions:
+                    console.print(f"  {action}")
+            else:
+                console.print("[dim]Codex workflow already installed.[/]")
+            console.print("\n[bold]Ready.[/] Codex will use hyperresearch through the CLI.")
+            console.print(
+                "[yellow]Codex trust:[/] Project-local hooks load only after Codex trusts this project."
+            )
+            console.print(
+                f"[dim]If Codex says project-local config/hooks are disabled, add this to "
+                f"{trust_hint['config_path']} or accept Codex's trust prompt:[/]"
+            )
+            for line in str(trust_hint["toml"]).splitlines():
+                console.print(f"  {line}", markup=False)
+            console.print("[dim]Claude Code hooks, skills, and agents were not installed.[/]")
+        return
 
     # Step 3: Always re-inject CLAUDE.md (updates blurb + path)
     doc_actions = inject_agent_docs(root)
@@ -174,6 +231,18 @@ def install(
 
         console.print("\n[bold]Ready.[/] Agents will now check the research base before web searches.")
         console.print("[dim]Tip: Run 'hyperresearch setup' for interactive configuration (profile, stealth, etc.)[/]")
+
+
+def _codex_trust_hint(root: Path) -> dict[str, str | bool]:
+    import json
+
+    project = str(root).replace("\\", "/")
+    toml = f"[projects.{json.dumps(project)}]\ntrust_level = \"trusted\""
+    return {
+        "required_for_project_hooks": True,
+        "config_path": str(Path.home() / ".codex" / "config.toml"),
+        "toml": toml,
+    }
 
 
 def _setup_crawl4ai(vault) -> str:

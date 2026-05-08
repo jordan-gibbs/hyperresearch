@@ -14,6 +14,8 @@ from pathlib import Path
 
 HYPERRESEARCH_SECTION_MARKER = "<!-- hyperresearch:start -->"
 HYPERRESEARCH_SECTION_END = "<!-- hyperresearch:end -->"
+HYPERRESEARCH_CODEX_SECTION_MARKER = "<!-- hyperresearch-codex:start -->"
+HYPERRESEARCH_CODEX_SECTION_END = "<!-- hyperresearch-codex:end -->"
 
 HYPERRESEARCH_BLURB = """
 {marker}
@@ -116,6 +118,64 @@ Summaries must be specific — "Mamba achieves linear-time sequence modeling via
 {end_marker}
 """
 
+HYPERRESEARCH_CODEX_BLURB = """
+{marker}
+## Research Base (hyperresearch for Codex) - Today is {today}
+
+**CLI path: `{hpr}`** - use this exact path for every hyperresearch command.
+It may not be on your system PATH.
+
+This repository uses hyperresearch as a research vault. The backend is the
+existing Python CLI and markdown vault, not a separate Codex storage layer.
+Prefer JSON output for all agent-facing calls.
+
+Primary backend pattern: `hyperresearch ... --json`.
+
+### Codex Trust And Hooks
+
+`install --codex` generated `.codex/hooks.json` and `.codex/config.toml`.
+Codex loads project-local hooks only after this project is trusted by Codex.
+If Codex reports that project-local config, hooks, and exec policies are
+disabled, trust this project in Codex before relying on hook reminders.
+
+Until the project is trusted, this `AGENTS.md` guidance and installed skills
+still load, but SessionStart and PreToolUse hook reminders do not.
+
+### Backend Rules
+
+- Search the vault before fetching new sources.
+- Use `{hpr} search "<query>" --json` for vault retrieval.
+- Use `{hpr} note show <id> --json` or `{hpr} note show <id1> <id2> --json`
+  to read notes.
+- Do not ingest source pages directly when provenance matters. Use
+  `{hpr} fetch "<url>" --json` so sources, raw files, and duplicate checks are
+  persisted in the vault.
+- After direct markdown edits, run `{hpr} sync --json`.
+- Before declaring a research run complete, run `{hpr} lint --json`,
+  `{hpr} repair --json`, and `{hpr} status --json`.
+
+### Codex Workflow
+
+When the user asks for hyperresearch or `/hyperresearch <query>`, run the
+Hyperresearch workflow through the Codex skills installed under
+`.agents/skills/`. Keep the same artifact paths used by the Claude Code
+workflow, including `research/scaffold.md`, `research/prompt-decomposition.json`,
+`research/temp/`, and `research/notes/final_report_<vault_tag>.md`.
+
+The initial Codex integration intentionally follows the existing CLI-driven
+Claude Code workflow. MCP is available in hyperresearch but is not the primary
+path for this port unless a later project ADR changes that decision.
+
+### Invariants
+
+- Preserve the canonical research query in `research/query-<vault_tag>.md`.
+- Preserve source provenance by fetching through hyperresearch.
+- Preserve the 16-step tier routing and artifact contract.
+- Patch final reports surgically after synthesis; do not regenerate them.
+- Keep existing user-authored AGENTS.md content outside this managed block.
+{end_marker}
+"""
+
 
 
 def _resolve_executable() -> str:
@@ -175,14 +235,49 @@ def inject_agent_docs(vault_root: Path) -> list[str]:
     return modified
 
 
-def _inject_into_file(filepath: Path, blurb: str, filename: str) -> str | None:
+def inject_codex_agent_docs(vault_root: Path) -> list[str]:
+    """Inject Codex-facing hyperresearch guidance into AGENTS.md.
+
+    This is intentionally separate from ``inject_agent_docs`` so Codex install
+    can avoid installing Claude hooks or skills.
+    """
+    hpr_path = _resolve_executable().replace("\\", "/")
+    from datetime import date
+
+    blurb = HYPERRESEARCH_CODEX_BLURB.format(
+        marker=HYPERRESEARCH_CODEX_SECTION_MARKER,
+        end_marker=HYPERRESEARCH_CODEX_SECTION_END,
+        hpr=hpr_path,
+        today=date.today().isoformat(),
+    )
+
+    modified: list[str] = []
+    result = _inject_into_file(
+        vault_root / "AGENTS.md",
+        blurb,
+        "AGENTS.md",
+        marker=HYPERRESEARCH_CODEX_SECTION_MARKER,
+        end_marker=HYPERRESEARCH_CODEX_SECTION_END,
+    )
+    if result:
+        modified.append(result)
+    return modified
+
+
+def _inject_into_file(
+    filepath: Path,
+    blurb: str,
+    filename: str,
+    marker: str = HYPERRESEARCH_SECTION_MARKER,
+    end_marker: str = HYPERRESEARCH_SECTION_END,
+) -> str | None:
     """Inject the hyperresearch blurb into a single file. Returns action taken or None."""
     if filepath.exists():
         content = filepath.read_text(encoding="utf-8-sig")
 
-        if HYPERRESEARCH_SECTION_MARKER in content:
+        if marker in content:
             pattern = re.compile(
-                re.escape(HYPERRESEARCH_SECTION_MARKER) + r".*?" + re.escape(HYPERRESEARCH_SECTION_END),
+                re.escape(marker) + r".*?" + re.escape(end_marker),
                 re.DOTALL,
             )
             new_content = pattern.sub(lambda _: blurb.strip(), content)

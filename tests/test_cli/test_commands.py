@@ -36,6 +36,67 @@ def test_init_json(tmp_path: Path):
     assert "vault_path" in data["data"]
 
 
+def test_install_codex_json_creates_agents_md_without_claude_hooks(tmp_path: Path):
+    root = tmp_path / "codex-kb"
+    result = runner.invoke(app, ["install", str(root), "--codex", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["ok"] is True
+    assert data["data"]["vault"] == "created"
+    assert data["data"]["hooks_installed"] == []
+    assert data["data"]["crawl4ai"] == "skipped"
+    assert data["data"]["codex_workflow"]
+    assert data["data"]["codex_trust"]["required_for_project_hooks"] is True
+    assert str(root).replace("\\", "/") in data["data"]["codex_trust"]["toml"]
+
+    agents_path = root / "AGENTS.md"
+    assert agents_path.exists()
+    body = agents_path.read_text(encoding="utf-8")
+    assert "hyperresearch for Codex" in body
+    assert "hyperresearch ... --json" in body
+    assert "Codex Trust And Hooks" in body
+    assert "Until the project is trusted" in body
+    assert "MCP is available" in body
+
+    assert not (root / ".claude").exists()
+    assert not (root / ".hyperresearch" / "hook.js").exists()
+    assert (root / ".codex" / "hooks.json").exists()
+    assert (root / ".codex" / "hooks" / "hyperresearch_pre_tool_use.py").exists()
+    assert (root / ".codex" / "config.toml").exists()
+    assert (root / ".agents" / "skills" / "hyperresearch" / "SKILL.md").exists()
+    assert (root / ".agents" / "skills" / "hyperresearch-1-decompose" / "SKILL.md").exists()
+    assert (root / ".codex" / "agents" / "hyperresearch-fetcher.toml").exists()
+
+
+def test_install_codex_human_output_includes_trust_snippet(tmp_path: Path):
+    root = tmp_path / "codex-human"
+    result = runner.invoke(app, ["install", str(root), "--codex"])
+    assert result.exit_code == 0
+
+    assert "Codex trust:" in result.output
+    assert '[projects."' in result.output
+    assert 'codex-human"]' in result.output
+    assert 'trust_level = "trusted"' in result.output
+
+
+def test_install_codex_preserves_existing_agents_md(tmp_path: Path):
+    root = tmp_path / "existing"
+    root.mkdir()
+    (root / "AGENTS.md").write_text("# Team rules\n\nDo not remove me.\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["install", str(root), "--codex", "--json"])
+    assert result.exit_code == 0
+    body = (root / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Do not remove me." in body
+    assert body.count("<!-- hyperresearch-codex:start -->") == 1
+
+    result = runner.invoke(app, ["install", str(root), "--codex", "--json"])
+    assert result.exit_code == 0
+    body = (root / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Do not remove me." in body
+    assert body.count("<!-- hyperresearch-codex:start -->") == 1
+
+
 def test_init_double(tmp_path: Path):
     runner.invoke(app, ["init", str(tmp_path / "dup")])
     result = runner.invoke(app, ["init", str(tmp_path / "dup")])
@@ -114,6 +175,18 @@ def test_search_text(vault_dir: Path):
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert data["data"]["total"] >= 1
+
+
+def test_search_empty_query_with_tag_filter(vault_dir: Path):
+    os.chdir(vault_dir)
+    runner.invoke(app, ["note", "new", "Tagged Guide", "--tag", "codex-parity"])
+    runner.invoke(app, ["sync"])
+
+    result = runner.invoke(app, ["search", "", "--tag", "codex-parity", "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    ids = {r["id"] for r in data["data"]["results"]}
+    assert "tagged-guide" in ids
 
 
 def test_graph_broken(vault_dir: Path):

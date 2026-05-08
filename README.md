@@ -13,7 +13,7 @@
 
 ---
 
-**Hyperresearch turns Claude Code into a deep research agent. and currently leads the DeepResearch-Bench RACE leaderboard (benchmarked internally).** A tier-adaptive 16-step pipeline produces adversarially-audited reports with full source provenance. Every fetched source lands in a persistent, searchable vault that compounds across sessions.
+**Hyperresearch turns Claude Code into a deep research agent, with a Codex adapter that reuses the same vault and CLI backend. It currently leads the DeepResearch-Bench RACE leaderboard (benchmarked internally).** A tier-adaptive 16-step pipeline produces adversarially-audited reports with full source provenance. Every fetched source lands in a persistent, searchable vault that compounds across sessions.
 
 <p align="center">
   <img src="assets/benchmark.png" alt="DeepResearch-Bench top-5 — hyperresearch leads the chart ahead of Grep Deep Research, Cellcog Max, nvidia-aiq, Gemini Deep Research, and OpenAI Deep Research" width="780">
@@ -23,12 +23,32 @@
 
 ## Install
 
+### Claude Code
+
 ```bash
 cd your-project
 pip install hyperresearch && hyperresearch install
 ```
 
 Then `/hyperresearch <anything>` in Claude Code.
+
+### Codex
+
+```bash
+cd your-project
+pip install hyperresearch
+hyperresearch install --codex
+codex .
+```
+
+Then ask Codex for `/hyperresearch <anything>`.
+
+`install --codex` writes Codex guidance to `AGENTS.md`, generates the entry
+skill plus all 16 step skills under `.agents/skills/`, generates custom agents
+under `.codex/agents/`, and keeps using the existing `hyperresearch ... --json`
+CLI backend. Project-local Codex hooks load only after Codex trusts the
+project; accept the Codex trust prompt if you want SessionStart and PreToolUse
+reminders.
 
 > Python 3.11–3.13. (3.14 not yet supported — use `pyenv install 3.13`, `uv venv -p 3.13`, or `py -3.13 -m venv .venv`.)
 >
@@ -38,7 +58,7 @@ Then `/hyperresearch <anything>` in Claude Code.
 
 ## The 16-step research pipeline
 
-The entry skill is a thin router. It bootstraps the canonical research query, then invokes one step skill per pipeline phase via Claude Code's `Skill` tool. Each step's procedure is loaded fresh into context only when needed defeating context-rot problems that makes long pipelines silently drop steps.
+The entry skill is a thin router. It bootstraps the canonical research query, then invokes one step skill per pipeline phase via Claude Code's `Skill` tool or the generated Codex skill adapter. Each step's procedure is loaded fresh into context only when needed defeating context-rot problems that makes long pipelines silently drop steps.
 
 | # | Step | What it does | Tiers |
 |---|---|---|---|
@@ -70,7 +90,7 @@ In your prompt, you can request one of two tiers and the rest of the pipeline sc
 
 ### The two load-bearing principles
 
-1. **Patch, never regenerate.** After step 11 produces the synthesized report (or step 10 for light tier), the only modifications are surgical Edit hunks. The patcher and polish auditor are tool-locked to `[Read, Edit]` at the Claude Code allowlist level so they physically cannot Write a new draft. Per-hunk caps make "just rewrite it" mechanically impossible. Critic findings that don't fit a small hunk escalate as structural issues.
+1. **Patch, never regenerate.** After step 11 produces the synthesized report (or step 10 for light tier), the only modifications are surgical Edit hunks. The patcher and polish auditor are tool-locked to `[Read, Edit]` at the Claude Code allowlist level so they physically cannot Write a new draft. Codex receives matching generated-agent instructions and sandbox settings, but Claude Code remains the stricter tool-lock implementation. Per-hunk caps make "just rewrite it" mechanically impossible. Critic findings that don't fit a small hunk escalate as structural issues.
 
 2. **Canonical research query is gospel.** The verbatim user prompt is persisted to `research/query-<vault_tag>.md` once and re-read by every subsequent step and every spawned subagent. Wrapper requirements (save paths, citation format, terminal sections) are a separate contract.
 
@@ -92,6 +112,10 @@ In your prompt, you can request one of two tiers and the rest of the pipeline sc
 | `hyperresearch-patcher` | Opus | Tool-locked `[Read, Edit]`. Applies critic findings as surgical Edit hunks |
 | `hyperresearch-polish-auditor` | Opus | Tool-locked `[Read, Edit]`. Cuts filler, strips hygiene leaks |
 | `hyperresearch-readability-recommender` | Opus | Writes JSON suggestions for paragraph rhythm and list/table conversion |
+
+Codex installs generated custom agents for the same roster. Their model and
+reasoning settings are adapter policy, generated from packaged mapping data,
+not a claim of exact model equivalence with Claude labels.
 
 ---
 
@@ -156,15 +180,16 @@ After the academic sweep, run web searches for context, news, non-academic angle
 
 - It doesn't replace your judgment on which sources matter. The agent picks, you steer.
 - It can't fetch what's behind a paywall you haven't logged into.
-- It runs on Anthropic models Opus + Sonnet + Haiku via the subagent roster. Costs scale with tier and corpus size. If anyone wants to port this to Codex, put up a PR! 
+- Claude Code remains the native workflow. Codex support is a generated adapter over the same bundled skills and CLI backend; tool-lock parity is enforced through Codex prompts, sandbox settings, hooks, and lint checks rather than Claude's exact allowlist mechanism.
 - The lint gate catches **structural** failures (missing scaffold, broken provenance, unresolved CRITICALs). It cannot guarantee factual accuracy, that's still your call.
 
 ---
 
 ## Requirements
 
-- Python 3.11+
-- [Claude Code](https://claude.com/claude-code)
+- Python 3.11–3.13
+- [Claude Code](https://claude.com/claude-code) for the native workflow
+- OpenAI Codex CLI for the Codex adapter workflow
 
 ---
 

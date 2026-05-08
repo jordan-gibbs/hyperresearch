@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
+.DS_Store
 *.egg-info/
 dist/
 build/
@@ -22,10 +23,11 @@ draco-bench/
 # in src/hyperresearch/skills/ (skills) and src/hyperresearch/core/hooks.py
 # (agent templates).
 .claude/
+.codex/
+.agents/
 CLAUDE.md
 AGENTS.md
 GEMINI.md
 
 # Per-vault research output
 research/
-

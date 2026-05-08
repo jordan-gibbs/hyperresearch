@@ -67,9 +67,9 @@ class Vault:
     def temp_dir(self) -> Path:
         """Sidelined notes (link-auto-resolution stubs, agent-drift artifacts).
 
-        Sibling of `notes_dir` and `index_dir`. Files here ARE still synced into
-        the DB (so wiki-link targets resolve), but they're kept out of `notes/`
-        so that directory listings of research content stay clean.
+        Sibling of `notes_dir` and `index_dir`. Note-like files here are synced
+        into the DB so wiki-link targets resolve, but workflow staging artifacts
+        are skipped by sync so repair/enrichment does not rewrite them as notes.
         """
         return self.research_dir / "temp"
 
@@ -95,7 +95,12 @@ class Vault:
         self.close()
 
     @staticmethod
-    def init(root: Path, name: str = "Research Base", research_dir: str = "research") -> Vault:
+    def init(
+        root: Path,
+        name: str = "Research Base",
+        research_dir: str = "research",
+        inject_docs: bool = True,
+    ) -> Vault:
         """Initialize a new vault at the given path."""
         root = root.resolve()
         hyperresearch_dir = root / HYPERRESEARCH_DIR
@@ -136,9 +141,10 @@ class Vault:
             "# {{ title }}\n\n"
         )
 
-        # Inject CLAUDE.md at vault root
-        from hyperresearch.core.agent_docs import inject_agent_docs
-        inject_agent_docs(root)
+        if inject_docs:
+            # Inject CLAUDE.md at vault root
+            from hyperresearch.core.agent_docs import inject_agent_docs
+            inject_agent_docs(root)
 
         return vault
 
