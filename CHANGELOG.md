@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.6] - 2026-05-14
+
+### Run-to-run safety: no more silent overwrites between /hyperresearch sessions
+
+Three changes that close the remaining "I ran another hyperresearch and lost stuff" foot-guns, so you can fire off runs back-to-back without thinking about it.
+
+- **sync no longer ingests frontmatterless scratch files (closes #25).** The depth-investigator and other agents leave plain-markdown body files under `research/temp/` after calling `note new --body-file`. Those scratch files derived the same id from their stem as the canonical notes created from them, and the UPSERT race smashed the canonical row's `path` field — silently breaking subsequent `note update --add-tag` calls. `compute_sync_plan` now peeks the first 16 bytes and skips anything that doesn't open with a YAML frontmatter delimiter. Real notes (including `graph stub` sidelined notes under `research/temp/`) always have frontmatter, so the fix is content-based and doesn't break that workflow. Belt-and-suspenders: `execute_sync` now refuses to UPSERT a note whose id is already owned by a different path, surfacing collisions to `result.errors` instead of overwriting.
+- **`hyperresearch archive-run` preserves prior-run artifacts.** A second `/hyperresearch` in the same vault used to silently overwrite `research/scaffold.md`, `prompt-decomposition.json`, `loci.json`, `comparisons.md`, all 4 `critic-findings-*.json`, `patch-log.json`, `polish-log.json`, `readability-*.json`, `corpus-critic-gaps.json`, plus the entire `research/temp/` scratch tree. The new command moves all of that into `research/runs/archive-<prev-tag>-<UTC-timestamp>/` before the next run starts. Cheap no-op on a fresh vault. Wired into the entry-skill bootstrap as step 0.5, so users don't have to remember to call it.
+- **`hyperresearch vault-tag <slug>` mints a collision-safe vault_tag.** The orchestrator's topical slug (e.g. `efield-dft-sac`) is no longer used as the final vault_tag — `hyperresearch vault-tag` appends a random 6-hex-char suffix verified unique against every prior run's `query-*.md` and `final_report_*.md` in the live vault. Re-running the same query produces a fresh tag, so prior final reports can never be overwritten. Two queries that happen to slug-collide on shared lexical material also get distinct tags. Legacy without-suffix tags from older runs can't collide with the new format by construction.
+
+**Limitation worth knowing:** these three changes solve sequential runs comprehensively. Two `/hyperresearch` invocations that *overlap in time* still race on the new files they both write to flat paths (scaffold.md, loci.json, etc.). True parallel-run safety needs per-run files to live under `research/runs/<vault_tag>/`, which is a deeper refactor — flagged but deferred.
+
 ## [0.8.5] - 2026-04-29
 
 ### Reports self-title; wikilinks become the default citation system
