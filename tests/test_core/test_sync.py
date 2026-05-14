@@ -123,3 +123,138 @@ def test_sync_excludes_research_root_staging_files(tmp_vault):
     assert "scaffold.md" not in added_names
     assert "comparisons.md" not in added_names
     assert "synthesis.md" not in added_names
+
+
+def test_sync_skips_frontmatterless_scratch_files(tmp_vault):
+    """Issue #25: agent subagents write plain-markdown scratch body files
+    under research/temp/ (e.g. interim-report-<locus>.md) before passing
+    them to `note new --body-file`. Those files MUST NOT enter the note
+    index — they collide on derived id with the canonical notes created
+    from them and silently smash the canonical row's path.
+    """
+    from hyperresearch.core.note import write_note
+
+    # Canonical note (frontmatter present).
+    write_note(tmp_vault.notes_dir, "Interim Report Foo", body="# Real\n", note_id="interim-report-foo")
+
+    # Scratch body file at research/temp/ (no frontmatter).
+    tmp_vault.temp_dir.mkdir(parents=True, exist_ok=True)
+    (tmp_vault.temp_dir / "interim-report-foo.md").write_text("# Interim report: foo\n\nbody\n")
+
+    # Also: nested temp/ inside an arbitrary sub-tree (e.g. run-dir layout).
+    nested = tmp_vault.research_dir / "runs" / "abc" / "temp"
+    nested.mkdir(parents=True)
+    (nested / "scratch.md").write_text("body without frontmatter\n")
+
+    plan = compute_sync_plan(tmp_vault)
+
+    added_rels = [str(p.relative_to(tmp_vault.root)).replace("\\", "/") for p in plan.to_add]
+    assert "research/notes/interim-report-foo.md" in added_rels
+    assert all("temp/" not in r for r in added_rels)
+
+    result = execute_sync(tmp_vault, plan)
+    assert result.added == 1
+    assert result.errors == []
+
+    # The canonical note's path is what's in the DB, not the scratch path.
+    row = tmp_vault.db.execute(
+        "SELECT path FROM notes WHERE id = ?", ("interim-report-foo",)
+    ).fetchone()
+    assert row["path"] == "research/notes/interim-report-foo.md"
+
+
+def test_sync_includes_stub_notes_in_temp(tmp_vault):
+    """research/temp/ doubles as the home for stub notes the `graph stub`
+    command creates to resolve broken wiki-links. Those notes carry full
+    YAML frontmatter and MUST continue to sync — the issue #25 fix is
+    content-based, not path-based, precisely to keep this working.
+    """
+    from hyperresearch.core.note import write_note
+
+    write_note(
+        tmp_vault.temp_dir,
+        "Stub Topic",
+        body="# Stub Topic\n\n*Stub — created to resolve a broken link.*\n",
+        note_id="stub-topic",
+        status="draft",
+        summary="Stub for [[stub-topic]]",
+    )
+
+    plan = compute_sync_plan(tmp_vault)
+    added_names = [p.name for p in plan.to_add]
+    assert "stub-topic.md" in added_names
+
+    result = execute_sync(tmp_vault, plan)
+    assert result.added == 1
+    assert result.errors == []
+    row = tmp_vault.db.execute("SELECT id FROM notes WHERE id = ?", ("stub-topic",)).fetchone()
+    assert row is not None
+
+
+def test_sync_surfaces_duplicate_id_collision_as_error(tmp_vault):
+    """Defense-in-depth (#25): if a new file claims an id already owned by
+    another file in the vault, the second one must NOT silently smash the
+    first's row. Surface it as a result.errors entry instead.
+    """
+    from hyperresearch.core.note import write_note
+
+    # Establish the canonical first.
+    write_note(tmp_vault.notes_dir, "Topic", note_id="topic", body="# Topic A\n")
+    plan1 = compute_sync_plan(tmp_vault)
+    result1 = execute_sync(tmp_vault, plan1)
+    assert result1.added == 1
+    assert result1.errors == []
+
+    # Drop a second file elsewhere that hand-rolls the same id in frontmatter.
+    tmp_vault.temp_dir.mkdir(parents=True, exist_ok=True)
+    (tmp_vault.temp_dir / "duplicate.md").write_text(
+        "---\nid: topic\ntitle: Topic Duplicate\n---\n\n# Topic B\n"
+    )
+
+    plan2 = compute_sync_plan(tmp_vault)
+    result2 = execute_sync(tmp_vault, plan2)
+
+    assert result2.added == 0
+    assert len(result2.errors) == 1
+    assert "id collision" in result2.errors[0]["error"]
+
+    # The canonical path is preserved.
+    row = tmp_vault.db.execute("SELECT path FROM notes WHERE id = ?", ("topic",)).fetchone()
+    assert row["path"] == "research/notes/topic.md"
+
+
+def test_sync_cleans_up_stale_collided_row(tmp_vault):
+    """Pre-fix vaults can have a DB row whose `path` points into research/temp/
+    (the scratch file won the UPSERT race). After the fix lands, that file no
+    longer enters the sync plan as an add/update; instead it appears in
+    `to_delete` so the bad row goes away on the next sync. The canonical
+    file then re-adds cleanly.
+    """
+    from hyperresearch.core.note import write_note
+
+    # Simulate the pre-fix DB state directly.
+    write_note(tmp_vault.notes_dir, "Foo", note_id="foo", body="# Foo\n")
+    plan = compute_sync_plan(tmp_vault)
+    execute_sync(tmp_vault, plan)
+
+    # Stamp the DB row's path onto a scratch location, as the old race would.
+    tmp_vault.db.execute(
+        "UPDATE notes SET path = ? WHERE id = ?",
+        ("research/temp/foo.md", "foo"),
+    )
+    tmp_vault.db.commit()
+    tmp_vault.temp_dir.mkdir(parents=True, exist_ok=True)
+    (tmp_vault.temp_dir / "foo.md").write_text("scratch body without frontmatter\n")
+
+    plan2 = compute_sync_plan(tmp_vault)
+    # The scratch file is not in to_add (no frontmatter); the stale db path
+    # is in to_delete; the canonical file is in to_add.
+    to_delete_paths = list(plan2.to_delete)
+    to_add_rels = [str(p.relative_to(tmp_vault.root)).replace("\\", "/") for p in plan2.to_add]
+    assert "research/temp/foo.md" in to_delete_paths
+    assert "research/notes/foo.md" in to_add_rels
+
+    result = execute_sync(tmp_vault, plan2)
+    assert result.errors == []
+    row = tmp_vault.db.execute("SELECT path FROM notes WHERE id = ?", ("foo",)).fetchone()
+    assert row["path"] == "research/notes/foo.md"

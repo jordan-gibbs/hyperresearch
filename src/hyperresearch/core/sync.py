@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import sqlite3
 import time
 from dataclasses import dataclass, field
@@ -42,6 +43,31 @@ def _should_exclude(rel_path: str, exclude_parts: list[str]) -> bool:
     return first in exclude_parts
 
 
+_FRONTMATTER_PROBE = re.compile(rb"^---[ \t]*\r?\n")
+
+
+def _has_frontmatter(path: Path) -> bool:
+    """Cheap content probe — true iff the file opens with a YAML frontmatter
+    delimiter (matching parse_frontmatter's regex, with optional UTF-8 BOM).
+
+    Real notes — including stub notes under research/temp/ — always carry
+    frontmatter (write_note() in core/note.py emits it unconditionally).
+    Files without it are agent scratch artifacts that should never enter the
+    note index (see issue #25): interim-report body files written before
+    `note new --body-file`, evidence-digest.md, draft-{a,b,c}.md, and similar.
+    Ingesting them produces same-id collisions with the canonical notes
+    derived from them.
+    """
+    try:
+        with path.open("rb") as f:
+            head = f.read(16)
+    except OSError:
+        return False
+    if head.startswith(b"\xef\xbb\xbf"):
+        head = head[3:]
+    return _FRONTMATTER_PROBE.match(head) is not None
+
+
 def compute_sync_plan(vault, force: bool = False) -> SyncPlan:
     """Compare disk state against DB state. Returns a plan."""
     plan = SyncPlan()
@@ -64,6 +90,9 @@ def compute_sync_plan(vault, force: bool = False) -> SyncPlan:
         # Skip staging files at the research/ root. Real notes live in
         # research/notes/** or research/index/**.
         if md_file.parent == kb_dir:
+            continue
+        # Skip scratch artifacts without YAML frontmatter.
+        if not _has_frontmatter(md_file):
             continue
         rel = md_file.relative_to(vault.root).as_posix()
         disk_files[rel] = md_file.stat().st_mtime
@@ -109,6 +138,36 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
 
     changed_ids: set[str] = set()
 
+    # Defense-in-depth (#25): refuse to silently smash an existing row's path
+    # field when a second file in the same pass derives the same id, or when
+    # a new file claims an id that's already in the DB at a different path.
+    # The collision would otherwise be order-dependent and lose data on the
+    # next `note update`.
+    deleted_paths = set(plan.to_delete)
+    id_to_path: dict[str, str] = {}
+    for row in conn.execute("SELECT id, path FROM notes"):
+        if row["path"] in deleted_paths:
+            continue
+        id_to_path[row["id"]] = row["path"]
+
+    def _upsert_with_collision_check(file_path: Path) -> str | None:
+        note = read_note(file_path, vault.root)
+        rel = file_path.relative_to(vault.root).as_posix()
+        existing = id_to_path.get(note.meta.id)
+        if existing is not None and existing != rel:
+            result.errors.append({
+                "path": rel,
+                "error": (
+                    f"id collision: '{note.meta.id}' already belongs to "
+                    f"'{existing}'. Skipped to avoid silent overwrite."
+                ),
+            })
+            return None
+        _upsert_note_to_db(conn, note, now_iso, file_mtime=file_path.stat().st_mtime)
+        id_to_path[note.meta.id] = rel
+        changed_ids.add(note.meta.id)
+        return note.meta.id
+
     try:
         # Process deletes
         for rel_path in plan.to_delete:
@@ -124,20 +183,16 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
         # Process adds
         for file_path in plan.to_add:
             try:
-                note = read_note(file_path, vault.root)
-                _upsert_note_to_db(conn, note, now_iso, file_mtime=file_path.stat().st_mtime)
-                changed_ids.add(note.meta.id)
-                result.added += 1
+                if _upsert_with_collision_check(file_path) is not None:
+                    result.added += 1
             except Exception as e:
                 result.errors.append({"path": str(file_path), "error": str(e)})
 
         # Process updates
         for file_path in plan.to_update:
             try:
-                note = read_note(file_path, vault.root)
-                _upsert_note_to_db(conn, note, now_iso, file_mtime=file_path.stat().st_mtime)
-                changed_ids.add(note.meta.id)
-                result.updated += 1
+                if _upsert_with_collision_check(file_path) is not None:
+                    result.updated += 1
             except Exception as e:
                 result.errors.append({"path": str(file_path), "error": str(e)})
 
