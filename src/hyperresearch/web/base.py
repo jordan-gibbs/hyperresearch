@@ -166,4 +166,12 @@ def get_provider(
 
         return ExaProvider()
 
-    raise ValueError(f"Unknown web provider: {name!r}. Available: builtin, crawl4ai, exa")
+    if name == "tavily":
+        try:
+            from hyperresearch.web.tavily_provider import TavilyProvider
+
+            return TavilyProvider()
+        except ImportError:
+            raise ImportError("tavily provider requires: pip install \"hyperresearch[tavily]\"")
+
+    raise ValueError(f"Unknown web provider: {name!r}. Available: builtin, crawl4ai, exa, tavily")
