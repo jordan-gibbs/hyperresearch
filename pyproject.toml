@@ -28,7 +28,7 @@ dependencies = [
     "pydantic>=2.0",
     "jinja2>=3.1",
     "platformdirs>=4.0",
-    "Crawl4AI>=0.4",
+    "Crawl4AI>=0.7.3",
     "pymupdf>=1.24",
     "httpx>=0.27",
 ]
