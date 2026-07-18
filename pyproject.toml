@@ -37,8 +37,9 @@ dependencies = [
 crawl4ai = ["Crawl4AI>=0.4"]
 mcp = ["mcp>=1.6"]
 exa = ["exa-py>=2.0.0"]
+tavily = ["tavily-python>=0.3"]
 watch = ["watchdog>=4.0"]
-all = ["hyperresearch[crawl4ai,mcp,exa,watch]"]
+all = ["hyperresearch[crawl4ai,mcp,exa,tavily,watch]"]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
