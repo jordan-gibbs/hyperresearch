@@ -9,6 +9,7 @@ Supports authenticated crawling via crawl4ai browser profiles:
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import pathlib
 import sys
@@ -64,11 +65,46 @@ def _looks_like_binary(text: str) -> bool:
     return binary_garbage_ratio(sample) > 0.05
 
 
-def _fetch_pdf(url: str) -> WebResult | None:
-    """Download a PDF and extract text using pymupdf. Returns None if extraction fails."""
+_PYMUPDF_MISSING_LOGGED = False
+
+
+def _pdf_log() -> logging.Logger:
+    return logging.getLogger("hyperresearch.pdf")
+
+
+def _import_pymupdf():
+    """Import pymupdf, warning loudly (once) if it is unavailable.
+
+    Without this warning a missing/broken pymupdf is invisible: every PDF falls
+    through to the browser lane, arrives as binary, and is discarded as junk —
+    across every domain at once, with nothing explaining why.
+    """
+    global _PYMUPDF_MISSING_LOGGED
     try:
         import pymupdf
-    except ImportError:
+
+        return pymupdf
+    except ImportError as exc:
+        if not _PYMUPDF_MISSING_LOGGED:
+            _PYMUPDF_MISSING_LOGGED = True
+            _pdf_log().error(
+                "pymupdf could not be imported (%s) — PDF text extraction is disabled, "
+                "so every PDF will be discarded as junk content. Reinstall it with "
+                "`pip install --force-reinstall pymupdf`.",
+                exc,
+            )
+        return None
+
+
+def _fetch_pdf(url: str) -> WebResult | None:
+    """Download a PDF and extract text using pymupdf. Returns None if extraction fails.
+
+    Every failure path logs its reason. A silent None here is indistinguishable
+    from "this URL is not a PDF", which is what made missing-PDF failures so hard
+    to diagnose.
+    """
+    pymupdf = _import_pymupdf()
+    if pymupdf is None:
         return None
 
     import httpx
@@ -81,17 +117,31 @@ def _fetch_pdf(url: str) -> WebResult | None:
                 url += ".pdf"
 
         resp = httpx.get(url, follow_redirects=True, timeout=30, verify=False, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
         })
         if resp.status_code != 200:
+            _pdf_log().warning("PDF fetch for %s returned HTTP %s", url, resp.status_code)
             return None
 
-        content_type = resp.headers.get("content-type", "")
-        if "pdf" not in content_type and not url.lower().endswith(".pdf"):
-            return None  # Not actually a PDF
-
         pdf_bytes = resp.content
+        content_type = resp.headers.get("content-type", "")
+
+        # Magic bytes are authoritative. Servers mislabel PDFs as octet-stream,
+        # and plenty of PDF URLs carry no .pdf suffix, so trusting the header or
+        # the URL shape alone silently drops real PDFs.
+        if not pdf_bytes.startswith(b"%PDF-"):
+            _pdf_log().warning(
+                "PDF fetch for %s did not return PDF data (content-type=%r, first bytes=%r)",
+                url, content_type, pdf_bytes[:8],
+            )
+            return None
+
         if len(pdf_bytes) < 100:
+            _pdf_log().warning("PDF fetch for %s returned only %d bytes", url, len(pdf_bytes))
             return None
 
         doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
@@ -103,9 +153,14 @@ def _fetch_pdf(url: str) -> WebResult | None:
             if text.strip():
                 pages.append(text)
 
+        page_count = doc.page_count
         doc.close()
 
         if not pages:
+            _pdf_log().warning(
+                "PDF at %s has %d page(s) but no extractable text layer — "
+                "likely a scanned document requiring OCR.", url, page_count,
+            )
             return None
 
         # Build markdown from extracted text
@@ -129,8 +184,7 @@ def _fetch_pdf(url: str) -> WebResult | None:
         )
 
     except Exception as e:
-        import logging
-        logging.getLogger("hyperresearch.pdf").warning(f"PDF extraction failed for {url}: {e}")
+        _pdf_log().warning("PDF extraction failed for %s: %s", url, e)
         return None
 
 
