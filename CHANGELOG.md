@@ -1,6 +1,16 @@
 # Changelog
 
-## [Unreleased]
+## [0.8.7] - 2026-07-18
+
+Community-fix release: five contributed PRs plus two maintainer follow-ups, closing #32, #33, #35, #37, and #39.
+
+### Fetching and search
+
+- **Non-English pages are no longer discarded as binary garbage (closes #37, thanks @synqing).** The junk filter counted every character above `ord(127)` as non-printable, so CJK, Arabic, Cyrillic, and accented-Latin pages always tripped the threshold and were thrown away. The check now counts only true control characters and U+FFFD, shared between both fetch gates via one `binary_garbage_ratio()` so they can't drift apart again. Regression fixtures use real Chinese/Japanese/Arabic/Russian/French prose.
+- **Degenerate or failed searches error loudly instead of returning `[]` (closes #32, thanks @ankaggarwal94 for the report and @synqing for the fix).** An empty query, a malformed query, and a broken FTS index were all silently swallowed and reported as "no results." `search_fts` now raises `SearchQueryError` for queries with no searchable terms (CLI exits 2 with `BAD_QUERY` in `--json` mode) and lets genuine index failures propagate. The shipped step skills and agent prompts that used `search "" --tag` as a list-all idiom were rewritten to `note list --tag ... --all`.
+- **Patchright stealth actually engages now (closes #35, thanks @seanyoungberg).** The crawler was built without an explicit strategy, so crawl4ai defaulted to plain Playwright and the stealth driver never ran. The provider now wires `UndetectedAdapter` through `AsyncPlaywrightCrawlerStrategy` at both fetch call sites; Crawl4AI floor raised to 0.7.3.
+- **PDF fetch failures are diagnosable instead of silent (closes #39, thanks @mcowan38 for the report and @synqing for the fix).** Every `_fetch_pdf` failure path now logs its reason — including a missing/broken pymupdf, which used to silently disable all PDF ingestion and present as every PDF on every domain getting junked. PDF identity now comes from `%PDF-` magic bytes rather than the content-type header or URL suffix, so mislabelled PDFs are kept and HTML masquerading as PDF is named in the log.
+- **New `tavily` web provider (thanks @tavily-integrations).** `provider = "tavily"` in config plus `TAVILY_API_KEY`; optional install via `pip install "hyperresearch[tavily]"`. Ships with offline tests that stub the SDK.
 
 ### Lint
 
