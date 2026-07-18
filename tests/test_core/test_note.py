@@ -1,5 +1,6 @@
 """Tests for note read/write operations."""
 
+import unicodedata
 
 from hyperresearch.core.note import read_note, strip_markdown, write_note
 from hyperresearch.models.note import slugify
@@ -11,6 +12,53 @@ def test_slugify_basic():
     assert slugify("  spaces  ") == "spaces"
     assert slugify("CamelCase") == "camelcase"
     assert slugify("dashes--double") == "dashes-double"
+
+
+# --- Non-Latin titles must produce meaningful ids ----------------------------
+# `flags=re.ASCII` stripped every non-Latin character, so a vault of Japanese
+# sources degenerated into wikipedia, wikipedia-2, wikipedia-3 — ids that carry
+# no information and make [[wikilink]] citations useless.
+
+
+def test_slugify_preserves_cjk():
+    assert slugify("バックライト - Wikipedia") == "バックライト-wikipedia"
+    assert slugify("液晶ディスプレイ - Wikipedia") == "液晶ディスプレイ-wikipedia"
+    assert slugify("导光板 - 维基百科") == "导光板-维基百科"
+
+
+def test_slugify_preserves_other_scripts():
+    assert slugify("Диффузор (оптика)") == "диффузор-оптика"
+    assert slugify("Évolution des systèmes") == "évolution-des-systèmes"
+
+
+def test_distinct_cjk_titles_get_distinct_slugs():
+    """The actual bug: different Japanese pages must not collide."""
+    assert slugify("バックライト - Wikipedia") != slugify("液晶ディスプレイ - Wikipedia")
+
+
+def test_slugify_ascii_behaviour_is_unchanged():
+    """Existing vaults must keep resolving — ASCII slugs must not shift."""
+    for title in ("Diffuser (optics) - Wikipedia", "Python 3.12 Features!", "CamelCase"):
+        assert slugify(title).isascii()
+
+
+def test_slugify_symbol_only_title_falls_back_to_hash():
+    result = slugify("!!! ??? ***")
+    assert result.startswith("note-")
+
+
+def test_slugify_respects_filesystem_byte_limit():
+    """One CJK char is 3 UTF-8 bytes; most filesystems cap a name at 255 bytes."""
+    result = slugify("光" * 200)
+    assert len(result.encode("utf-8")) <= 200
+    assert result == unicodedata.normalize("NFC", result), "must not split a character"
+
+
+def test_slugify_normalises_equivalent_unicode():
+    """Composed and decomposed forms of the same title must agree."""
+    composed = "café"          # é as U+00E9
+    decomposed = "café"  # e + combining acute
+    assert slugify(composed) == slugify(decomposed)
 
 
 def test_write_and_read_roundtrip(tmp_vault):
