@@ -1,7 +1,0 @@
-# Workspace-local agent skills. Pulled skills + drafts are rebuildable
-# via `knack pull` / `knack publish`, so we keep them out of source
-# control by default. Remove individual entries from this file to commit
-# specific skills (and their drafts) that you want pinned to the repo.
-*
-!.gitignore
-!README.md
