@@ -161,10 +161,10 @@ Context compaction may eat parts of this conversation. If you're unsure what ste
 1. **Check the TodoWrite list.** It carries integer step numbers and survives compaction.
 2. **Check disk artifacts.** Each step writes a canonical artifact:
    - Step 1: `research/scaffold.md`, `research/prompt-decomposition.json`, `research/temp/coverage-matrix.md`
-   - Step 2: vault notes tagged with vault_tag (`$HPR search "" --tag <vault_tag> -j`)
+   - Step 2: vault notes tagged with vault_tag (`$HPR note list --tag <vault_tag> --all -j`)
    - Step 3: `research/temp/contradiction-graph.json`, `research/temp/consensus-claims.json`
    - Step 4: `research/loci.json`
-   - Step 5: vault notes with `type: interim` (`$HPR search "" --tag <vault_tag> --type interim -j`)
+   - Step 5: vault notes with `type: interim` (`$HPR note list --tag <vault_tag> --type interim --all -j`)
    - Step 6: `research/comparisons.md`
    - Step 7: `research/temp/source-tensions.json`
    - Step 8: `research/corpus-critic-gaps.json`, `research/temp/corpus-critic-results.md`

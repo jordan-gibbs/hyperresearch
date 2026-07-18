@@ -25,7 +25,7 @@ Read these inputs:
 - `research/temp/contradiction-graph.json` — ranked fight clusters (if step 3 ran)
 - `research/temp/coverage-gaps.md` — which atomic items have weak coverage
 
-Survey the corpus: `$HPR search "" --tag <vault_tag> -j` to confirm width sweep is complete.
+Survey the corpus: `$HPR note list --tag <vault_tag> --all -j` to confirm width sweep is complete.
 
 ---
 

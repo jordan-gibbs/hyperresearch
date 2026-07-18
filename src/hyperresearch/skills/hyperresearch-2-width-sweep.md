@@ -165,7 +165,7 @@ Append a few lines with `Edit` or `Write` every 30-60 seconds. Productive thinki
 
 **Vault count check** — once every 60 seconds max:
 ```bash
-PYTHONIOENCODING=utf-8 $HPR search "" --tag <vault_tag> --json | python -c "import sys,json; d=json.load(sys.stdin); print(f'Notes in vault: {len(d.get(\"data\",{}).get(\"results\",[]))}')"
+PYTHONIOENCODING=utf-8 $HPR note list --tag <vault_tag> --all --json | python -c "import sys,json; d=json.load(sys.stdin); print(f'Notes in vault: {len(d.get(\"data\",[]))}')"
 ```
 
 The wave is done when the vault note count is ≥80% of total URLs queued.
@@ -176,7 +176,7 @@ The wave is done when the vault note count is ≥80% of total URLs queued.
 
 After Wave 1 returns, run the coverage check before proceeding:
 
-1. **List fetched sources:** `$HPR search "" --tag <vault_tag> --json` — count substantive (non-deprecated) notes.
+1. **List fetched sources:** `$HPR note list --tag <vault_tag> --all --json` — count substantive (non-deprecated) notes.
 
 2. **Map sources → atomic items.** For each atomic item in the decomposition, identify which fetched sources serve it. Mark each item as:
    - **Well-covered** (4+ relevant sources)

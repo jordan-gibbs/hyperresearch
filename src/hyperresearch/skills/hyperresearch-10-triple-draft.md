@@ -30,7 +30,7 @@ Read these inputs:
 - `research/comparisons.md` (full tier) — cross-locus tensions
 - `research/temp/source-tensions.json` (full tier) — expert disagreements
 - `research/temp/coverage-gaps.md` (if exists) — items with weak source coverage
-- Survey vault: `$HPR search "" --tag <vault_tag> -j` for the evidence landscape
+- Survey vault: `$HPR note list --tag <vault_tag> --all -j` for the evidence landscape
 - Modality calibration (from the scaffold's `modality` field):
   - **collect** — enumerative coverage, per-entity sections with named fields
   - **synthesize** — defended thesis with evidence chains, interpretive density
@@ -59,7 +59,7 @@ If `pipeline_tier == "light"`: SKIP step 10.1 — 10.3 below and follow this sec
 
 **Light tier writes a single draft directly to `research/notes/final_report_<vault_tag>.md`.** No subagents, no triple-draft ensemble, no synthesizer.
 
-1. **Read the vault directly.** Light tier has no `evidence-digest.md` (step 9 was skipped). Survey the vault: `$HPR search "" --tag <vault_tag> -j` and pick the 8–15 most relevant non-deprecated notes. Read each one (`$HPR note show <id1> <id2> ... -j`) before writing.
+1. **Read the vault directly.** Light tier has no `evidence-digest.md` (step 9 was skipped). Survey the vault: `$HPR note list --tag <vault_tag> --all -j` and pick the 8–15 most relevant non-deprecated notes. Read each one (`$HPR note show <id1> <id2> ... -j`) before writing.
 
 2. **Honor the structural contract.**
    - Use the literal H2 headings from `required_section_headings` in `research/prompt-decomposition.json`, in order.
@@ -101,7 +101,7 @@ Write the 3 angle assignments to `research/temp/draft-angles.md` (for the run lo
 
 1. **List all substantive vault notes:**
    ```bash
-   $HPR search "" --tag <vault_tag> --json
+   $HPR note list --tag <vault_tag> --all --json
    ```
    Filter to non-deprecated notes. You should have 50-100 candidates.
 
