@@ -15,6 +15,8 @@ import sys
 from datetime import UTC, datetime
 
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, DefaultMarkdownGenerator
+from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
+from crawl4ai.browser_adapter import UndetectedAdapter
 from crawl4ai.content_filter_strategy import PruningContentFilter
 
 from hyperresearch.web.base import WebResult, binary_garbage_ratio
@@ -190,6 +192,23 @@ class Crawl4AIProvider:
             markdown_generator=self._md_generator,
         )
 
+    def _make_crawler(self) -> AsyncWebCrawler:
+        """Build an AsyncWebCrawler wired with the stealth (patchright) adapter.
+
+        crawl4ai's AsyncWebCrawler defaults to PlaywrightAdapter (plain
+        playwright); patchright/stealth only engages when an UndetectedAdapter is
+        passed via an explicit AsyncPlaywrightCrawlerStrategy. Without this the
+        provider's anti-bot behavior is only simulate_user + smart-wait. The
+        adapter's use_undetected flag is threaded through every BrowserManager
+        launch branch (default, persistent-context, and managed-browser/CDP), so
+        this is compatible with the authenticated-profile (user_data_dir) path.
+        """
+        strategy = AsyncPlaywrightCrawlerStrategy(
+            browser_config=self._browser_config,
+            browser_adapter=UndetectedAdapter(),
+        )
+        return AsyncWebCrawler(crawler_strategy=strategy, config=self._browser_config)
+
     def fetch(self, url: str) -> WebResult:
         # PDF detection: fetch directly with httpx, extract text with pymupdf
         if _is_pdf_url(url):
@@ -275,7 +294,7 @@ class Crawl4AIProvider:
         )
 
     async def _fetch_async(self, url: str) -> WebResult:
-        async with AsyncWebCrawler(config=self._browser_config) as crawler:
+        async with self._make_crawler() as crawler:
             result = await crawler.arun(url=url, config=self._run_config)
             metadata = result.metadata or {}
 
@@ -346,7 +365,7 @@ class Crawl4AIProvider:
 
         # Fetch HTML pages with browser
         if html_urls:
-            async with AsyncWebCrawler(config=self._browser_config) as crawler:
+            async with self._make_crawler() as crawler:
                 results = await crawler.arun_many(urls=html_urls, config=self._run_config)
                 for cr, url in zip(results, html_urls, strict=False):
                     if not cr.success:
