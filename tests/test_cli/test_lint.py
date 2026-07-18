@@ -1196,7 +1196,7 @@ def test_patch_surgery_empty_log_without_findings_is_silent(tmp_vault):
 # ---------------------------------------------------------------------------
 
 
-def _write_decomposition(vault, entities=None, formats=None):
+def _write_decomposition(vault, entities=None, formats=None, citation_style=None):
     import json as _json
     research = vault.root / "research"
     research.mkdir(parents=True, exist_ok=True)
@@ -1208,6 +1208,8 @@ def _write_decomposition(vault, entities=None, formats=None):
         "time_horizons": [],
         "scope_conditions": [],
     }
+    if citation_style is not None:
+        data["citation_style"] = citation_style
     (research / "prompt-decomposition.json").write_text(
         _json.dumps(data, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -1411,3 +1413,121 @@ def test_extract_coverage_skips_on_hyperresearch_runs(tmp_vault):
     ]
     # Silent on hyperresearch — locus-coverage handles this mode
     assert issues == []
+
+
+# ---------------------------------------------------------------------------
+# citation-style-preservation
+# ---------------------------------------------------------------------------
+
+
+def _citation_issues(out: str) -> list[dict]:
+    import json
+    data = json.loads(out)
+    return [
+        i for i in data.get("data", {}).get("issues", [])
+        if i.get("rule") == "citation-style-preservation"
+    ]
+
+
+def test_citation_preservation_passes_with_resolvable_wikilink(tmp_vault):
+    _write_source(tmp_vault, "Battery Paper", "battery-paper")
+    _write_decomposition(tmp_vault, citation_style="wikilink")
+    _write_final_report(
+        tmp_vault,
+        "# Report\n\nSolid-state batteries are improving [[battery-paper]].\n",
+    )
+    code, out = _run_lint(tmp_vault, rule="citation-style-preservation")
+    assert code == 0
+    assert _citation_issues(out) == []
+
+
+def test_citation_preservation_flags_report_with_no_wikilinks(tmp_vault):
+    _write_source(tmp_vault, "Battery Paper", "battery-paper")
+    _write_decomposition(tmp_vault, citation_style="wikilink")
+    _write_final_report(tmp_vault, "# Report\n\nAll citations were stripped.\n")
+    _, out = _run_lint(tmp_vault, rule="citation-style-preservation")
+    issues = _citation_issues(out)
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "error"
+    assert "no [[wikilink]] markers" in issues[0]["message"]
+
+
+def test_citation_preservation_flags_only_unresolvable_wikilinks(tmp_vault):
+    _write_source(tmp_vault, "Battery Paper", "battery-paper")
+    _write_decomposition(tmp_vault, citation_style="wikilink")
+    _write_final_report(
+        tmp_vault,
+        "# Report\n\nSee [[does-not-exist]] and [[also-missing|display text]].\n",
+    )
+    _, out = _run_lint(tmp_vault, rule="citation-style-preservation")
+    issues = _citation_issues(out)
+    assert len(issues) == 1
+    assert "none of which resolve" in issues[0]["message"]
+
+
+def test_citation_preservation_wikilink_with_display_pipe_resolves(tmp_vault):
+    _write_source(tmp_vault, "Battery Paper", "battery-paper")
+    _write_decomposition(tmp_vault, citation_style="wikilink")
+    _write_final_report(
+        tmp_vault,
+        "# Report\n\nPer [[battery-paper|Chen et al. 2025]], density doubled.\n",
+    )
+    _, out = _run_lint(tmp_vault, rule="citation-style-preservation")
+    assert _citation_issues(out) == []
+
+
+def test_citation_preservation_skips_when_no_source_notes(tmp_vault):
+    # Nothing to cite -> nothing to enforce.
+    _write_decomposition(tmp_vault, citation_style="wikilink")
+    _write_final_report(tmp_vault, "# Report\n\nNo sources exist yet.\n")
+    _, out = _run_lint(tmp_vault, rule="citation-style-preservation")
+    assert _citation_issues(out) == []
+
+
+def test_citation_preservation_skips_without_decomposition(tmp_vault):
+    _write_source(tmp_vault, "Battery Paper", "battery-paper")
+    _write_final_report(tmp_vault, "# Report\n\nNo decomposition declared.\n")
+    _, out = _run_lint(tmp_vault, rule="citation-style-preservation")
+    assert _citation_issues(out) == []
+
+
+def test_citation_preservation_skips_style_none(tmp_vault):
+    _write_source(tmp_vault, "Battery Paper", "battery-paper")
+    _write_decomposition(tmp_vault, citation_style="none")
+    _write_final_report(tmp_vault, "# Report\n\nDeliberately citation-free.\n")
+    _, out = _run_lint(tmp_vault, rule="citation-style-preservation")
+    assert _citation_issues(out) == []
+
+
+def test_citation_preservation_inline_passes_with_refs_and_heading(tmp_vault):
+    _write_source(tmp_vault, "Battery Paper", "battery-paper")
+    _write_decomposition(tmp_vault, citation_style="inline")
+    _write_final_report(
+        tmp_vault,
+        "# Report\n\nDensity doubled [1].\n\n## Sources\n\n1. Chen et al. 2025\n",
+    )
+    _, out = _run_lint(tmp_vault, rule="citation-style-preservation")
+    assert _citation_issues(out) == []
+
+
+def test_citation_preservation_inline_flags_missing_refs(tmp_vault):
+    _write_source(tmp_vault, "Battery Paper", "battery-paper")
+    _write_decomposition(tmp_vault, citation_style="inline")
+    _write_final_report(tmp_vault, "# Report\n\nNo citations at all.\n")
+    _, out = _run_lint(tmp_vault, rule="citation-style-preservation")
+    issues = _citation_issues(out)
+    assert len(issues) == 1
+    assert issues[0]["severity"] == "error"
+    assert "numbered [N] reference markers" in issues[0]["message"]
+    assert "Sources/References section heading" in issues[0]["message"]
+
+
+def test_citation_preservation_wrapper_contract_overrides_style(tmp_vault):
+    # Decomposition says wikilink, wrapper overrides to none -> rule skips
+    # even though the report has no wikilinks.
+    _write_source(tmp_vault, "Battery Paper", "battery-paper")
+    _write_decomposition(tmp_vault, citation_style="wikilink")
+    _write_wrapper_contract(tmp_vault, citation_style="none")
+    _write_final_report(tmp_vault, "# Report\n\nWrapper said no citations.\n")
+    _, out = _run_lint(tmp_vault, rule="citation-style-preservation")
+    assert _citation_issues(out) == []

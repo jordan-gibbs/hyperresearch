@@ -26,6 +26,7 @@ RULES = {
     "locus-coverage": "Loci identified in Layer 2 missing their interim-report notes (depth investigator skipped)",
     "patch-surgery": "Critical critic findings skipped by the patcher (Layer 6 regeneration guard tripped)",
     "instruction-coverage": "Atomic items from prompt-decomposition missing from the final report (draft drifted from user's ask)",
+    "citation-style-preservation": "Final report carries no citations matching the declared citation_style (wikilink markers or numbered references stripped)",
     "extract-coverage": "Light-tier runs with fetched sources but no paired extract notes (reading loop skipped or source-analyst not delegated for long sources)",
     "orphaned-raw-files": "Files in research/raw/ with no matching note (disk leak from old note rm)",
     "singleton-tags": "Tags used by only one note",
@@ -1196,6 +1197,120 @@ def lint(
                             "review manually."
                         ),
                     })
+
+    if "citation-style-preservation" in rules_to_run:
+        # The polish step (15) is instructed by prompt to preserve
+        # `[[<source-note-id>]]` markers when citation_style == "wikilink" —
+        # they ARE the citation system. Nothing structural enforced that: a
+        # synthesizer or polish regression that strips every source wikilink
+        # would ship a citation-free report. This rule is the presence-only
+        # backstop: at least one citation matching the declared style must
+        # survive in the final report. Deliberately NOT a density floor —
+        # short reports and quote-heavy sections make density checks
+        # false-positive; a separate warning-level rule can add that later.
+        decomp_path = vault.root / "research" / "prompt-decomposition.json"
+        citation_style: str | None = None
+        if decomp_path.exists():
+            try:
+                decomp = json.loads(decomp_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                # Corrupt decomposition JSON is already reported by
+                # instruction-coverage; don't double-report here.
+                decomp = None
+            if isinstance(decomp, dict) and isinstance(decomp.get("citation_style"), str):
+                citation_style = decomp["citation_style"]
+
+        # Wrapper contract overrides the decomposition's citation_style
+        # (read at lint time, so a mid-pipeline wrapper change wins naturally).
+        contract_path = vault.root / "research" / "wrapper_contract.json"
+        if contract_path.exists():
+            try:
+                contract = json.loads(contract_path.read_text(encoding="utf-8-sig"))
+            except (OSError, json.JSONDecodeError):
+                # Unreadable contract is already reported by wrapper-report.
+                contract = None
+            if isinstance(contract, dict) and isinstance(contract.get("citation_style"), str):
+                citation_style = contract["citation_style"]
+
+        if citation_style in ("wikilink", "inline"):
+            source_count_row = conn.execute(
+                "SELECT COUNT(*) AS c FROM notes n "
+                "WHERE n.source IS NOT NULL "
+                "AND n.id NOT LIKE '\\_%' ESCAPE '\\' "
+                "AND n.type NOT IN ('index','raw','moc')"
+            ).fetchone()
+            notes_dir = vault.root / "research" / "notes"
+            report_candidates = sorted(
+                notes_dir.glob("final_report*.md"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            ) if notes_dir.exists() else []
+            # No source notes => nothing to cite; no report => wrapper-report
+            # already errors on that. Either way there is nothing to check.
+            if source_count_row["c"] > 0 and report_candidates:
+                report_path = report_candidates[0]
+                try:
+                    report_text = report_path.read_text(encoding="utf-8-sig")
+                except OSError:
+                    report_text = ""
+
+                if citation_style == "wikilink":
+                    import re as _re
+                    all_note_ids = {
+                        r["id"] for r in conn.execute("SELECT id FROM notes")
+                    }
+                    targets = [
+                        t.split("|", 1)[0].strip()
+                        for t in _re.findall(r"\[\[([^\]]+)\]\]", report_text)
+                    ]
+                    resolved = [t for t in targets if t in all_note_ids]
+                    if not resolved:
+                        detail = (
+                            f"it contains {len(targets)} wikilink(s), none of "
+                            "which resolve to a vault note"
+                            if targets
+                            else "it contains no [[wikilink]] markers at all"
+                        )
+                        issues.append({
+                            "rule": "citation-style-preservation",
+                            "severity": "error",
+                            "note_id": "<vault>",
+                            "note_path": str(report_path),
+                            "message": (
+                                "citation_style is 'wikilink' but the final "
+                                f"report cites no vault sources: {detail}. "
+                                "A polish/synthesis step likely stripped the "
+                                "source citations. Restore [[<source-note-id>]] "
+                                "markers for the claims the corpus supports."
+                            ),
+                        })
+
+                elif citation_style == "inline":
+                    import re as _re
+                    has_numbered_ref = bool(_re.search(r"\[\d+\]", report_text))
+                    has_refs_heading = bool(_re.search(
+                        r"^#{1,6}\s*(sources|references)\b",
+                        report_text,
+                        _re.IGNORECASE | _re.MULTILINE,
+                    ))
+                    if not (has_numbered_ref and has_refs_heading):
+                        missing = []
+                        if not has_numbered_ref:
+                            missing.append("numbered [N] reference markers")
+                        if not has_refs_heading:
+                            missing.append("a Sources/References section heading")
+                        issues.append({
+                            "rule": "citation-style-preservation",
+                            "severity": "error",
+                            "note_id": "<vault>",
+                            "note_path": str(report_path),
+                            "message": (
+                                "citation_style is 'inline' but the final "
+                                f"report is missing {' and '.join(missing)}. "
+                                "Restore the inline citation system before "
+                                "shipping the report."
+                            ),
+                        })
 
     if "orphaned-raw-files" in rules_to_run:
         # Walk research/raw/ and flag files whose stem doesn't match any note
