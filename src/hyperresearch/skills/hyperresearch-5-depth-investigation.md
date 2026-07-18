@@ -79,7 +79,7 @@ Read these inputs:
 
 4. **Read the interim notes.** After all return, list them:
    ```bash
-   $HPR search "" --tag <vault_tag> --type interim --json
+   $HPR note list --tag <vault_tag> --type interim --all --json
    ```
    Then batch-read them:
    ```bash

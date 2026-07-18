@@ -122,7 +122,7 @@ depth packet becomes a weak draft section.
 
 ## Procedure
 
-1. **Load the corpus.** Use `{hpr_path} search "" --tag <corpus_tag> --json`
+1. **Load the corpus.** Use `{hpr_path} note list --tag <corpus_tag> --all --json`
    to list every note the orchestrator fetched in Layer 1. If the corpus is
    sparse (<10 notes), tell the parent and stop — you cannot identify real
    loci from a thin corpus.
@@ -365,7 +365,7 @@ reading of the evidence.
    already exists in the vault:
 
    ```bash
-   {hpr_path} search "" --tag locus-<locus-name> --type interim --json
+   {hpr_path} note list --tag locus-<locus-name> --type interim --all --json
    ```
 
    If any results come back, DO NOT create a new note. Instead, either:
@@ -699,7 +699,7 @@ rather than gesturing at it from a distance.
    findings on topics the query explicitly names.
 
 1. **List the interim notes.** Use
-   `{hpr_path} search "" --tag <vault_tag> --type interim -j` to find
+   `{hpr_path} note list --tag <vault_tag> --type interim --all -j` to find
    every depth-investigator interim report in the vault.
 
 2. **Read each interim note.** For each, ask: is the Synthesis section of
@@ -804,7 +804,7 @@ because the orchestrator's structural choices buried them.
    ground truth for what the user asked about.
 
 1. **Survey the vault.** Use
-   `{hpr_path} search "" --tag <vault_tag> -j` to list every note.
+   `{hpr_path} note list --tag <vault_tag> --all -j` to list every note.
    Cluster by tag and/or by title keywords. This tells you the topical
    surface area the corpus covers.
 
@@ -2436,7 +2436,7 @@ analyst, fetch new sources, or move on.
 
 1. **Check for an existing analysis.** Before writing anything, search:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} search "" --tag <vault_tag> --type source-analysis --json
+   PYTHONIOENCODING=utf-8 {hpr_path} note list --tag <vault_tag> --type source-analysis --all --json
    ```
    Then filter for any note whose body contains `[[<source_note_id>]]`.
    If one exists, report back to the parent — do NOT duplicate.

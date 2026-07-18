@@ -26,7 +26,7 @@ Read these inputs:
 - `research/scaffold.md` — vault_tag
 - `research/comparisons.md` — cross-locus tensions
 - `research/temp/contradiction-graph.json` (if step 3 ran)
-- Survey vault: `$HPR search "" --tag <vault_tag> -j` for the 15–20 highest-quality non-deprecated sources
+- Survey vault: `$HPR note list --tag <vault_tag> --all -j` for the 15–20 highest-quality non-deprecated sources
 
 ---
 

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Lint
+
+- **New lint rule `citation-style-preservation` (closes #33).** When `prompt-decomposition.json` (or a `wrapper_contract.json` override) declares `citation_style: "wikilink"`, the final report must contain at least one `[[<note-id>]]` wikilink that resolves to a vault note; for `"inline"`, at least one numbered `[N]` marker plus a Sources/References heading. Presence-only by design — it catches the polish/synthesis regression that strips every citation, without the false-positive tail a density floor would have on short or quote-heavy reports. Skips cleanly when the style is `"none"`, no decomposition exists, or the vault has no source notes.
+
 ### Release readiness and deployability
 
 - **Version metadata is consistent again.** `hyperresearch.__version__` now tracks the version declared in `pyproject.toml`, fixing the state where the built wheel reported `0.8.6` while `hyperresearch --version` reported `0.8.5`.
