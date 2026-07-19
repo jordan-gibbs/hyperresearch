@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 10
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
@@ -39,7 +39,19 @@ CREATE TABLE IF NOT EXISTS notes (
     updated      TEXT,
     file_mtime   REAL NOT NULL,
     content_hash TEXT NOT NULL,
-    synced_at    TEXT NOT NULL
+    synced_at    TEXT NOT NULL,
+    -- Source-ranking columns (v9). Frontmatter-mirrored: doi, utility_score,
+    -- citation_count, venue, is_retracted. Derived (DB-cache only, recomputed):
+    -- authority_score, centrality_score, independence, quality_score.
+    doi              TEXT,
+    utility_score    REAL,
+    authority_score  REAL,
+    centrality_score REAL,
+    independence     REAL,
+    citation_count   INTEGER,
+    venue            TEXT,
+    is_retracted     INTEGER NOT NULL DEFAULT 0,
+    quality_score    REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_notes_status ON notes(status);
@@ -93,6 +105,55 @@ CREATE TABLE IF NOT EXISTS embeddings (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS claims (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_id        TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+    claim          TEXT NOT NULL,
+    claim_hash     TEXT NOT NULL,
+    quoted_support TEXT,
+    numbers        TEXT,
+    confidence     TEXT,
+    evidence_type  TEXT,
+    stance_target  TEXT,
+    stance         TEXT,
+    vault_tag      TEXT,
+    ingested_at    TEXT NOT NULL,
+    UNIQUE (note_id, claim_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_claims_note ON claims(note_id);
+CREATE INDEX IF NOT EXISTS idx_claims_vault_tag ON claims(vault_tag);
+CREATE INDEX IF NOT EXISTS idx_claims_stance_target ON claims(stance_target);
+
+CREATE TABLE IF NOT EXISTS api_cache (
+    url        TEXT PRIMARY KEY,
+    body       TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS escalations (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    url           TEXT NOT NULL,
+    reason        TEXT NOT NULL
+                      CHECK (reason IN ('login_wall','bot_block','captcha','fetch_failed','interactive_needed','scholar_search')),
+    requested_by  TEXT,
+    suggested_by  TEXT,
+    utility_score REAL,
+    vault_tag     TEXT,
+    status        TEXT NOT NULL DEFAULT 'queued'
+                      CHECK (status IN ('queued','in_progress','fetched','needs_human','abandoned')),
+    attempts      INTEGER NOT NULL DEFAULT 0,
+    note_id       TEXT,
+    claimed_by    TEXT,
+    detail        TEXT,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL,
+    UNIQUE (url, vault_tag)
+);
+
+CREATE INDEX IF NOT EXISTS idx_escalations_status ON escalations(status);
+CREATE INDEX IF NOT EXISTS idx_escalations_tag ON escalations(vault_tag);
+
 CREATE TABLE IF NOT EXISTS tag_aliases (
     alias     TEXT PRIMARY KEY,
     canonical TEXT NOT NULL
@@ -138,6 +199,13 @@ CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
     aliases,
     tokenize='porter unicode61'
 );
+
+CREATE VIRTUAL TABLE IF NOT EXISTS claims_fts USING fts5(
+    claim_id UNINDEXED,
+    claim,
+    quoted_support,
+    tokenize='porter unicode61'
+);
 """
 
 # Indexes on columns added by migrations — must run AFTER migrate() so that
@@ -145,6 +213,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
 POST_MIGRATE_INDEXES_SQL = """
 CREATE INDEX IF NOT EXISTS idx_notes_tier ON notes(tier);
 CREATE INDEX IF NOT EXISTS idx_notes_content_type ON notes(content_type);
+CREATE INDEX IF NOT EXISTS idx_notes_doi ON notes(doi);
+CREATE INDEX IF NOT EXISTS idx_notes_quality ON notes(quality_score);
 """
 
 

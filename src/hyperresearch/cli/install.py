@@ -25,16 +25,47 @@ def install(
         "--steps-only",
         help="Install only the 16 step skills to <PATH>/.claude/skills/. Used internally by the entry skill bootstrap on first /hyperresearch invocation in a project. Not normally invoked by users.",
     ),
+    profile: str | None = typer.Option(
+        None,
+        "--profile",
+        help="Pipeline profile to render skill/agent prompts from (built-in gears: full, premier; plus any [profile.*] defined in .hyperresearch/config.toml). Defaults to the gear persisted by `hyperresearch profile use` (or 'full'). See `hyperresearch profile list`.",
+    ),
 ) -> None:
     """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
     import sys
 
     from hyperresearch.core.hooks import (
         _install_hyperresearch_step_skills,
+        _set_render_state,
         install_global_hooks,
         install_hooks,
     )
+    from hyperresearch.core.profiles import ProfileError
     from hyperresearch.core.vault import Vault, VaultError
+
+    # No explicit --profile → use the gear persisted by `hpr profile use`
+    # in the target's config (falling back to "full").
+    def _default_profile(config_path: Path | None) -> str:
+        if profile is not None:
+            return profile
+        if config_path is not None and config_path.exists():
+            from hyperresearch.core.config import VaultConfig
+
+            return VaultConfig.load(config_path).pipeline_profile
+        return "full"
+
+    # Validate the profile early so a typo fails before any files are written.
+    def _check_profile(resolved: str, config_path: Path | None) -> None:
+        from hyperresearch.core.profiles import resolve_profile
+
+        try:
+            resolve_profile(resolved, config_path)
+        except ProfileError as e:
+            if json_output:
+                output(error(str(e), "UNKNOWN_PROFILE"), json_mode=True)
+            else:
+                console.print(f"[red]Error:[/] {e}")
+            raise typer.Exit(1)
 
     # Steps-only path: lazy install of the 16 step skills to a project's
     # .claude/skills/. Called by the entry skill's bootstrap on first
@@ -42,6 +73,11 @@ def install(
     # on subsequent invocations.
     if steps_only:
         target = Path(path).resolve()
+        steps_config = target / ".hyperresearch" / "config.toml"
+        steps_config_path = steps_config if steps_config.exists() else None
+        steps_profile = _default_profile(steps_config_path)
+        _check_profile(steps_profile, steps_config_path)
+        _set_render_state(steps_profile, steps_config_path)
         result = _install_hyperresearch_step_skills(target)
         if json_output:
             output(
@@ -66,7 +102,9 @@ def install(
 
         hpr_path = _resolve_executable()
         home = Path.home()
-        hook_actions = install_global_hooks(home, hpr_path=hpr_path)
+        global_profile = profile if profile is not None else "full"
+        _check_profile(global_profile, None)
+        hook_actions = install_global_hooks(home, hpr_path=hpr_path, profile=global_profile)
 
         if json_output:
             output(
@@ -127,8 +165,13 @@ def install(
     # Step 3: Always re-inject CLAUDE.md (updates blurb + path)
     doc_actions = inject_agent_docs(root)
 
-    # Step 4: Install Claude Code hook + skills + subagents
-    hook_actions = install_hooks(root, hpr_path=hpr_path)
+    # Step 4: Install Claude Code hook + skills + subagents (rendered from the
+    # gear profile — explicit --profile, else the gear persisted in config)
+    project_config = root / ".hyperresearch" / "config.toml"
+    project_config_path = project_config if project_config.exists() else None
+    project_profile = _default_profile(project_config_path)
+    _check_profile(project_profile, project_config_path)
+    hook_actions = install_hooks(root, hpr_path=hpr_path, profile=project_profile)
 
     # Step 3: Auto-configure crawl4ai if installed
     crawl4ai_status = _setup_crawl4ai(vault)

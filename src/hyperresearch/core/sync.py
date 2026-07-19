@@ -85,11 +85,16 @@ def compute_sync_plan(vault, force: bool = False) -> SyncPlan:
     if not kb_dir.exists():
         return plan
 
+    runs_dir = kb_dir / "runs"
     disk_files: dict[str, float] = {}
     for md_file in kb_dir.rglob("*.md"):
         # Skip staging files at the research/ root. Real notes live in
         # research/notes/** or research/index/**.
         if md_file.parent == kb_dir:
+            continue
+        # Skip per-run workspaces entirely (research/runs/<vault_tag>/**) —
+        # run-scoped pipeline artifacts are never vault notes.
+        if runs_dir in md_file.parents:
             continue
         # Skip scratch artifacts without YAML frontmatter.
         if not _has_frontmatter(md_file):
@@ -223,13 +228,19 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
     expires_iso = meta.expires.isoformat() if meta.expires else None
 
     # Use INSERT ... ON CONFLICT to avoid CASCADE deletes from INSERT OR REPLACE
+    # NOTE: the derived score columns (authority_score, centrality_score,
+    # independence, quality_score) are deliberately absent — they are DB-cache
+    # values computed by `hpr sources score` / `hpr graph rank` and must
+    # survive re-syncs. Frontmatter-mirrored ranking fields (doi,
+    # utility_score, citation_count, venue, is_retracted) sync normally.
     conn.execute(
         """
         INSERT INTO notes
             (id, title, path, status, type, tier, content_type, source, parent,
              deprecated, reviewed, expires, word_count, summary,
-             created, updated, file_mtime, content_hash, synced_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             created, updated, file_mtime, content_hash, synced_at,
+             doi, utility_score, citation_count, venue, is_retracted)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title=excluded.title, path=excluded.path, status=excluded.status,
             type=excluded.type, tier=excluded.tier, content_type=excluded.content_type,
@@ -239,7 +250,10 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
             word_count=excluded.word_count, summary=excluded.summary,
             created=excluded.created, updated=excluded.updated,
             file_mtime=excluded.file_mtime, content_hash=excluded.content_hash,
-            synced_at=excluded.synced_at
+            synced_at=excluded.synced_at,
+            doi=excluded.doi, utility_score=excluded.utility_score,
+            citation_count=excluded.citation_count, venue=excluded.venue,
+            is_retracted=excluded.is_retracted
         """,
         (
             meta.id, meta.title, note.path, meta.status, meta.type,
@@ -248,6 +262,8 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
             reviewed_iso, expires_iso,
             note.word_count, meta.summary, created_iso, updated_iso,
             file_mtime, note.content_hash, synced_at,
+            meta.doi, meta.utility_score, meta.citation_count, meta.venue,
+            1 if meta.is_retracted else 0,
         ),
     )
 

@@ -20,11 +20,11 @@ description: >
 ## Recover state
 
 Read these inputs:
-- `research/scaffold.md` — vault_tag
-- `research/comparisons.md` — cross-locus tensions
-- `research/loci.json` — scored loci
-- `research/temp/source-tensions.json` — expert disagreements
-- `research/prompt-decomposition.json` — specifically the `time_periods` array
+- `research/runs/<vault_tag>/scaffold.md` — vault_tag
+- `research/runs/<vault_tag>/comparisons.md` — cross-locus tensions
+- `research/runs/<vault_tag>/loci.json` — scored loci
+- `research/runs/<vault_tag>/temp/source-tensions.json` — expert disagreements
+- `research/runs/<vault_tag>/prompt-decomposition.json` — specifically the `time_periods` array
 
 ---
 
@@ -39,7 +39,7 @@ For each `time_period` entry:
    PYTHONIOENCODING=utf-8 {hpr_path} search "<period> <issuer>" --tag <vault_tag> --include-body -j
    ```
 2. Open the candidate notes (`note show <id> -j`) and verify the document's actual reporting period — the filing must cover the SPECIFIC period named in the prompt, not an adjacent one. A Q1 2025 10-Q does NOT satisfy "Q3 2024" — different period, different tabular data.
-3. **If the period-pinned filing is missing, add it to `research/corpus-critic-gaps.json` as a `priority: critical` gap of type `period-pinned-primary` BEFORE spawning the corpus-critic subagent.** Schema:
+3. **If the period-pinned filing is missing, add it to `research/runs/<vault_tag>/corpus-critic-gaps.json` as a `priority: critical` gap of type `period-pinned-primary` BEFORE spawning the corpus-critic subagent.** Schema:
    ```json
    {{
      "type": "period-pinned-primary",
@@ -60,40 +60,40 @@ The targeted fetch wave in the next step will pull these filings BEFORE the corp
 
 ## Procedure
 
-1. **Spawn ONE `hyperresearch-corpus-critic` subagent** (Sonnet).
+1. **Spawn ONE `hyperresearch-corpus-critic` subagent**.
 
    **Spawn template:**
    ```
    subagent_type: hyperresearch-corpus-critic
    prompt: |
      RESEARCH QUERY (verbatim, gospel):
-     > {{paste research/query-<vault_tag>.md body}}
+     > {{paste research/runs/<vault_tag>/query.md body}}
 
-     QUERY FILE: research/query-<vault_tag>.md
+     QUERY FILE: research/runs/<vault_tag>/query.md
 
      PIPELINE POSITION: You are step 8 of the hyperresearch V8 pipeline.
-     Step 6 produced research/comparisons.md. After you return, the
+     Step 6 produced research/runs/<vault_tag>/comparisons.md. After you return, the
      orchestrator runs a targeted fetch wave, then step 10 drafts.
 
      YOUR INPUTS:
      - corpus_tag: <vault_tag>
-     - comparisons_path: research/comparisons.md
-     - loci_path: research/loci.json
-     - output_path: research/corpus-critic-gaps.json
+     - comparisons_path: research/runs/<vault_tag>/comparisons.md
+     - loci_path: research/runs/<vault_tag>/loci.json
+     - output_path: research/runs/<vault_tag>/corpus-critic-gaps.json
    ```
 
-2. **Read the gaps output** (`research/corpus-critic-gaps.json`). Each gap has a `priority` (critical / high) and a `type` (overturning / strengthening / independent-verification).
+2. **Read the gaps output** (`research/runs/<vault_tag>/corpus-critic-gaps.json`). Each gap has a `priority` (critical / high) and a `type` (overturning / strengthening / independent-verification).
 
-3. **Targeted fetch wave.** Spawn **2–4 fetcher subagents** (Sonnet) to search for and fetch the sources identified in the gaps.
+3. **Targeted fetch wave.** Spawn **2–4 fetcher subagents** to search for and fetch the sources identified in the gaps.
 
    **Spawn template:**
    ```
    subagent_type: hyperresearch-fetcher
    prompt: |
      RESEARCH QUERY (verbatim, gospel):
-     > {{paste research/query-<vault_tag>.md body}}
+     > {{paste research/runs/<vault_tag>/query.md body}}
 
-     QUERY FILE: research/query-<vault_tag>.md
+     QUERY FILE: research/runs/<vault_tag>/query.md
 
      PIPELINE POSITION: You are a step 8 fetcher (corpus-critic gap-fill)
      of the hyperresearch V8 pipeline. The corpus critic identified specific
@@ -108,11 +108,11 @@ The targeted fetch wave in the next step will pull these filings BEFORE the corp
    ```
 
 4. **Assess results.**
-   - **Overturning source found:** re-read the relevant committed position from the interim note. If the new source genuinely undercuts it, update `research/comparisons.md` to note the weakened position — the draft will handle it with appropriate calibration. Do NOT re-run the full depth investigation; adjust the position's confidence level.
+   - **Overturning source found:** re-read the relevant committed position from the interim note. If the new source genuinely undercuts it, update `research/runs/<vault_tag>/comparisons.md` to note the weakened position — the draft will handle it with appropriate calibration. Do NOT re-run the full depth investigation; adjust the position's confidence level.
    - **Overturning source NOT found:** the committed position gains confidence. Note this in `comparisons.md` — "adversarial search for counter-evidence to [position] returned no substantive challenges."
    - **Strengthening/verification source found:** note the additional support in `comparisons.md`. The draft can assert more confidently.
 
-5. **Log results** to `research/temp/corpus-critic-results.md`:
+5. **Log results** to `research/runs/<vault_tag>/temp/corpus-critic-results.md`:
    - Each gap: what was searched, what was found (or not), how it affects the committed positions
    - Updated confidence levels for any positions that changed
 
@@ -120,10 +120,10 @@ The targeted fetch wave in the next step will pull these filings BEFORE the corp
 
 ## Exit criterion
 
-- `research/corpus-critic-gaps.json` exists
+- `research/runs/<vault_tag>/corpus-critic-gaps.json` exists
 - All critical gaps attempted (fetched or documented as unfindable)
-- `research/temp/corpus-critic-results.md` exists
-- `research/comparisons.md` updated with confidence/strengthening/overturning notes
+- `research/runs/<vault_tag>/temp/corpus-critic-results.md` exists
+- `research/runs/<vault_tag>/comparisons.md` updated with confidence/strengthening/overturning notes
 
 ---
 

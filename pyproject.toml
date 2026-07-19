@@ -79,6 +79,17 @@ ignore = [
     "SIM105",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Profiles/render carry deliberate en dashes (user-facing range strings and
+# the dash filter); tests assert on en-dash-rendered prompt output. The
+# "ambiguous unicode" warnings are false positives by construction there.
+"src/hyperresearch/core/profiles.py" = ["RUF001"]
+"src/hyperresearch/core/render.py" = ["RUF001", "RUF002"]
+"src/hyperresearch/core/citecheck.py" = ["RUF001"]
+"tests/test_core/test_render.py" = ["RUF001", "RUF002"]
+"tests/test_core/test_prompt_golden.py" = ["RUF001", "RUF002"]
+"tests/test_cli/test_install_profile.py" = ["RUF001", "RUF002"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true

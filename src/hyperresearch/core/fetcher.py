@@ -39,11 +39,7 @@ def fetch_and_save(
         from urllib.parse import urlparse as _urlparse
 
         domain = _urlparse(url).netloc.lower()
-        _auth_aggressive = (
-            "linkedin.com", "twitter.com", "x.com", "facebook.com",
-            "instagram.com", "tiktok.com",
-        )
-        if any(d in domain for d in _auth_aggressive):
+        if any(d in domain for d in vault.config.fetch.visible_browser_domains):
             visible = True
 
     # Fetch content
@@ -52,22 +48,44 @@ def fetch_and_save(
         profile=vault.config.web_profile,
         magic=vault.config.web_magic,
         headless=not visible,
+        settings=vault.config.fetch,
+        gates=vault.config.junk,
     )
 
     result = prov.fetch(url)
 
-    # Detect login redirects — abort instead of saving junk
-    if result.looks_like_login_wall(url):
+    # Detect login redirects — abort, but escalate to the browser lane
+    if result.looks_like_login_wall(url, vault.config.junk):
+        from hyperresearch.core.escalation import maybe_enqueue_blocked_fetch
+
+        item_id = maybe_enqueue_blocked_fetch(
+            vault, url, "login_wall",
+            vault_tag=tags[0] if tags else None,
+            detail=f"login wall: {result.title}",
+        )
+        escalated = f" Queued for browser-lane escalation (#{item_id})." if item_id else ""
         raise RuntimeError(
             f"Redirected to login page ({result.title}). "
             "Your browser profile session may have expired. "
-            "Run 'hyperresearch setup' and create a new login profile."
+            f"Run 'hyperresearch setup' and create a new login profile.{escalated}"
         )
 
     # Detect junk pages — captcha, error pages, binary garbage, empty content
-    junk_reason = result.looks_like_junk()
+    junk_reason = result.looks_like_junk(vault.config.junk)
     if junk_reason:
-        raise RuntimeError(f"Skipped junk content: {junk_reason}")
+        escalated = ""
+        if junk_reason.startswith("Bot detection"):
+            from hyperresearch.core.escalation import maybe_enqueue_blocked_fetch
+
+            reason = "captcha" if "captcha" in junk_reason.lower() else "bot_block"
+            item_id = maybe_enqueue_blocked_fetch(
+                vault, url, reason,
+                vault_tag=tags[0] if tags else None,
+                detail=junk_reason,
+            )
+            if item_id:
+                escalated = f" Queued for browser-lane escalation (#{item_id})."
+        raise RuntimeError(f"Skipped junk content: {junk_reason}.{escalated}")
 
     # Write note
     note_title = title or result.title or urlparse(url).path.split("/")[-1] or "Untitled"
@@ -81,6 +99,12 @@ def fetch_and_save(
     }
     if result.metadata.get("author"):
         extra_meta["author"] = result.metadata["author"]
+
+    from hyperresearch.core.scholar import extract_doi
+
+    detected_doi = extract_doi(url, result.raw_html, result.content)
+    if detected_doi:
+        extra_meta["doi"] = detected_doi
 
     note_path = write_note(
         vault.notes_dir,
@@ -148,7 +172,10 @@ def fetch_and_save(
         from hyperresearch.cli.fetch import _save_assets
 
         assets_dir = vault.root / "research" / "assets" / note_id
-        saved_assets = _save_assets(conn, result, note_id, assets_dir)
+        saved_assets = _save_assets(
+            conn, result, note_id, assets_dir,
+            settings=vault.config.assets, image_timeout_s=vault.config.fetch.image_timeout_s,
+        )
 
     return {
         "note_id": note_id,

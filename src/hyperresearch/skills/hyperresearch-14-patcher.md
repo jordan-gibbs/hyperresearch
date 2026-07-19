@@ -20,26 +20,26 @@ description: >
 ## Recover state
 
 Read these inputs:
-- `research/scaffold.md` — vault_tag
+- `research/runs/<vault_tag>/scaffold.md` — vault_tag
 - `research/notes/final_report_<vault_tag>.md` — the synthesized final report from step 11
-- All `research/critic-findings-*.json` files (count depends on tier)
-- `research/temp/evidence-digest.md` — patcher's primary citation source
-- `research/query-<vault_tag>.md` — canonical research query
+- All `research/runs/<vault_tag>/critic-findings-*.json` files (count depends on tier)
+- `research/runs/<vault_tag>/temp/evidence-digest.md` — patcher's primary citation source
+- `research/runs/<vault_tag>/query.md` — canonical research query
 
 ---
 
 ## Step 14.0 — Skip gate (optional)
 
-Before spawning the patcher, check whether `research/skip-patcher.txt` exists. If it does, the invoker has requested that step 14 be bypassed. In that case, skip to "Skip path" below.
+Before spawning the patcher, check whether `research/runs/<vault_tag>/skip-patcher.txt` exists. If it does, the invoker has requested that step 14 be bypassed. In that case, skip to "Skip path" below.
 
 **Skip path:** Record a minimal log:
 
 ```bash
 python -c "
 import json, pathlib
-files = ['research/critic-findings-dialectic.json','research/critic-findings-depth.json','research/critic-findings-width.json','research/critic-findings-instruction.json']
+files = ['research/runs/<vault_tag>/critic-findings-dialectic.json','research/runs/<vault_tag>/critic-findings-depth.json','research/runs/<vault_tag>/critic-findings-width.json','research/runs/<vault_tag>/critic-findings-instruction.json']
 total = sum(len(json.loads(pathlib.Path(f).read_text()).get('findings',[])) for f in files if pathlib.Path(f).exists())
-pathlib.Path('research/patch-log.json').write_text(json.dumps({'total_findings': total, 'applied': [], 'skipped': [{'reason': 'patcher-skipped-by-invoker'}], 'conflicts': [], 'orchestrator_escalated': []}))
+pathlib.Path('research/runs/<vault_tag>/patch-log.json').write_text(json.dumps({'total_findings': total, 'applied': [], 'skipped': [{'reason': 'patcher-skipped-by-invoker'}], 'conflicts': [], 'orchestrator_escalated': []}))
 "
 ```
 
@@ -52,7 +52,7 @@ Then proceed to step 15. Most runs should not use this gate.
 The patcher is tool-locked to `[Read, Edit]` — it cannot Write. Edit can only modify files that already exist. So you (the orchestrator) MUST write the canonical stub first, which the patcher will then Edit to populate:
 
 ```bash
-echo '{"total_findings": 0, "applied": [], "skipped": [], "conflicts": [], "orchestrator_escalated": []}' > research/patch-log.json
+echo '{"total_findings": 0, "applied": [], "skipped": [], "conflicts": [], "orchestrator_escalated": []}' > research/runs/<vault_tag>/patch-log.json
 ```
 
 The schema above is canonical. The patcher's only job on this file is to Edit the existing keys — `total_findings` becomes an integer, the four arrays get populated. **The patcher MUST NOT invent alternate schemas** — downstream tooling assumes the canonical shape.
@@ -70,9 +70,9 @@ Spawn ONCE.
 subagent_type: hyperresearch-patcher
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
-  > {{paste research/query-<vault_tag>.md body}}
+  > {{paste research/runs/<vault_tag>/query.md body}}
 
-  QUERY FILE: research/query-<vault_tag>.md
+  QUERY FILE: research/runs/<vault_tag>/query.md
 
   PIPELINE POSITION: You are step 14 (patcher) of the hyperresearch V8
   pipeline. Step 12 produced critic findings; step 13 filled vault gaps.
@@ -82,18 +82,18 @@ prompt: |
   YOUR INPUTS:
   - draft_path: research/notes/final_report_<vault_tag>.md
   - findings_paths: [
-      research/critic-findings-dialectic.json,    (full tier only)
-      research/critic-findings-depth.json,        (full tier only)
-      research/critic-findings-width.json,
-      research/critic-findings-instruction.json
+      research/runs/<vault_tag>/critic-findings-dialectic.json,    (full tier only)
+      research/runs/<vault_tag>/critic-findings-depth.json,        (full tier only)
+      research/runs/<vault_tag>/critic-findings-width.json,
+      research/runs/<vault_tag>/critic-findings-instruction.json
     ]
-  - patch_log_path: research/patch-log.json   (already stubbed)
-  - evidence_digest_path: research/temp/evidence-digest.md
+  - patch_log_path: research/runs/<vault_tag>/patch-log.json   (already stubbed)
+  - evidence_digest_path: research/runs/<vault_tag>/temp/evidence-digest.md
 ```
 
 The patcher's job:
 - Apply each finding's patch as an Edit on the draft file
-- Populate the pre-stubbed patch log via Edit on `research/patch-log.json`
+- Populate the pre-stubbed patch log via Edit on `research/runs/<vault_tag>/patch-log.json`
 - Each Edit hunk stays surgical: change as little as possible while addressing the issue
 - Reject findings that don't serve the research_query (the patcher checks every finding against the canonical query)
 - Escalate findings that require structural restructure (rather than applying them as oversized patches)
@@ -113,7 +113,7 @@ Check the patch log when the patcher returns:
 
 - **Did the patcher log a "patch too large" skip?** That means a critic proposed regeneration in patch clothing. If the finding was critical, re-spawn the critic with a tighter suggestion, or address it yourself with multiple small hunks.
 
-- **Is the patch log still the empty stub?** If yes, the patcher failed to log — its Task result will contain the real log inline. Read the Task result, parse out the JSON, and write it to `research/patch-log.json` yourself via Bash so downstream lint rules see it.
+- **Is the patch log still the empty stub?** If yes, the patcher failed to log — its Task result will contain the real log inline. Read the Task result, parse out the JSON, and write it to `research/runs/<vault_tag>/patch-log.json` yourself via Bash so downstream lint rules see it.
 
 ---
 
@@ -125,7 +125,7 @@ For each entry:
 1. Read the `issue` field to understand which H2 in the draft needs to move, be added, or be renamed.
 2. Apply the restructure via hand-written Edit calls on `research/notes/final_report_<vault_tag>.md`. You have Write and Edit access — the tool lock applies only to the patcher and polish auditor subagents.
 3. Preserve the body content within each H2 section — you are moving / renaming / inserting headings, not regenerating prose. If a new heading is added and its body needs fresh content, write a short evidence-grounded paragraph for it.
-4. Log changes in `research/orchestrator-restructure-log.md` (plain markdown, one bullet per change) so downstream lint rules can see this step happened.
+4. Log changes in `research/runs/<vault_tag>/orchestrator-restructure-log.md` (plain markdown, one bullet per change) so downstream lint rules can see this step happened.
 5. Never regenerate a whole section or the whole draft. The "patch not regenerate" invariant still binds you — broader tools but not broader license.
 
 ---
@@ -140,17 +140,17 @@ For each entry:
 
 ## Exit criterion
 
-- `research/patch-log.json` exists with `total_findings` set and at least one of `applied` / `skipped` / `conflicts` populated
+- `research/runs/<vault_tag>/patch-log.json` exists with `total_findings` set and at least one of `applied` / `skipped` / `conflicts` populated
 - All critical findings either applied or resolved by orchestrator
-- All `orchestrator_escalated` findings handled (with `research/orchestrator-restructure-log.md` if any structural restructures were applied)
+- All `orchestrator_escalated` findings handled (with `research/runs/<vault_tag>/orchestrator-restructure-log.md` if any structural restructures were applied)
 - `research/notes/final_report_<vault_tag>.md` has been edited (or no edits needed if findings were trivial)
 
 ---
 
 ## Next step
 
-Return to the entry skill (`hyperresearch`). Invoke step 15:
+Return to the entry skill (`hyperresearch`). Invoke step 14.5 (cite-check):
 
 ```
-Skill(skill: "hyperresearch-15-polish")
+Skill(skill: "hyperresearch-14-5-cite-check")
 ```

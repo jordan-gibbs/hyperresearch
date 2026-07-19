@@ -2,8 +2,8 @@
 name: hyperresearch-16-readability-audit
 description: >
   Step 16 (final) of the hyperresearch V8 pipeline. Spawns the
-  hyperresearch-readability-recommender subagent (Read+Write tool-locked,
-  Opus) to audit the polished final report and write JSON
+  hyperresearch-readability-recommender subagent (Read+Write
+  tool-locked) to audit the polished final report and write JSON
   recommendations for paragraph merges, breaks, list/table conversions,
   bold injection, sentence splits, and HR removal. The orchestrator
   reads the recommendations and SELECTIVELY applies them via direct
@@ -25,7 +25,7 @@ description: >
 ## Recover state
 
 Read these inputs:
-- `research/scaffold.md` — vault_tag
+- `research/runs/<vault_tag>/scaffold.md` — vault_tag
 - `research/notes/final_report_<vault_tag>.md` — the polished final report from step 15
 
 ---
@@ -39,9 +39,9 @@ Spawn ONE `hyperresearch-readability-recommender` subagent. Single spawn, runs o
 subagent_type: hyperresearch-readability-recommender
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
-  > {{paste research/query-<vault_tag>.md body}}
+  > {{paste research/runs/<vault_tag>/query.md body}}
 
-  QUERY FILE: research/query-<vault_tag>.md
+  QUERY FILE: research/runs/<vault_tag>/query.md
 
   PIPELINE POSITION: You are step 16 of the hyperresearch V8 pipeline —
   the final analytical pass. The final report at
@@ -55,10 +55,10 @@ prompt: |
 
   YOUR INPUTS:
   - draft_path: research/notes/final_report_<vault_tag>.md
-  - recommendations_path: research/readability-recommendations.json
+  - recommendations_path: research/runs/<vault_tag>/readability-recommendations.json
 
   Write recommendations as a JSON array per the schema in your agent
-  prompt. Cap at 50 recommendations, prioritized by impact.
+  prompt. Cap at << p.readability_rec_cap >> recommendations, prioritized by impact.
 ```
 
 ---
@@ -67,7 +67,7 @@ prompt: |
 
 When the recommender returns:
 
-1. **Read `research/readability-recommendations.json`.**
+1. **Read `research/runs/<vault_tag>/readability-recommendations.json`.**
 
 2. **Read the recommender's report-back.** It tells you:
    - Total count of recommendations
@@ -128,7 +128,7 @@ If an Edit fails because `old_string` doesn't match (recommender mis-anchored), 
 
 ## Step 16.5 — Log decisions
 
-Write `research/readability-decisions.json` with the orchestrator's decisions:
+Write `research/runs/<vault_tag>/readability-decisions.json` with the orchestrator's decisions:
 
 ```json
 {
@@ -150,8 +150,8 @@ This is the audit trail. If a future review finds a readability problem we shoul
 
 ## Exit criterion
 
-- `research/readability-recommendations.json` exists
-- `research/readability-decisions.json` exists with at least one entry in `applied` or all `skipped`
+- `research/runs/<vault_tag>/readability-recommendations.json` exists
+- `research/runs/<vault_tag>/readability-decisions.json` exists with at least one entry in `applied` or all `skipped`
 - `research/notes/final_report_<vault_tag>.md` reflects the applied recommendations
 - The final report's structure (H2 list, executive summary, conclusion) is unchanged from step 15's output (this step does not restructure)
 

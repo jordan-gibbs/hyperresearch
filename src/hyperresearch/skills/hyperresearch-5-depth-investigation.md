@@ -20,32 +20,32 @@ description: >
 ## Recover state
 
 Read these inputs:
-- `research/scaffold.md` — vault_tag
-- `research/loci.json` — scored loci with source_budget per locus
-- `research/temp/contradiction-graph.json` (if step 3 ran)
-- `research/query-<vault_tag>.md` — canonical research query
+- `research/runs/<vault_tag>/scaffold.md` — vault_tag
+- `research/runs/<vault_tag>/loci.json` — scored loci with source_budget per locus
+- `research/runs/<vault_tag>/temp/contradiction-graph.json` (if step 3 ran)
+- `research/runs/<vault_tag>/query.md` — canonical research query
 
 ---
 
 ## Procedure
 
-1. **Spawn K `hyperresearch-depth-investigator` subagents in parallel** (ONE message, all Task calls). One per locus with `source_budget > 0`, capped at 6.
+1. **Spawn K `hyperresearch-depth-investigator` subagents in parallel** (ONE message, all Task calls). One per locus with `source_budget > 0`, capped at << p.investigator_max >>.
 
    **Spawn template:**
    ```
    subagent_type: hyperresearch-depth-investigator
    prompt: |
      RESEARCH QUERY (verbatim, gospel):
-     > {{paste research/query-<vault_tag>.md body}}
+     > {{paste research/runs/<vault_tag>/query.md body}}
 
-     QUERY FILE: research/query-<vault_tag>.md
+     QUERY FILE: research/runs/<vault_tag>/query.md
 
      PIPELINE POSITION: You are step 5 (depth-investigator) of the
-     hyperresearch V8 pipeline. Step 4's loci analysts produced research/loci.json;
+     hyperresearch V8 pipeline. Step 4's loci analysts produced research/runs/<vault_tag>/loci.json;
      after you return, step 6 will reconcile your committed position against
-     the other investigators' positions in research/comparisons.md.
+     the other investigators' positions in research/runs/<vault_tag>/comparisons.md.
 
-     YOUR LOCUS (from research/loci.json):
+     YOUR LOCUS (from research/runs/<vault_tag>/loci.json):
      - name: "<locus name>"
      - one_line: "<one-line locus description>"
      - flavor: "dialectical" / "synthesis" / "technical"

@@ -92,6 +92,14 @@ class NoteMeta(BaseModel):
     expires: datetime | None = None      # Auto-stale after this date
     summary: str | None = None
     raw_file: str | None = None          # Relative path to raw artifact (e.g. raw/<id>.pdf)
+    # Source-ranking fields (frontmatter-mirrored; markdown stays truth).
+    # Derived scores (authority/centrality/independence/quality) are DB-cache
+    # only and deliberately NOT in frontmatter — they are recomputed.
+    doi: str | None = None               # DOI or arXiv id (e.g. 10.1234/x, arXiv:2501.01234)
+    utility_score: float | None = None   # Step-2 fetch-selection composite (0-18)
+    citation_count: int | None = None    # External citation count (OpenAlex/S2)
+    venue: str | None = None             # Publication venue, when known
+    is_retracted: bool | None = None     # None = unchecked; set by `hpr sources score`
 
     @field_validator("tags", mode="before")
     @classmethod

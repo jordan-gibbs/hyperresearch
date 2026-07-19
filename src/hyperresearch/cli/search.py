@@ -27,7 +27,9 @@ def search(
     has_backlinks: bool = typer.Option(False, "--has-backlinks", help="Only notes with backlinks"),
     include_body: bool = typer.Option(False, "--include-body", help="Include full note body (auto-enabled with --json)"),
     no_body: bool = typer.Option(False, "--no-body", help="Disable auto body inclusion in JSON mode"),
-    limit: int = typer.Option(20, "--limit", "-l", help="Max results"),
+    limit: int | None = typer.Option(None, "--limit", "-l", help="Max results (default from [search] config)"),
+    ranked: bool = typer.Option(False, "--ranked", help="Fold composite source-quality scores into ranking (tier + utility + authority + centrality)"),
+    semantic: bool = typer.Option(False, "--semantic", help="Blend in embedding similarity (requires [embeddings] provider)"),
     offset: int = typer.Option(0, "--offset", help="Offset for pagination"),
     max_tokens: int | None = typer.Option(None, "--max-tokens", help="Truncate results to fit token budget (1 token ~ 4 chars)"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
@@ -69,6 +71,8 @@ def search(
             console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(1)
     vault.auto_sync()
+    if limit is None:
+        limit = vault.config.search_default_limit
 
     filters = SearchFilters(
         tags=tag or None,
@@ -99,7 +103,8 @@ def search(
     }
     try:
         results = search_fts(
-            vault.db, query, filters=filters, limit=limit, offset=offset, ranking=ranking
+            vault.db, query, filters=filters, limit=limit, offset=offset,
+            ranking=ranking, quality_ranked=ranked,
         )
     except SearchQueryError as e:
         if json_output:
@@ -107,6 +112,47 @@ def search(
         else:
             console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(2) from e
+
+    # Hybrid semantic blend: RRF-fuse the FTS ranking with embedding cosine
+    # neighbors, then refetch metadata for any semantic-only hits.
+    if semantic:
+        from hyperresearch.core.embed import (
+            EmbeddingError,
+            reciprocal_rank_fusion,
+            semantic_search,
+        )
+
+        try:
+            sem_hits = semantic_search(vault, query, limit=limit)
+        except EmbeddingError as e:
+            if json_output:
+                output(error(str(e), "EMBEDDINGS_DISABLED"), json_mode=True)
+            else:
+                console.print(f"[red]Error:[/] {e}")
+            raise typer.Exit(1)
+
+        fused = reciprocal_rank_fusion(
+            [[r["id"] for r in results], [h["id"] for h in sem_hits]]
+        )
+        by_id = {r["id"]: r for r in results}
+        merged = []
+        for note_id, fused_score in fused[:limit]:
+            r = by_id.get(note_id)
+            if r is None:
+                row = vault.db.execute(
+                    "SELECT id, title, path, status, type, tier, content_type, "
+                    "quality_score, created, updated, word_count, summary "
+                    "FROM notes WHERE id = ?",
+                    (note_id,),
+                ).fetchone()
+                if row is None:
+                    continue
+                r = dict(row)
+                r["tags"] = []
+                r["snippet"] = ""
+            r["score"] = fused_score
+            merged.append(r)
+        results = merged
 
     # Auto-include body in JSON mode (agents almost always need it)
     want_body = include_body or (json_output and not no_body)
@@ -119,7 +165,7 @@ def search(
 
     # Token budget: truncate results to fit within limit
     if max_tokens and results:
-        budget_chars = max_tokens * 4  # ~4 chars per token
+        budget_chars = max_tokens * vault.config.search_chars_per_token
         used = 0
         trimmed = []
         for r in results:
@@ -157,5 +203,5 @@ def search(
                 f"[dim]({r['status']})[/] [green]{tags_str}[/]"
             )
             if r.get("snippet"):
-                console.print(f"    [dim]{r['snippet'][:200]}[/]")
+                console.print(f"    [dim]{r['snippet'][: vault.config.search_snippet_len]}[/]")
             console.print()

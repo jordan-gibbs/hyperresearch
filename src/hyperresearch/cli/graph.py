@@ -5,7 +5,7 @@ from __future__ import annotations
 import typer
 
 from hyperresearch.cli._output import console, output
-from hyperresearch.models.output import success
+from hyperresearch.models.output import error, success
 
 app = typer.Typer()
 
@@ -286,3 +286,54 @@ def graph_hubs(
         for h in hubs:
             table.add_row(h["id"], h["title"], str(h["inbound_links"]))
         console.print(table)
+
+
+@app.command("rank")
+def graph_rank(
+    json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
+    top: int = typer.Option(10, "--top", "-n", help="Show top-N central notes"),
+) -> None:
+    """Compute vault centrality (PageRank over the link graph).
+
+    Stores normalized scores to notes.centrality_score and recomputes the
+    composite quality_score. Centrality here means "many independent research
+    chains converged on this source".
+    """
+    from hyperresearch.core.graphrank import compute_centrality
+    from hyperresearch.core.quality import compute_quality_scores
+    from hyperresearch.core.vault import Vault, VaultError
+
+    try:
+        vault = Vault.discover()
+    except VaultError as e:
+        if json_output:
+            output(error(str(e), "NO_VAULT"), json_mode=True)
+        else:
+            console.print(f"[red]Error:[/] {e}")
+        raise typer.Exit(1)
+
+    vault.auto_sync()
+    conn = vault.db
+    ranked = compute_centrality(conn)
+    compute_quality_scores(conn, vault.config.ranking)
+
+    rows = conn.execute(
+        "SELECT id, title, centrality_score FROM notes "
+        "WHERE centrality_score IS NOT NULL "
+        "ORDER BY centrality_score DESC LIMIT ?",
+        (top,),
+    ).fetchall()
+    top_notes = [
+        {"id": r["id"], "title": r["title"], "centrality": round(r["centrality_score"], 4)}
+        for r in rows
+    ]
+
+    if json_output:
+        output(
+            success({"ranked": ranked, "top": top_notes}, count=ranked, vault=str(vault.root)),
+            json_mode=True,
+        )
+    else:
+        console.print(f"[green]Centrality computed:[/] {ranked} notes")
+        for n in top_notes:
+            console.print(f"  {n['centrality']:.4f}  [cyan]{n['id']}[/]  {n['title']}")

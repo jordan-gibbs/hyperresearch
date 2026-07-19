@@ -13,12 +13,9 @@ from hyperresearch.core.similarity import (
 )
 from hyperresearch.models.output import success
 
-# Use MinHash+LSH for vaults above this size, O(n^2) below
-LSH_THRESHOLD = 200
-
 
 def dedup(
-    threshold: float = typer.Option(0.6, "--threshold", "-t", help="Similarity threshold (0.0-1.0)"),
+    threshold: float | None = typer.Option(None, "--threshold", "-t", help="Similarity threshold (0.0-1.0); default from [dedup] config"),
     limit: int = typer.Option(20, "--limit", "-l", help="Max pairs to show"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
@@ -35,6 +32,9 @@ def dedup(
         raise typer.Exit(1)
 
     vault.auto_sync()
+    cfg = vault.config.dedup
+    if threshold is None:
+        threshold = cfg.default_threshold
 
     # Load all note content
     rows = vault.db.execute(
@@ -54,7 +54,7 @@ def dedup(
     # Build shingle sets
     notes = {}
     for row in rows:
-        shingles = shingle(row["body_plain"])
+        shingles = shingle(row["body_plain"], n=cfg.shingle_size)
         notes[row["id"]] = {
             "id": row["id"],
             "title": row["title"],
@@ -63,8 +63,8 @@ def dedup(
         }
 
     # Choose algorithm based on vault size
-    if len(notes) >= LSH_THRESHOLD:
-        pairs = _dedup_lsh(notes, threshold)
+    if len(notes) >= cfg.lsh_switchover:
+        pairs = _dedup_lsh(notes, threshold, num_perm=cfg.minhash_perm, bands=cfg.lsh_bands)
         method = "minhash+lsh"
     else:
         pairs = _dedup_brute(notes, threshold)
@@ -111,15 +111,15 @@ def _dedup_brute(notes: dict, threshold: float) -> list[dict]:
     return pairs
 
 
-def _dedup_lsh(notes: dict, threshold: float) -> list[dict]:
+def _dedup_lsh(notes: dict, threshold: float, num_perm: int = 128, bands: int = 16) -> list[dict]:
     """MinHash+LSH for large vaults — approximate but O(n)."""
     # Compute signatures
     signatures = {}
     for nid, note in notes.items():
-        signatures[nid] = minhash_signature(note["shingles"])
+        signatures[nid] = minhash_signature(note["shingles"], num_perm=num_perm)
 
     # Find candidate pairs via LSH
-    candidates = lsh_candidates(signatures)
+    candidates = lsh_candidates(signatures, bands=bands)
 
     # Verify candidates with exact Jaccard
     pairs = []

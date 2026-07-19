@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC
 
 import typer
@@ -28,6 +29,9 @@ RULES = {
     "instruction-coverage": "Atomic items from prompt-decomposition missing from the final report (draft drifted from user's ask)",
     "citation-style-preservation": "Final report carries no citations matching the declared citation_style (wikilink markers or numbered references stripped)",
     "extract-coverage": "Light-tier runs with fetched sources but no paired extract notes (reading loop skipped or source-analyst not delegated for long sources)",
+    "quote-integrity": "Quoted spans in the final report that appear verbatim in no vault note (hallucinated quotes)",
+    "numeric-consistency": "Numbers in the final report untraceable to claims or cited note bodies",
+    "retracted-citations": "Final report cites a retracted source without marking it as retracted",
     "orphaned-raw-files": "Files in research/raw/ with no matching note (disk leak from old note rm)",
     "singleton-tags": "Tags used by only one note",
     "broken-links": "Wiki-links that don't resolve",
@@ -38,6 +42,194 @@ RULES = {
     "expired-notes": "Notes past their expiry date",
     "stale-reviews": "Notes not reviewed in over 90 days",
 }
+
+
+def _run_dirs_newest_first(vault) -> list:
+    """Run workspaces under research/runs/, newest manifest first."""
+    runs_dir = vault.root / "research" / "runs"
+    if not runs_dir.is_dir():
+        return []
+    dirs = [d for d in runs_dir.iterdir() if d.is_dir() and (d / "run.json").exists()]
+    dirs.sort(key=lambda d: (d / "run.json").stat().st_mtime, reverse=True)
+    return dirs
+
+
+def _run_artifact(vault, *relparts: str):
+    """Resolve a run-scoped pipeline artifact.
+
+    3.0 layout: research/runs/<vault_tag>/<artifact> (newest run that has it
+    wins). Legacy pre-3.0 layout: research/<artifact>. Always returns a Path
+    (the legacy flat path when nothing exists anywhere) so `.exists()` checks
+    at call sites keep working unchanged.
+    """
+    for d in _run_dirs_newest_first(vault):
+        p = d.joinpath(*relparts)
+        if p.exists():
+            return p
+    return (vault.root / "research").joinpath(*relparts)
+
+
+def _query_files(vault) -> list:
+    """Canonical query files: runs/<tag>/query.md (3.0) + legacy query-*.md."""
+    files = []
+    for d in _run_dirs_newest_first(vault):
+        q = d / "query.md"
+        if q.exists():
+            files.append(q)
+    files.extend(sorted((vault.root / "research").glob("query-*.md")))
+    return files
+
+
+def _latest_report(vault):
+    """Newest final_report*.md, or (None, None) when no report exists."""
+    notes_dir = vault.root / "research" / "notes"
+    if not notes_dir.is_dir():
+        return None, None
+    candidates = sorted(notes_dir.glob("final_report*.md"), key=lambda p: p.stat().st_mtime)
+    if not candidates:
+        return None, None
+    p = candidates[-1]
+    try:
+        return p, p.read_text(encoding="utf-8-sig")
+    except OSError:
+        return None, None
+
+
+_QUOTE_SPAN_RE = re.compile(r"[\"“]([^\"“”]{20,600})[\"”]")
+_REPORT_NUMBER_RE = re.compile(r"\d[\d,]*\.\d+%?|\d[\d,]{3,}%?|\d[\d,]*%")
+
+
+def _report_body_only(report_text: str) -> str:
+    """Report minus the Sources/References section and citation markers."""
+    import re as _re
+
+    body = _re.split(r"^##\s+(?:Sources|References)\b", report_text, maxsplit=1, flags=_re.M | _re.I)[0]
+    return _re.sub(r"\[\d{1,3}\]", "", body)
+
+
+def _check_quote_integrity(vault, conn, report_path, report_text) -> list[dict]:
+    """Every quoted span >= 5 words must exist in some vault note body.
+
+    Uses an FTS phrase query (porter-stemmed on both sides, so inflection
+    noise doesn't false-positive) and reports the nearest fuzzy match for
+    fast fixing. Hallucinated quotes are error severity — they are the one
+    thing a research report can never ship.
+    """
+    import re as _re
+
+    issues: list[dict] = []
+    body = _report_body_only(report_text)
+    for m in _QUOTE_SPAN_RE.finditer(body):
+        quote = _re.sub(r"\s+", " ", m.group(1)).strip()
+        if len(quote.split()) < 5:
+            continue
+        phrase = quote.replace('"', " ").replace("'", "''")
+        try:
+            hit = conn.execute(
+                'SELECT id FROM notes_fts WHERE notes_fts MATCH ? LIMIT 1',
+                (f'body_plain: "{phrase}"',),
+            ).fetchone()
+        except Exception:
+            hit = None
+        if hit:
+            continue
+        issues.append({
+            "rule": "quote-integrity",
+            "severity": "error",
+            "note_id": "<report>",
+            "note_path": str(report_path),
+            "message": (
+                f"Quoted span not found verbatim in any vault note: \"{quote[:120]}\"... "
+                "Either the quote is hallucinated/mangled or its source was never fetched. "
+                "Fix the quote or drop the quotation marks."
+            ),
+        })
+    return issues
+
+
+def _check_numeric_consistency(vault, conn, report_path, report_text) -> list[dict]:
+    """Substantive numbers in the report should be traceable to claims or
+    cited note bodies. Warning severity — legitimate derived arithmetic
+    exists; this flags candidates for the orchestrator to verify, it does
+    not block the gate."""
+    body = _report_body_only(report_text)
+    report_numbers = {n.rstrip(".,") for n in _REPORT_NUMBER_RE.findall(body)}
+    if not report_numbers:
+        return []
+
+    # Evidence blob: every claim (text, quotes, numbers) + bodies of notes
+    # with sources (the citable population).
+    parts: list[str] = []
+    for row in conn.execute("SELECT claim, quoted_support, numbers FROM claims"):
+        parts.extend(filter(None, (row["claim"], row["quoted_support"], row["numbers"])))
+    for row in conn.execute(
+        "SELECT nc.body_plain FROM note_content nc JOIN notes n ON n.id = nc.note_id "
+        "WHERE n.source IS NOT NULL"
+    ):
+        parts.append(row["body_plain"])
+    blob = " ".join(parts).replace(",", "")
+
+    issues: list[dict] = []
+    untraced = sorted(
+        n for n in report_numbers
+        if n.replace(",", "") not in blob
+    )
+    for number in untraced[:20]:
+        issues.append({
+            "rule": "numeric-consistency",
+            "severity": "warning",
+            "note_id": "<report>",
+            "note_path": str(report_path),
+            "message": (
+                f"Number '{number}' in the final report appears in no claim or cited "
+                "note body. If it is derived arithmetic, fine; otherwise verify it "
+                "against a source or remove it."
+            ),
+        })
+    if len(untraced) > 20:
+        issues.append({
+            "rule": "numeric-consistency",
+            "severity": "warning",
+            "note_id": "<report>",
+            "note_path": str(report_path),
+            "message": f"...and {len(untraced) - 20} more untraceable numbers (showing first 20).",
+        })
+    return issues
+
+
+def _check_retracted_citations(vault, conn, report_path, report_text) -> list[dict]:
+    """A cited retracted source blocks the gate — unless the citation itself
+    acknowledges the retraction (sometimes the retraction IS the story)."""
+
+    from hyperresearch.core.patterns import WIKI_LINK_RE
+
+    retracted = {
+        row["id"]: row["title"]
+        for row in conn.execute("SELECT id, title FROM notes WHERE is_retracted = 1")
+    }
+    if not retracted:
+        return []
+
+    issues: list[dict] = []
+    for m in WIKI_LINK_RE.finditer(report_text):
+        target = m.group(1).strip()
+        if target not in retracted:
+            continue
+        window = report_text[max(0, m.start() - 200): m.end() + 200].lower()
+        if "retract" in window:
+            continue
+        issues.append({
+            "rule": "retracted-citations",
+            "severity": "error",
+            "note_id": target,
+            "note_path": str(report_path),
+            "message": (
+                f"Final report cites [[{target}]] ('{retracted[target]}') which is "
+                "RETRACTED, without acknowledging the retraction. Drop the citation "
+                "or explicitly mark it (e.g. '(retracted)') where cited."
+            ),
+        })
+    return issues
 
 
 @app.callback(invoke_without_command=True)
@@ -133,7 +325,7 @@ def lint(
         if audit_file:
             audit_path = vault.root / audit_file
         else:
-            audit_path = vault.root / "research" / "audit_findings.json"
+            audit_path = _run_artifact(vault, "audit_findings.json")
         if audit_path.exists():
             try:
                 audit_data = _json.loads(audit_path.read_text(encoding="utf-8"))
@@ -396,11 +588,13 @@ def lint(
         )
         prompt_path = vault.root / "research" / "prompt.txt"
         canonical_prompt: str | None = None
-        # Check for new-style query files first, fall back to legacy prompt.txt
-        query_dir = vault.root / "research"
-        query_files = sorted(query_dir.glob("query-*.md"))
+        # Check for query files first (runs/<tag>/query.md, then legacy
+        # research/query-*.md), fall back to legacy prompt.txt
+        query_files = _query_files(vault)
         if query_files:
-            # Use the most recent query file (last alphabetically)
+            # _query_files orders newest-run first; legacy globs come after.
+            # Use the first (newest) for 3.0 runs, last for pure-legacy vaults.
+            query_files = [query_files[0]] if query_files[0].name == "query.md" else query_files
             try:
                 raw = query_files[-1].read_text(encoding="utf-8-sig").replace("\r\n", "\n")
                 # Strip YAML frontmatter if present
@@ -525,7 +719,7 @@ def lint(
         # but still enforce scaffold-leak hygiene (always wrong regardless
         # of wrapper).
         prompt_path = vault.root / "research" / "prompt.txt"
-        query_files_exist = bool(sorted((vault.root / "research").glob("query-*.md")))
+        query_files_exist = bool(_query_files(vault))
         contract_path = vault.root / "research" / "wrapper_contract.json"
         wrapper_contract: dict | None = None
         if contract_path.exists():
@@ -759,7 +953,7 @@ def lint(
             # breadcrumbs, reachability from seeds) still apply — they catch
             # fabricated provenance. The coverage ratio does not. Skip the
             # ratio checks when the vault is a hyperresearch run (loci.json exists).
-            is_hyperresearch_run = (vault.root / "research" / "loci.json").exists()
+            is_hyperresearch_run = _run_artifact(vault, "loci.json").exists()
 
             non_seed_ratio = len(non_seeds) / max(len(source_rows), 1)
             if is_hyperresearch_run:
@@ -813,7 +1007,7 @@ def lint(
         # the orchestrator commits to). Layer 3 must produce one interim note
         # per locus, tagged `locus-<locus-name>` with `type: interim`. This
         # rule catches depth investigators that failed or were skipped.
-        loci_path = vault.root / "research" / "loci.json"
+        loci_path = _run_artifact(vault, "loci.json")
         if loci_path.exists():
             try:
                 loci_data = json.loads(loci_path.read_text(encoding="utf-8"))
@@ -912,9 +1106,9 @@ def lint(
         # Hyperresearch runs use a different artifact shape (interim notes per
         # locus, checked by `locus-coverage`). Skip this rule when
         # `research/loci.json` exists — that signals a hyperresearch run.
-        is_hyperresearch_run = (vault.root / "research" / "loci.json").exists()
+        is_hyperresearch_run = _run_artifact(vault, "loci.json").exists()
         if not is_hyperresearch_run:
-            extract_min_words = 150
+            extract_min_words = vault.config.lint.extract_min_words
 
             source_count_row = conn.execute(
                 "SELECT COUNT(*) as c FROM notes n "
@@ -972,8 +1166,9 @@ def lint(
             # session needs at least 1 extract — the analyst is mandatory
             # on single-pass runs, not optional.
             if source_count >= 1:
-                required_extracts = max(1, source_count // 3)
-                error_floor = max(1, source_count // 4)
+                divisor = vault.config.lint.extract_coverage_divisor
+                required_extracts = max(1, source_count // divisor)
+                error_floor = max(1, source_count // (divisor + 1))
                 if extract_count < required_extracts:
                     ratio = extract_count / source_count if source_count else 0
                     notes_parts = []
@@ -1008,7 +1203,7 @@ def lint(
         # skipped, and conflicted findings. Skipped `critical` findings are
         # blockers — the draft shipped with a critical critique unresolved.
         # This rule surfaces that.
-        patch_log_path = vault.root / "research" / "patch-log.json"
+        patch_log_path = _run_artifact(vault, "patch-log.json")
         if patch_log_path.exists():
             try:
                 log = json.loads(patch_log_path.read_text(encoding="utf-8"))
@@ -1064,7 +1259,7 @@ def lint(
             # Only flag when there WERE findings to apply.
             critic_totals = 0
             for name in ("dialectic", "depth", "width"):
-                cf = vault.root / "research" / f"critic-findings-{name}.json"
+                cf = _run_artifact(vault, f"critic-findings-{name}.json")
                 if cf.exists():
                     try:
                         cdata = json.loads(cf.read_text(encoding="utf-8"))
@@ -1112,7 +1307,7 @@ def lint(
         # The instruction-critic agent (Layer 5) does the deeper structural
         # audit. This lint rule is the final post-patch gate that catches
         # items the critic flagged but the patcher couldn't apply.
-        decomp_path = vault.root / "research" / "prompt-decomposition.json"
+        decomp_path = _run_artifact(vault, "prompt-decomposition.json")
         notes_dir = vault.root / "research" / "notes"
         report_candidates = sorted(
             notes_dir.glob("final_report*.md"),
@@ -1208,7 +1403,7 @@ def lint(
         # survive in the final report. Deliberately NOT a density floor —
         # short reports and quote-heavy sections make density checks
         # false-positive; a separate warning-level rule can add that later.
-        decomp_path = vault.root / "research" / "prompt-decomposition.json"
+        decomp_path = _run_artifact(vault, "prompt-decomposition.json")
         citation_style: str | None = None
         if decomp_path.exists():
             try:
@@ -1366,8 +1561,8 @@ def lint(
         """).fetchone()["c"]
 
         scaffold_count = _count_by_tag("scaffold")
-        scaffold_md_exists = (vault.root / "research" / "scaffold.md").exists()
-        loci_json_exists = (vault.root / "research" / "loci.json").exists()
+        scaffold_md_exists = _run_artifact(vault, "scaffold.md").exists()
+        loci_json_exists = _run_artifact(vault, "loci.json").exists()
         interim_count_row = conn.execute(
             "SELECT COUNT(*) as c FROM notes n WHERE n.type = 'interim'"
         ).fetchone()
@@ -1412,7 +1607,7 @@ def lint(
             if loci_json_exists:
                 try:
                     loci_data = json.loads(
-                        (vault.root / "research" / "loci.json").read_text(encoding="utf-8")
+                        _run_artifact(vault, "loci.json").read_text(encoding="utf-8")
                     )
                     loci_list = (
                         loci_data.get("loci", [])
@@ -1424,7 +1619,7 @@ def lint(
                     locus_count = 0
 
                 comparisons_exists = (
-                    vault.root / "research" / "comparisons.md"
+                    _run_artifact(vault, "comparisons.md")
                 ).exists()
                 if locus_count >= 1 and not comparisons_exists:
                     issues.append({
@@ -1553,7 +1748,7 @@ def lint(
 
     if "stale-reviews" in rules_to_run:
         from datetime import datetime, timedelta
-        cutoff = (datetime.now(UTC) - timedelta(days=90)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(days=vault.config.lint.stale_review_days)).isoformat()
         for row in conn.execute(
             "SELECT id, path, reviewed FROM notes "
             "WHERE reviewed IS NOT NULL AND reviewed < ? AND status = 'evergreen'",
@@ -1566,6 +1761,19 @@ def lint(
                 "note_path": row["path"],
                 "message": f"Last reviewed {row['reviewed'][:10]}. Consider re-reviewing.",
             })
+
+    # --- Phase-5 verification rules: report content vs. vault evidence ---
+
+    _verification_rules = {"quote-integrity", "numeric-consistency", "retracted-citations"}
+    if _verification_rules & set(rules_to_run):
+        report_path, report_text = _latest_report(vault)
+        if report_text is not None:
+            if "quote-integrity" in rules_to_run:
+                issues.extend(_check_quote_integrity(vault, conn, report_path, report_text))
+            if "numeric-consistency" in rules_to_run:
+                issues.extend(_check_numeric_consistency(vault, conn, report_path, report_text))
+            if "retracted-citations" in rules_to_run:
+                issues.extend(_check_retracted_citations(vault, conn, report_path, report_text))
 
     # Audit-gate self-certification post-check. For each CRITICAL finding
     # that was marked `fixed_at`, we queued its implied lint rule for

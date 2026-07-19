@@ -63,10 +63,10 @@ def test_install_hyperresearch_skill_idempotent(tmp_vault):
     assert second is None
 
 
-def test_install_hyperresearch_step_skills_creates_all_16(tmp_vault):
+def test_install_hyperresearch_step_skills_creates_all(tmp_vault):
     """Each step skill lives at .claude/skills/hyperresearch-N-name/SKILL.md so the
-    orchestrator can invoke it via the Skill tool. All 16 must install on a
-    fresh vault."""
+    orchestrator can invoke it via the Skill tool. All 18 (16 numbered +
+    1.5 chapter-partition + 14.5 cite-check) must install on a fresh vault."""
     from hyperresearch.core.hooks import (
         _HYPERRESEARCH_STEP_SKILLS,
         _install_hyperresearch_step_skills,
@@ -74,7 +74,7 @@ def test_install_hyperresearch_step_skills_creates_all_16(tmp_vault):
 
     result = _install_hyperresearch_step_skills(tmp_vault.root)
     assert result is not None
-    assert len(_HYPERRESEARCH_STEP_SKILLS) == 16
+    assert len(_HYPERRESEARCH_STEP_SKILLS) == 18
 
     skills_root = tmp_vault.root / ".claude" / "skills"
     for skill_name in _HYPERRESEARCH_STEP_SKILLS:
@@ -370,6 +370,8 @@ def test_install_hooks_registers_full_hyperresearch_roster(tmp_vault):
         "hyperresearch-readability-recommender.md",
         "hyperresearch-draft-orchestrator.md",
         "hyperresearch-synthesizer.md",
+        "hyperresearch-browser-fetcher.md",
+        "hyperresearch-cite-checker.md",
     }
     actual_agents = {p.name for p in agents_dir.iterdir() if p.is_file()}
     assert expected_agents == actual_agents, (

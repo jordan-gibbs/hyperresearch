@@ -6,8 +6,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Protocol, runtime_checkable
 
+from hyperresearch.core.config import FetchSettings, JunkGates
+
 # Whitespace that is legitimate in extracted text.
 _TEXT_WHITESPACE = "\t\n\r\f\v"
+
+# Default thresholds — used when no vault config is in play (e.g. direct
+# provider usage in tests/scripts). Matches VaultConfig defaults.
+DEFAULT_GATES = JunkGates()
 
 
 def is_binary_garbage_char(c: str) -> bool:
@@ -33,6 +39,17 @@ def binary_garbage_ratio(text: str) -> float:
     return sum(1 for c in text if is_binary_garbage_char(c)) / len(text)
 
 
+def is_binary_garbage(sample: str, gates: JunkGates | None = None) -> bool:
+    """Shared threshold check for binary/mis-decoded content.
+
+    Single implementation for both fetch gates (WebResult.looks_like_junk and
+    the crawl4ai post-fetch PDF re-check) so the threshold can't drift apart
+    between them again.
+    """
+    gates = gates or DEFAULT_GATES
+    return binary_garbage_ratio(sample) > gates.binary_garbage_ratio
+
+
 @dataclass
 class WebResult:
     """A single web fetch or search result."""
@@ -55,21 +72,23 @@ class WebResult:
 
         return urlparse(self.url).netloc
 
-    def looks_like_login_wall(self, original_url: str) -> bool:
+    def looks_like_login_wall(self, original_url: str, gates: JunkGates | None = None) -> bool:
         """Check if the result appears to be a login/signup redirect rather than real content."""
+        gates = gates or DEFAULT_GATES
         login_signals = (
             "sign in", "sign up", "log in", "login", "create account",
             "auth", "register", "sso", "verify your identity",
+            *gates.extra_login_signals,
         )
         title_lower = (self.title or "").lower()
-        content_lower = (self.content or "")[:500].lower()
+        content_lower = (self.content or "")[: gates.login_sample_chars].lower()
 
         # Title contains login language
         title_match = any(s in title_lower for s in login_signals)
 
         # Content is mostly login form (very short with login keywords)
         content_match = (
-            len(self.content or "") < 1000
+            len(self.content or "") < gates.login_wall_max_chars
             and any(s in content_lower for s in login_signals)
         )
 
@@ -82,17 +101,18 @@ class WebResult:
 
         return title_match or content_match or url_redirected
 
-    def looks_like_junk(self) -> str | None:
+    def looks_like_junk(self, gates: JunkGates | None = None) -> str | None:
         """Check if the result is junk that shouldn't be saved.
 
         Returns a reason string if junk, None if OK.
         """
+        gates = gates or DEFAULT_GATES
         content = self.content or ""
         title_lower = (self.title or "").lower()
-        content_lower = content[:2000].lower()
+        content_lower = content[: gates.sample_window].lower()
 
         # Empty or near-empty content
-        if len(content.strip()) < 300:
+        if len(content.strip()) < gates.min_content_chars:
             return "Empty or near-empty content"
 
         # Cloudflare / bot detection pages
@@ -104,7 +124,7 @@ class WebResult:
             "enable javascript and cookies", "browser check",
             "ddos protection", "attention required",
         )
-        if any(s in title_lower or s in content_lower for s in cf_signals):
+        if any(s in title_lower or s in content_lower for s in cf_signals + tuple(gates.extra_junk_signals)):
             return f"Bot detection page: {self.title}"
 
         # Error pages
@@ -124,15 +144,15 @@ class WebResult:
 
         # Binary garbage from PDFs that weren't properly extracted
         pdf_binary_signals = ("endstream", "endobj", "/FlateDecode", "%PDF-")
-        sample = content[:2000]
+        sample = content[: gates.sample_window]
         if any(m in sample for m in pdf_binary_signals):
             return "Binary PDF garbage in content"
 
-        if binary_garbage_ratio(sample) > 0.05:
+        if is_binary_garbage(sample, gates):
             return "High ratio of binary/non-printable content"
 
         # Cookie consent / boilerplate pages (short with mostly nav/cookie text)
-        if len(content.strip()) < 1500:
+        if len(content.strip()) < gates.cookie_wall_max_chars:
             cookie_signals = (
                 "we use cookies", "cookie policy", "accept cookies", "cookie consent",
                 "there appears to be a technical issue", "please enable javascript",
@@ -167,6 +187,8 @@ def get_provider(
     profile: str | None = None,
     magic: bool = False,
     headless: bool = True,
+    settings: FetchSettings | None = None,
+    gates: JunkGates | None = None,
 ) -> WebProvider:
     """Load a web provider by name. Falls back to builtin if none specified."""
     if name is None or name == "builtin":
@@ -182,6 +204,8 @@ def get_provider(
                 profile=profile or None,
                 magic=magic,
                 headless=headless,
+                settings=settings,
+                gates=gates,
             )
         except ImportError:
             raise ImportError("crawl4ai provider requires: pip install hyperresearch[crawl4ai]")

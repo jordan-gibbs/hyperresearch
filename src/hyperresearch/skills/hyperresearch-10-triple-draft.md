@@ -24,12 +24,12 @@ description: >
 ## Recover state
 
 Read these inputs:
-- `research/scaffold.md` — vault_tag, modality, wrapper requirements
-- `research/prompt-decomposition.json` — atomic items, required_section_headings, response_format, citation_style, pipeline_tier
-- `research/temp/evidence-digest.md` — top claims + verbatim quotes — PRIMARY EVIDENCE LAYER (full only; absent for light)
-- `research/comparisons.md` (full tier) — cross-locus tensions
-- `research/temp/source-tensions.json` (full tier) — expert disagreements
-- `research/temp/coverage-gaps.md` (if exists) — items with weak source coverage
+- `research/runs/<vault_tag>/scaffold.md` — vault_tag, modality, wrapper requirements
+- `research/runs/<vault_tag>/prompt-decomposition.json` — atomic items, required_section_headings, response_format, citation_style, pipeline_tier
+- `research/runs/<vault_tag>/temp/evidence-digest.md` — top claims + verbatim quotes — PRIMARY EVIDENCE LAYER (full only; absent for light)
+- `research/runs/<vault_tag>/comparisons.md` (full tier) — cross-locus tensions
+- `research/runs/<vault_tag>/temp/source-tensions.json` (full tier) — expert disagreements
+- `research/runs/<vault_tag>/temp/coverage-gaps.md` (if exists) — items with weak source coverage
 - Survey vault: `$HPR note list --tag <vault_tag> --all -j` for the evidence landscape
 - Modality calibration (from the scaffold's `modality` field):
   - **collect** — enumerative coverage, per-entity sections with named fields
@@ -41,13 +41,13 @@ Read these inputs:
 
 ## Step 10.0 — Read response_format and citation_style
 
-Read `response_format` and `citation_style` from `research/prompt-decomposition.json`. These control the draft shape:
+Read `response_format` and `citation_style` from `research/runs/<vault_tag>/prompt-decomposition.json`. These control the draft shape:
 
 | Format | Target length | Character |
 |--------|-------------|-----------|
-| `"short"` | 500–2000 words / 1500–6000 chars (CJK) | Direct answer, compact |
-| `"structured"` | 2000–5000 words / 6000–15000 chars (CJK) | Scannable, breadth-first |
-| `"argumentative"` | 5000–10000 words / 20000–25000 chars (CJK) | Dense thesis-driven |
+| `"short"` | << p.word_targets.short|dash >> words / 1500–6000 chars (CJK) | Direct answer, compact |
+| `"structured"` | << p.word_targets.structured|dash >> words / 6000–15000 chars (CJK) | Scannable, breadth-first |
+| `"argumentative"` | << p.word_targets.argumentative|dash >> words / 20000–25000 chars (CJK) | Dense thesis-driven |
 
 **Length discipline:** Target the MIDDLE of the range. Under-length loses on comprehensiveness; over-length dilutes good content.
 
@@ -59,10 +59,10 @@ If `pipeline_tier == "light"`: SKIP step 10.1 — 10.3 below and follow this sec
 
 **Light tier writes a single draft directly to `research/notes/final_report_<vault_tag>.md`.** No subagents, no triple-draft ensemble, no synthesizer.
 
-1. **Read the vault directly.** Light tier has no `evidence-digest.md` (step 9 was skipped). Survey the vault: `$HPR note list --tag <vault_tag> --all -j` and pick the 8–15 most relevant non-deprecated notes. Read each one (`$HPR note show <id1> <id2> ... -j`) before writing.
+1. **Read the vault directly.** Light tier has no `evidence-digest.md` (step 9 was skipped). Survey the vault: `$HPR note list --tag <vault_tag> --all -j` and pick the << p.single_draft_reads|dash >> most relevant non-deprecated notes. Read each one (`$HPR note show <id1> <id2> ... -j`) before writing.
 
 2. **Honor the structural contract.**
-   - Use the literal H2 headings from `required_section_headings` in `research/prompt-decomposition.json`, in order.
+   - Use the literal H2 headings from `required_section_headings` in `research/runs/<vault_tag>/prompt-decomposition.json`, in order.
    - Hit the length target from step 10.0's table for the chosen `response_format` (light typically pairs with `short` or `structured`).
    - Apply the modality calibration from the recover-state list above.
 
@@ -91,13 +91,13 @@ Based on the evidence, tensions, and query, assign each sub-orchestrator a disti
 - **Draft B — Depth-optimized:** deeper treatment of the 3-4 most important atomic items.
 - **Draft C — Practitioner-optimized:** organized around actionable recommendations.
 
-Write the 3 angle assignments to `research/temp/draft-angles.md` (for the run log). Each angle: 2-3 sentences describing the analytical direction.
+Write the 3 angle assignments to `research/runs/<vault_tag>/temp/draft-angles.md` (for the run log). Each angle: 2-3 sentences describing the analytical direction.
 
 ---
 
 ## Step 10.2 — Curate per-angle source lists
 
-**Critical step.** Each draft sub-orchestrator does NOT decide what to read. YOU pick the 20-50 most relevant vault notes for each angle and pass them as `must_read_note_ids`. This eliminates wasted vault-survey loops in the sub-orchestrators and forces real differentiation by giving each draft a different evidence base.
+**Critical step.** Each draft sub-orchestrator does NOT decide what to read. YOU pick the << p.must_read.short[0] >>-<< p.must_read.argumentative[1] >> most relevant vault notes for each angle and pass them as `must_read_note_ids`. This eliminates wasted vault-survey loops in the sub-orchestrators and forces real differentiation by giving each draft a different evidence base.
 
 1. **List all substantive vault notes:**
    ```bash
@@ -105,7 +105,13 @@ Write the 3 angle assignments to `research/temp/draft-angles.md` (for the run lo
    ```
    Filter to non-deprecated notes. You should have 50-100 candidates.
 
-2. **For each draft (A, B, C), pick 20-50 angle-specific notes.** Use these signals:
+   **Rank the pool before picking.** For each atomic item, run a quality-ranked search to surface the best-evidence sources first:
+   ```bash
+   $HPR search "<atomic item keywords>" --tag <vault_tag> --ranked -j
+   ```
+   `--ranked` folds the composite `quality_score` (tier + utility + citation authority + vault centrality, retractions floored) into relevance. Prefer high-quality sources when two candidates cover the same ground; a note with `quality_score` near the retraction floor should not appear in any must_read list unless the draft explicitly discusses its retraction.
+
+2. **For each draft (A, B, C), pick << p.must_read.short[0] >>-<< p.must_read.argumentative[1] >> angle-specific notes.** Use these signals:
    - **Source-analysis notes** (`type: source-analysis`): high-value, full digests of long sources. Include relevant ones in EVERY draft's list — these are gold.
    - **Interim notes** (`type: interim`, full tier only): include all of them in EVERY draft's list — these have the committed positions.
    - **For Draft A (strongest-thesis or breadth):** prefer sources that support the dominant evidence direction. Include any source the evidence digest cites for high-confidence claims.
@@ -114,12 +120,12 @@ Write the 3 angle assignments to `research/temp/draft-angles.md` (for the run lo
 
 3. **Source overlap is fine.** Drafts can share source IDs — interim notes and key source-analyses should appear in all three lists. Differentiation comes from the angle-specific extras (the 5-15 sources unique to each draft's list).
 
-4. **Cap each list at 50, minimum 20.** For `argumentative` format, lean toward 35-50. For `structured`, lean toward 25-40. For `short`, lean toward 20-30.
+4. **Cap each list at << p.must_read.argumentative[1] >>, minimum << p.must_read.short[0] >>.** For `argumentative` format, lean toward << p.must_read.argumentative|hyphen >>. For `structured`, lean toward << p.must_read.structured|hyphen >>. For `short`, lean toward << p.must_read.short|hyphen >>.
 
 5. **Write each list to disk** so the spawn template can reference it:
-   - `research/temp/draft-a-source-list.md`
-   - `research/temp/draft-b-source-list.md`
-   - `research/temp/draft-c-source-list.md`
+   - `research/runs/<vault_tag>/temp/draft-a-source-list.md`
+   - `research/runs/<vault_tag>/temp/draft-b-source-list.md`
+   - `research/runs/<vault_tag>/temp/draft-c-source-list.md`
 
    Format:
    ```markdown
@@ -133,18 +139,18 @@ Write the 3 angle assignments to `research/temp/draft-angles.md` (for the run lo
 
 ---
 
-## Step 10.3 — Spawn 3 draft sub-orchestrators in parallel
+## Step 10.3 — Spawn << p.draft_count >> draft sub-orchestrators in parallel
 
-**Spawn 3 `hyperresearch-draft-orchestrator` subagents in ONE message.** This is true parallel execution. Each gets a different `draft_id`, `analytical_angle`, and (CRUCIALLY) a different `must_read_note_ids` array.
+**Spawn << p.draft_count >> `hyperresearch-draft-orchestrator` subagents in ONE message.** This is true parallel execution. Each gets a different `draft_id`, `analytical_angle`, and (CRUCIALLY) a different `must_read_note_ids` array.
 
 **Spawn template:**
 ```
 subagent_type: hyperresearch-draft-orchestrator
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
-  > {{paste research/query-<vault_tag>.md body}}
+  > {{paste research/runs/<vault_tag>/query.md body}}
 
-  QUERY FILE: research/query-<vault_tag>.md
+  QUERY FILE: research/runs/<vault_tag>/query.md
 
   PIPELINE POSITION: You are one of 3 parallel step 10 sub-orchestrators
   in the hyperresearch V8 pipeline. After you and the other two return, the
@@ -153,16 +159,16 @@ prompt: |
   synthesis, not the final output.
 
   YOUR INPUTS:
-  - query_file_path: research/query-<vault_tag>.md
+  - query_file_path: research/runs/<vault_tag>/query.md
   - vault_tag: <vault_tag>
   - draft_id: "a" (or "b" or "c")
-  - output_path: research/temp/draft-a.md (or draft-b.md or draft-c.md)
+  - output_path: research/runs/<vault_tag>/temp/draft-a.md (or draft-b.md or draft-c.md)
   - analytical_angle: "<the 2-3 sentence angle assignment>"
-  - must_read_note_ids: [<paste the IDs from research/temp/draft-<x>-source-list.md, e.g. 30-50 IDs>]
-  - decomposition_path: research/prompt-decomposition.json
-  - evidence_digest_path: research/temp/evidence-digest.md
-  - comparisons_path: research/comparisons.md
-  - source_tensions_path: research/temp/source-tensions.json
+  - must_read_note_ids: [<paste the IDs from research/runs/<vault_tag>/temp/draft-<x>-source-list.md, e.g. 30-50 IDs>]
+  - decomposition_path: research/runs/<vault_tag>/prompt-decomposition.json
+  - evidence_digest_path: research/runs/<vault_tag>/temp/evidence-digest.md
+  - comparisons_path: research/runs/<vault_tag>/comparisons.md
+  - source_tensions_path: research/runs/<vault_tag>/temp/source-tensions.json
   - response_format: "<short|structured|argumentative>"
   - citation_style: "<wikilink|inline|none>"
   - modality: "<collect|synthesize|compare|forecast>"
@@ -172,7 +178,7 @@ prompt: |
   Write your draft from your assigned angle, citing your curated sources.
 ```
 
-**CRITICAL: never emit bare text while the 3 sub-orchestrators are running.** They will take 5-15 minutes each. Use this time to think — append notes to `research/temp/orchestrator-notes.md` about the synthesis you'll plan in step 11: what's the strongest thesis emerging across angles? Which atomic items will be contentious? What argumentative beats must the final draft commit to? One vault count check per minute max. Write your thoughts, don't just poll.
+**CRITICAL: never emit bare text while the 3 sub-orchestrators are running.** They will take 5-15 minutes each. Use this time to think — append notes to `research/runs/<vault_tag>/temp/orchestrator-notes.md` about the synthesis you'll plan in step 11: what's the strongest thesis emerging across angles? Which atomic items will be contentious? What argumentative beats must the final draft commit to? One vault count check per minute max. Write your thoughts, don't just poll.
 
 ---
 
@@ -181,9 +187,9 @@ prompt: |
 When all 3 sub-orchestrators return:
 
 1. **Confirm all 3 draft files exist:**
-   - `research/temp/draft-a.md`
-   - `research/temp/draft-b.md`
-   - `research/temp/draft-c.md`
+   - `research/runs/<vault_tag>/temp/draft-a.md`
+   - `research/runs/<vault_tag>/temp/draft-b.md`
+   - `research/runs/<vault_tag>/temp/draft-c.md`
 
 2. **Read each sub-orchestrator's report-back.** Each should report:
    - Path to the draft
@@ -204,9 +210,9 @@ When all 3 sub-orchestrators return:
 - `research/notes/final_report_<vault_tag>.md` exists, hits the length target from step 10.0, follows `required_section_headings`, and respects `citation_style`.
 
 **Standard / full tier:**
-- All three drafts exist at `research/temp/draft-{a,b,c}.md`
+- All three drafts exist at `research/runs/<vault_tag>/temp/draft-{a,b,c}.md`
 - Each draft has non-trivial length (1000+ chars argumentative, 500+ structured)
-- Sub-orchestrator report-backs are captured (you can paraphrase them in `research/temp/orchestrator-notes.md` for the synthesis plan you'll write in step 11)
+- Sub-orchestrator report-backs are captured (you can paraphrase them in `research/runs/<vault_tag>/temp/orchestrator-notes.md` for the synthesis plan you'll write in step 11)
 
 ---
 

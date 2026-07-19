@@ -68,6 +68,7 @@ def search_fts(
     offset: int = 0,
     include_index: bool = False,
     ranking: dict | None = None,
+    quality_ranked: bool = False,
 ) -> list[dict]:
     """Execute a full-text search against the notes_fts table.
 
@@ -105,6 +106,7 @@ def search_fts(
     sql = f"""
         SELECT
             n.id, n.title, n.path, n.status, n.type, n.tier, n.content_type,
+            n.quality_score,
             n.created, n.updated, n.word_count, n.summary,
             snippet(notes_fts, 2, '>>>', '<<<', '...', 64) as snippet,
             bm25(notes_fts, 0.0, {tw}, {bw}, {tgw}, {aw}) as score,
@@ -147,6 +149,7 @@ def search_fts(
             "updated": row["updated"],
             "word_count": row["word_count"],
             "summary": row["summary"],
+            "quality_score": row["quality_score"] if "quality_score" in row.keys() else None,  # noqa: SIM118
             "score": abs(row["score"]),
             "snippet": row["snippet"] or "",
         })
@@ -163,6 +166,17 @@ def search_fts(
                 r["score"] *= penalize_deprecated
             elif r["status"] == "stale":
                 r["score"] *= penalize_stale
+        results.sort(key=lambda x: x["score"], reverse=True)
+
+    # Quality-weighted re-rank (opt-in): fold the composite source-quality
+    # score into relevance. (0.5 + quality) keeps unscored notes (quality
+    # NULL -> neutral 1.0x via fallback 0.5) competitive while a
+    # ground-truth-tier, high-authority source (~1.0) roughly triples a
+    # retracted one (~0.05).
+    if quality_ranked:
+        for r in results:
+            q = r.get("quality_score")
+            r["score"] *= 0.5 + (q if q is not None else 0.5)
         results.sort(key=lambda x: x["score"], reverse=True)
 
     return results

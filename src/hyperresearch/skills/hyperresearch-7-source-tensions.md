@@ -2,7 +2,7 @@
 name: hyperresearch-7-source-tensions
 description: >
   Step 7 of the hyperresearch V8 pipeline. Extracts explicit expert
-  disagreements from the corpus into research/temp/source-tensions.json,
+  disagreements from the corpus into research/runs/<vault_tag>/temp/source-tensions.json,
   including orphan tensions that didn't surface as loci. Reads full source
   bodies of top 8-12 sources (not summaries) to find tensions that hide
   in nuance. The Source Tensions section in step 10's draft is the single
@@ -23,9 +23,9 @@ description: >
 ## Recover state
 
 Read these inputs:
-- `research/scaffold.md` — vault_tag
-- `research/comparisons.md` — cross-locus tensions
-- `research/temp/contradiction-graph.json` (if step 3 ran)
+- `research/runs/<vault_tag>/scaffold.md` — vault_tag
+- `research/runs/<vault_tag>/comparisons.md` — cross-locus tensions
+- `research/runs/<vault_tag>/temp/contradiction-graph.json` (if step 3 ran)
 - Survey vault: `$HPR note list --tag <vault_tag> --all -j` for the 15–20 highest-quality non-deprecated sources
 
 ---
@@ -42,7 +42,7 @@ Read these inputs:
    - Industry claims that contradict independent research
    - Historical consensus that recent evidence challenges
 
-3. **If `research/temp/contradiction-graph.json` exists**, read it. Any high-relevance fight cluster that was NOT promoted to a locus is a prime orphan-tension candidate. It was important enough for the contradiction graph but wasn't investigated in depth — these deserve standalone treatment in the draft.
+3. **If `research/runs/<vault_tag>/temp/contradiction-graph.json` exists**, read it. Any high-relevance fight cluster that was NOT promoted to a locus is a prime orphan-tension candidate. It was important enough for the contradiction graph but wasn't investigated in depth — these deserve standalone treatment in the draft.
 
 4. **Select 3–7 source tensions.** Combine comparisons.md tensions with orphan tensions. Rank by:
    - **Decision relevance:** does resolving this tension change the report's recommendation?
@@ -57,7 +57,7 @@ Read these inputs:
    - State Side B's strongest case with evidence
    - Commit to a reading: which side has the better evidence, or is there a synthesis? Name the load-bearing reason.
 
-6. **Write `research/temp/source-tensions.json`:**
+6. **Write `research/runs/<vault_tag>/temp/source-tensions.json`:**
    ```json
    {
      "tensions": [
@@ -87,7 +87,7 @@ This artifact feeds directly into step 10's mandatory Source Tensions section. E
 
 ## Exit criterion
 
-- `research/temp/source-tensions.json` exists with 3–7 tensions
+- `research/runs/<vault_tag>/temp/source-tensions.json` exists with 3–7 tensions
 - Each tension has both sides with proponents, a committed resolution, and decision_relevance
 
 ---

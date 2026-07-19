@@ -11,14 +11,11 @@ from urllib.parse import urlparse
 import typer
 
 from hyperresearch.cli._output import console, output
+from hyperresearch.core.config import AssetSettings, FetchSettings
 from hyperresearch.models.output import error, success
 
 app = typer.Typer()
 
-# Max images to download per fetch
-MAX_IMAGES = 5
-# Skip small images (icons, logos, spacers, tracking pixels, nav elements)
-MIN_IMAGE_BYTES = 50_000
 # URL patterns that are almost never content images
 SKIP_URL_PATTERNS = (
     "logo", "icon", "favicon", "badge", "avatar", "sprite", "banner",
@@ -220,6 +217,11 @@ def fetch(
         "--suggested-by-reason",
         help="One-line justification for why the suggesting source named this URL. Appears next to the [[source-id]] breadcrumb.",
     ),
+    utility_score: float | None = typer.Option(
+        None,
+        "--utility-score",
+        help="Step-2 fetch-selection utility score (0-18). Persisted to note frontmatter so the quality composite can use it after fetching.",
+    ),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
     """Fetch a URL and save its content as a research note."""
@@ -290,11 +292,7 @@ def fetch(
         from urllib.parse import urlparse as _urlparse
 
         domain = _urlparse(url).netloc.lower()
-        _auth_aggressive_domains = (
-            "linkedin.com", "twitter.com", "x.com", "facebook.com",
-            "instagram.com", "tiktok.com",
-        )
-        if any(d in domain for d in _auth_aggressive_domains):
+        if any(d in domain for d in vault.config.fetch.visible_browser_domains):
             visible = True
 
     # Fetch content
@@ -303,6 +301,8 @@ def fetch(
         profile=vault.config.web_profile,
         magic=vault.config.web_magic,
         headless=not visible,
+        settings=vault.config.fetch,
+        gates=vault.config.junk,
     )
     if not json_output:
         console.print(f"[dim]Fetching with {prov.name}...[/]")
@@ -316,25 +316,38 @@ def fetch(
             console.print(f"[red]Fetch failed:[/] {e}")
         raise typer.Exit(1)
 
-    # Detect login redirects — abort instead of saving login page junk
-    if result.looks_like_login_wall(url):
+    # Detect login redirects — abort, but ESCALATE to the browser lane
+    # instead of silently losing the source.
+    if result.looks_like_login_wall(url, vault.config.junk):
+        item_id = _escalate_blocked(vault, url, "login_wall", tags, suggested_by, utility_score,
+                                    detail=f"login wall: {result.title}")
+        escalated = f" Queued for browser-lane escalation (#{item_id})." if item_id else ""
         msg = (
             f"Redirected to login page ({result.title}). "
             "Try --visible flag (runs browser non-headless, sites are less aggressive). "
-            "If that fails, re-create your login profile with 'hyperresearch setup'."
+            f"If that fails, re-create your login profile with 'hyperresearch setup'.{escalated}"
         )
         if json_output:
-            output(error(msg, "AUTH_REQUIRED"), json_mode=True)
+            output(error(msg, "AUTH_REQUIRED_ESCALATED" if item_id else "AUTH_REQUIRED"), json_mode=True)
         else:
             console.print(f"[red]Auth required:[/] {msg}")
         raise typer.Exit(1)
 
-    # Detect junk pages — captcha, error pages, binary garbage, empty content
-    junk_reason = result.looks_like_junk()
+    # Detect junk pages — captcha, error pages, binary garbage, empty content.
+    # Bot-detection junk (Cloudflare/captcha walls) escalates to the browser
+    # lane; content-quality junk (error pages, empty content) does not — a
+    # 404 in Chrome is still a 404.
+    junk_reason = result.looks_like_junk(vault.config.junk)
     if junk_reason:
-        msg = f"Skipped junk content from {url}: {junk_reason}"
+        item_id = None
+        if junk_reason.startswith("Bot detection"):
+            reason = "captcha" if "captcha" in junk_reason.lower() else "bot_block"
+            item_id = _escalate_blocked(vault, url, reason, tags, suggested_by, utility_score,
+                                        detail=junk_reason)
+        escalated = f" Queued for browser-lane escalation (#{item_id})." if item_id else ""
+        msg = f"Skipped junk content from {url}: {junk_reason}.{escalated}"
         if json_output:
-            output(error(msg, "JUNK_CONTENT"), json_mode=True)
+            output(error(msg, "JUNK_ESCALATED" if item_id else "JUNK_CONTENT"), json_mode=True)
         else:
             console.print(f"[yellow]Skipped:[/] {msg}")
         raise typer.Exit(1)
@@ -353,6 +366,15 @@ def fetch(
     }
     if result.metadata.get("author"):
         extra_meta["author"] = result.metadata["author"]
+
+    # Source-ranking capture: DOI/arXiv id + the orchestrator's utility score
+    from hyperresearch.core.scholar import extract_doi
+
+    detected_doi = extract_doi(url, result.raw_html, result.content)
+    if detected_doi:
+        extra_meta["doi"] = detected_doi
+    if utility_score is not None:
+        extra_meta["utility_score"] = utility_score
 
     # Build body with backlink breadcrumb if this fetch was suggested by another note.
     # Prepending `*Suggested by [[source-id]] — reason*` lines creates wiki-links the
@@ -480,7 +502,10 @@ def fetch(
     saved_assets: list[dict] = []
     if save_assets:
         assets_dir = vault.root / "research" / "assets" / note_id
-        saved_assets = _save_assets(conn, result, note_id, assets_dir)
+        saved_assets = _save_assets(
+            conn, result, note_id, assets_dir,
+            settings=vault.config.assets, image_timeout_s=vault.config.fetch.image_timeout_s,
+        )
 
     data = {
         "note_id": note_id,
@@ -505,8 +530,38 @@ def fetch(
             console.print(f"  Assets: {len(saved_assets)} saved to research/assets/{note_id}/")
 
 
-def _save_assets(conn, result, note_id: str, assets_dir: Path) -> list[dict]:
+def _escalate_blocked(
+    vault, url: str, reason: str, tags: list[str],
+    suggested_by: list[str], utility_score: float | None,
+    detail: str | None = None,
+) -> int | None:
+    """Queue a blocked fetch for the Chrome lane. Never raises — a failed
+    enqueue must not mask the original fetch outcome."""
+    try:
+        from hyperresearch.core.escalation import maybe_enqueue_blocked_fetch
+
+        return maybe_enqueue_blocked_fetch(
+            vault, url, reason,
+            vault_tag=tags[0] if tags else None,
+            suggested_by=suggested_by[0] if suggested_by else None,
+            utility_score=utility_score,
+            detail=detail,
+        )
+    except Exception:
+        return None
+
+
+def _save_assets(
+    conn,
+    result,
+    note_id: str,
+    assets_dir: Path,
+    settings: AssetSettings | None = None,
+    image_timeout_s: int | None = None,
+) -> list[dict]:
     """Save screenshot and images to assets dir, record in DB. Returns list of saved asset info."""
+    settings = settings or AssetSettings()
+    timeout_s = image_timeout_s if image_timeout_s is not None else FetchSettings().image_timeout_s
     saved: list[dict] = []
     now = datetime.now(UTC).isoformat()
 
@@ -544,10 +599,13 @@ def _save_assets(conn, result, note_id: str, assets_dir: Path) -> list[dict]:
 
         # Sort by score descending, take top N
         candidates.sort(key=lambda m: m.get("score", 0), reverse=True)
-        for img in candidates[:MAX_IMAGES]:
+        for img in candidates[: settings.max_images]:
             img_url = img.get("src", "")
             alt = img.get("alt", "") or ""
-            asset_info = _download_image(conn, note_id, img_url, alt, assets_dir, now)
+            asset_info = _download_image(
+                conn, note_id, img_url, alt, assets_dir, now,
+                min_image_bytes=settings.min_image_bytes, timeout_s=timeout_s,
+            )
             if asset_info:
                 saved.append(asset_info)
 
@@ -557,7 +615,10 @@ def _save_assets(conn, result, note_id: str, assets_dir: Path) -> list[dict]:
     return saved
 
 
-def _download_image(conn, note_id: str, img_url: str, alt: str, assets_dir: Path, now: str) -> dict | None:
+def _download_image(
+    conn, note_id: str, img_url: str, alt: str, assets_dir: Path, now: str,
+    min_image_bytes: int = 50_000, timeout_s: int = 15,
+) -> dict | None:
     """Download a single image. Returns asset info dict or None if skipped."""
     import urllib.request
 
@@ -584,14 +645,14 @@ def _download_image(conn, note_id: str, img_url: str, alt: str, assets_dir: Path
 
     try:
         req = urllib.request.Request(img_url, headers={"User-Agent": "hyperresearch/0.1"})
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
             data = resp.read()
             content_type = resp.headers.get("Content-Type", "")
     except Exception:
         return None
 
     # Skip tiny images (icons, spacers, tracking pixels)
-    if len(data) < MIN_IMAGE_BYTES:
+    if len(data) < min_image_bytes:
         return None
 
     file_path.write_bytes(data)

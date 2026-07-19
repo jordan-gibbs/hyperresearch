@@ -158,6 +158,88 @@ def _migrate_v8_source_analysis_note_type(conn: sqlite3.Connection) -> None:
     """)
 
 
+def _migrate_v9_source_ranking(conn: sqlite3.Connection) -> None:
+    """Source-ranking schema (2.0 phase 2): note score columns, claims, api_cache.
+
+    Additive only — existing rows keep NULL scores until `hpr sources score` /
+    `hpr graph rank` populate them. Idempotent via column/table existence checks.
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(notes)")}
+    new_columns = {
+        "doi": "TEXT",
+        "utility_score": "REAL",
+        "authority_score": "REAL",
+        "centrality_score": "REAL",
+        "independence": "REAL",
+        "citation_count": "INTEGER",
+        "venue": "TEXT",
+        "is_retracted": "INTEGER NOT NULL DEFAULT 0",
+        "quality_score": "REAL",
+    }
+    for name, decl in new_columns.items():
+        if name not in existing:
+            conn.execute(f"ALTER TABLE notes ADD COLUMN {name} {decl}")
+
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS claims (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            note_id        TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+            claim          TEXT NOT NULL,
+            claim_hash     TEXT NOT NULL,
+            quoted_support TEXT,
+            numbers        TEXT,
+            confidence     TEXT,
+            evidence_type  TEXT,
+            stance_target  TEXT,
+            stance         TEXT,
+            vault_tag      TEXT,
+            ingested_at    TEXT NOT NULL,
+            UNIQUE (note_id, claim_hash)
+        );
+        CREATE INDEX IF NOT EXISTS idx_claims_note ON claims(note_id);
+        CREATE INDEX IF NOT EXISTS idx_claims_vault_tag ON claims(vault_tag);
+        CREATE INDEX IF NOT EXISTS idx_claims_stance_target ON claims(stance_target);
+
+        CREATE VIRTUAL TABLE IF NOT EXISTS claims_fts USING fts5(
+            claim_id UNINDEXED,
+            claim,
+            quoted_support,
+            tokenize='porter unicode61'
+        );
+
+        CREATE TABLE IF NOT EXISTS api_cache (
+            url        TEXT PRIMARY KEY,
+            body       TEXT NOT NULL,
+            fetched_at TEXT NOT NULL
+        );
+    """)
+
+
+_MIGRATE_V10_ESCALATIONS_SQL = """
+CREATE TABLE IF NOT EXISTS escalations (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    url           TEXT NOT NULL,
+    reason        TEXT NOT NULL
+                      CHECK (reason IN ('login_wall','bot_block','captcha','fetch_failed','interactive_needed','scholar_search')),
+    requested_by  TEXT,
+    suggested_by  TEXT,
+    utility_score REAL,
+    vault_tag     TEXT,
+    status        TEXT NOT NULL DEFAULT 'queued'
+                      CHECK (status IN ('queued','in_progress','fetched','needs_human','abandoned')),
+    attempts      INTEGER NOT NULL DEFAULT 0,
+    note_id       TEXT,
+    claimed_by    TEXT,
+    detail        TEXT,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL,
+    UNIQUE (url, vault_tag)
+);
+CREATE INDEX IF NOT EXISTS idx_escalations_status ON escalations(status);
+CREATE INDEX IF NOT EXISTS idx_escalations_tag ON escalations(vault_tag);
+"""
+
+
 MIGRATIONS: dict[int, str | Callable[[sqlite3.Connection], None]] = {
     2: """
 CREATE TABLE IF NOT EXISTS tag_aliases (
@@ -202,6 +284,8 @@ CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
     6: _migrate_v6_tier_content_type,
     7: _migrate_v7_interim_note_type,
     8: _migrate_v8_source_analysis_note_type,
+    9: _migrate_v9_source_ranking,
+    10: _MIGRATE_V10_ESCALATIONS_SQL,
 }
 
 

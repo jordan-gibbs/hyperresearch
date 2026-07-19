@@ -27,27 +27,40 @@ This project uses hyperresearch as an agent-driven research knowledge base. The 
 
 ### How to do research
 
-**Run a research session with `/hyperresearch <query>`.** This invokes the V8 16-step pipeline. The entry skill at `.claude/skills/hyperresearch/SKILL.md` is a thin ROUTER. The 16 step procedures live in their own skills (`hyperresearch-1-decompose` through `hyperresearch-16-readability-audit`) and are loaded fresh into context via the `Skill` tool when each step runs. This solves V7's context-compaction problem: each step's procedure lands in context only when needed. Read the entry skill before you start a research session; it explains the chain mechanics.
+**Run a research session with `/hyperresearch <query>`.** This invokes the V8 16-step pipeline. The entry skill at `.claude/skills/hyperresearch/SKILL.md` is a thin ROUTER. The step procedures live in their own skills (`hyperresearch-1-decompose` through `hyperresearch-16-readability-audit`, plus half-steps `1-5-chapter-partition` and `14-5-cite-check`) and are loaded fresh into context via the `Skill` tool when each step runs. This solves V7's context-compaction problem: each step's procedure lands in context only when needed. Read the entry skill before you start a research session; it explains the chain mechanics.
 
-Step 1 classifies the query into one of two tiers (`light` or `full`) and the rest of the pipeline scales accordingly — short bounded queries skip the depth investigations, critics, and patcher (~30-40 min); argumentative deep-research queries run all 16 steps with adversarial review (~1.5-2.5 hours).
+Step 1 classifies the query into a tier (`light` or `full`; `dissertation` is opt-in per run, never auto-classified) and the rest of the pipeline scales accordingly — short bounded queries skip the depth investigations, critics, and patcher (~30-40 min); argumentative deep-research queries run all 16 steps with adversarial review; dissertation runs loop steps 2-10 per chapter. Orthogonal to tiers, the installed **scale gear** (`full` ~55-80 sources, or `premier` ~100-130 sources with doubled depth budget) sets the numbers rendered into the step skills — the user switches it with `{hpr} profile use <full|premier>`; inspect with `{hpr} profile list -j`.
 
 **Do NOT use WebFetch for source pages** — use `{hpr} fetch` instead. The skill files explain when to fetch vs. search.
+
+### Run management and verification
+
+Every run owns a workspace at `research/runs/<vault_tag>/` and a manifest (`run.json`) — the durable record of pipeline position and spend:
+
+```bash
+{hpr} run status -j                 # Newest run: step status, spend, escalation queue depth
+{hpr} run resume -j                 # Exact next step + Skill invocation to continue with
+{hpr} run report -j                 # Per-step wall-time / spend / event telemetry
+{hpr} run verify <vault_tag> -j     # Ship gate: headings, length, citation density, cite-check resolution
+```
+
+Blocked fetches (login walls, bot walls, captchas) queue as escalations instead of dying: `{hpr} escalation list --status queued -j`. The browser-fetcher agent drains them via the user's real Chrome; CAPTCHAs / logins / 2FA are ALWAYS handed to the human, consolidated into one message.
 
 ### What the skill files own
 
 The skill files own everything about how to research. That includes:
 - The pipeline phases and what each phase does
-- Which subagents exist and what each one is for (fetcher, loci-analyst, depth-investigator, 4 critics, patcher, polish-auditor)
+- Which subagents exist and what each one is for (fetcher, source-analyst, loci-analyst, depth-investigator, corpus-critic, draft-orchestrators, synthesizer, 4 critics, patcher, cite-checker, polish-auditor, readability-recommender, browser-fetcher)
 - The tool-lock invariant (patcher and polish-auditor can only Read + Edit, never Write)
 - The subagent spawn contract (every Task call passes the verbatim research_query + pipeline position + inputs)
-- Artifact locations (`research/scaffold.md`, `research/prompt-decomposition.json`, `research/loci.json`, `research/comparisons.md`, interim notes, patch / polish logs)
+- Artifact locations — everything run-scoped lives under `research/runs/<vault_tag>/` (scaffold.md, prompt-decomposition.json, loci.json, comparisons.md, critic findings, patch / polish logs); final reports at `research/notes/final_report_<vault_tag>.md`
 - The curation pass after every research session
 
 If you need to know how hyperresearch works, read the skill file. This document does NOT duplicate that content — when the skill file and this file disagree, the skill file wins.
 
 ### Canonical research query
 
-In a normal run, the canonical research query is the user's verbatim prompt. In wrapped runs, if `research/prompt.txt` exists, that file is gospel and overrides any wrapping instructions. The pipeline persists the query as `research/query-<vault_tag>.md` with YAML frontmatter — this is the canonical query reference for all downstream layers. Wrapper requirements (save path, citation format, terminal sections) are a separate contract, captured in the scaffold — not pasted into the `## User Prompt (VERBATIM — gospel)` section.
+In a normal run, the canonical research query is the user's verbatim prompt. In wrapped runs, if `research/prompt.txt` exists, that file is gospel and overrides any wrapping instructions. The pipeline persists the query as `research/runs/<vault_tag>/query.md` with YAML frontmatter — this is the canonical query reference for all downstream steps. Wrapper requirements (save path, citation format, terminal sections) are a separate contract, captured in the scaffold — not pasted into the `## User Prompt (VERBATIM — gospel)` section.
 
 ### Academic APIs before web search
 
@@ -100,6 +113,8 @@ Every research session must end with a curation pass:
 {hpr} note update <id> --summary "<specific summary>" --add-tag <t> -j   # Add summary + tags
 {hpr} lint -j                                                            # Find missing tags / summaries / broken links
 {hpr} repair -j                                                          # Auto-fix broken links, rebuild indexes
+{hpr} sources score -j                                                   # Enrich DOI-bearing sources (citations, venue, retractions) + recompute quality
+{hpr} graph rank -j                                                      # Recompute vault PageRank centrality
 {hpr} status -j                                                          # Overall vault health
 ```
 

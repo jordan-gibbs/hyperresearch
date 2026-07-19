@@ -74,6 +74,20 @@ class Vault:
         return self.research_dir / "temp"
 
     @property
+    def runs_dir(self) -> Path:
+        """Per-run workspaces (research/runs/<vault_tag>/).
+
+        All run-scoped pipeline artifacts (scaffold, decomposition, loci,
+        critic findings, logs, temp scratch) live under one directory per
+        run, so concurrent and sequential runs never collide. Vault notes
+        stay global (research/notes/). NOT synced as notes.
+        """
+        return self.research_dir / "runs"
+
+    def run_dir(self, vault_tag: str) -> Path:
+        return self.runs_dir / vault_tag
+
+    @property
     def templates_dir(self) -> Path:
         """Templates live inside .hyperresearch/ (hidden)."""
         return self.hyperresearch_dir / "templates"

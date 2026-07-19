@@ -221,6 +221,18 @@ def repair(
         if not json_output:
             console.print("[dim]5/6 Skipping indexes[/]")
 
+    # Step 4.5: Recompute derived ranking scores (centrality + quality).
+    # Cheap, pure-local, and keeps the score cache fresh after a force-sync
+    # rebuilt the DB from markdown.
+    from hyperresearch.core.graphrank import compute_centrality
+    from hyperresearch.core.quality import compute_quality_scores
+
+    ranked = compute_centrality(vault.db)
+    compute_quality_scores(vault.db, vault.config.ranking)
+    report["centrality_ranked"] = ranked
+    if not json_output and ranked:
+        console.print(f"  centrality + quality recomputed for {ranked} notes")
+
     # Step 5: Update agent docs
     if update_docs:
         if not json_output:

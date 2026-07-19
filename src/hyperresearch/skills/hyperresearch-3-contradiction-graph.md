@@ -20,9 +20,9 @@ description: >
 ## Recover state
 
 Read these inputs:
-- `research/scaffold.md` — vault_tag
-- `research/prompt-decomposition.json` — atomic items, pipeline_tier
-- All `research/temp/claims-*.json` files (one per fetched note)
+- `research/runs/<vault_tag>/scaffold.md` — vault_tag
+- `research/runs/<vault_tag>/prompt-decomposition.json` — atomic items, pipeline_tier
+- All `research/runs/<vault_tag>/temp/claims-*.json` files (one per fetched note)
 
 If no claims files exist (e.g., fetchers didn't produce them), skip this step entirely — the next step (loci analysis) falls back to corpus prose-scanning.
 
@@ -30,7 +30,7 @@ If no claims files exist (e.g., fetchers didn't produce them), skip this step en
 
 ## Procedure
 
-1. **Load all claims** from `research/temp/claims-*.json` files.
+1. **Load all claims** from `research/runs/<vault_tag>/temp/claims-*.json` files.
 
 2. **Pair contradictions.** For each claim, find claims from OTHER sources that contradict it. Match on:
    - Same `stance_target` with opposing `stance` (supports vs. refutes)
@@ -53,16 +53,16 @@ If no claims files exist (e.g., fetchers didn't produce them), skip this step en
 
 4. **Rank clusters** by decision_relevance (high first), then by evidence_quality_delta (tighter fights rank higher).
 
-5. **Write `research/temp/contradiction-graph.json`** — array of ranked fight clusters.
+5. **Write `research/runs/<vault_tag>/temp/contradiction-graph.json`** — array of ranked fight clusters.
 
-6. **Identify consensus claims.** Claims where 3+ INDEPENDENT sources (after redundancy audit if step 2.6 ran) agree. Write these to `research/temp/consensus-claims.json`. These are the "settled ground" the draft can assert confidently without hedging.
+6. **Identify consensus claims.** Claims where 3+ INDEPENDENT sources agree. Independence is computed, not assumed: run `$HPR sources independence --tag <vault_tag> -j` first — it clusters syndicated copies (same canonical URL, near-duplicate bodies, shared wire-service boilerplate) and scores members `1/cluster_size`. **Count each cluster as ONE voice** (sum of independence scores ≥ 3.0, not raw source count ≥ 3). Write consensus claims to `research/runs/<vault_tag>/temp/consensus-claims.json`. These are the "settled ground" the draft can assert confidently without hedging.
 
 ---
 
 ## Exit criterion
 
-- `research/temp/contradiction-graph.json` exists (may be empty array if corpus is univocal)
-- `research/temp/consensus-claims.json` exists (may be empty array)
+- `research/runs/<vault_tag>/temp/contradiction-graph.json` exists (may be empty array if corpus is univocal)
+- `research/runs/<vault_tag>/temp/consensus-claims.json` exists (may be empty array)
 
 ---
 

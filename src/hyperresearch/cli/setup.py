@@ -143,8 +143,9 @@ def setup(
     for action in doc_actions:
         console.print(f"  [green]Docs:[/] {action}")
 
-    # Install Claude Code hook + skills + subagents
-    hook_actions = install_hooks(root, hpr_path=hpr_path)
+    # Install Claude Code hook + skills + subagents (rendered from the
+    # persisted scale gear, if one was chosen via `hpr profile use`)
+    hook_actions = install_hooks(root, hpr_path=hpr_path, profile=vault.config.pipeline_profile)
     for action in hook_actions:
         console.print(f"  [green]Hook:[/] {action}")
     if not hook_actions:

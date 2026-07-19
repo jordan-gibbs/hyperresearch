@@ -20,7 +20,8 @@ from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
 from crawl4ai.browser_adapter import UndetectedAdapter
 from crawl4ai.content_filter_strategy import PruningContentFilter
 
-from hyperresearch.web.base import WebResult, binary_garbage_ratio
+from hyperresearch.core.config import FetchSettings, JunkGates
+from hyperresearch.web.base import WebResult, is_binary_garbage
 
 # Fix Windows encoding before crawl4ai's managed browser tries to log Unicode
 if sys.platform == "win32":
@@ -50,11 +51,12 @@ def _is_pdf_url(url: str) -> bool:
     return "arxiv.org" in parsed.netloc and ("/pdf/" in path or "/abs/" in path)
 
 
-def _looks_like_binary(text: str) -> bool:
+def _looks_like_binary(text: str, gates: JunkGates | None = None) -> bool:
     """Check if extracted 'content' is actually binary garbage from a PDF."""
     if not text:
         return False
-    sample = text[:2000]
+    gates = gates or JunkGates()
+    sample = text[: gates.sample_window]
     # PDF internal structure markers — dead giveaway
     pdf_markers = ("endstream", "endobj", "/Filter", "/FlateDecode", "stream\nx", "%PDF-")
     if any(m in sample for m in pdf_markers):
@@ -62,7 +64,31 @@ def _looks_like_binary(text: str) -> bool:
     # Shared with WebResult.looks_like_junk() \u2014 keep one implementation, since these
     # two gates drifting apart is what let `ord(c) > 127` survive in base.py and
     # silently discard every non-English page.
-    return binary_garbage_ratio(sample) > 0.05
+    return is_binary_garbage(sample, gates)
+
+
+def _smart_wait_js(settings: FetchSettings) -> str:
+    """DOM-stability polling loop shared by the headless and visible paths.
+
+    Waits `wait_initial_ms`, then polls every `poll_interval_ms` until body text
+    length is unchanged for `stable_checks` consecutive polls, giving up after
+    `max_checks` polls.
+    """
+    return (
+        "() => new Promise(r => {"
+        "  setTimeout(() => {"
+        "    let last = document.body.innerText.length;"
+        "    let stable = 0;"
+        "    let checks = 0;"
+        "    const interval = setInterval(() => {"
+        "      const now = document.body.innerText.length;"
+        "      if (now === last) { stable++; } else { stable = 0; }"
+        f"      if (stable >= {settings.stable_checks} || checks > {settings.max_checks}) {{ clearInterval(interval); r(true); }}"
+        "      last = now; checks++;"
+        f"    }}, {settings.poll_interval_ms});"
+        f"  }}, {settings.wait_initial_ms});"
+        "})"
+    )
 
 
 _PYMUPDF_MISSING_LOGGED = False
@@ -96,7 +122,7 @@ def _import_pymupdf():
         return None
 
 
-def _fetch_pdf(url: str) -> WebResult | None:
+def _fetch_pdf(url: str, settings: FetchSettings | None = None) -> WebResult | None:
     """Download a PDF and extract text using pymupdf. Returns None if extraction fails.
 
     Every failure path logs its reason. A silent None here is indistinguishable
@@ -107,6 +133,8 @@ def _fetch_pdf(url: str) -> WebResult | None:
     if pymupdf is None:
         return None
 
+    settings = settings or FetchSettings()
+
     import httpx
 
     try:
@@ -116,7 +144,8 @@ def _fetch_pdf(url: str) -> WebResult | None:
             if not url.endswith(".pdf"):
                 url += ".pdf"
 
-        resp = httpx.get(url, follow_redirects=True, timeout=30, verify=False, headers={
+        resp = httpx.get(url, follow_redirects=True, timeout=settings.pdf_timeout_s,
+                         verify=settings.pdf_verify_tls, headers={
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                 "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -140,7 +169,7 @@ def _fetch_pdf(url: str) -> WebResult | None:
             )
             return None
 
-        if len(pdf_bytes) < 100:
+        if len(pdf_bytes) < settings.min_pdf_bytes:
             _pdf_log().warning("PDF fetch for %s returned only %d bytes", url, len(pdf_bytes))
             return None
 
@@ -198,6 +227,8 @@ class Crawl4AIProvider:
         profile: str | None = None,
         cookies: list[dict] | None = None,
         magic: bool = False,
+        settings: FetchSettings | None = None,
+        gates: JunkGates | None = None,
     ):
         # Resolve profile name to path (crawl4ai stores profiles in ~/.crawl4ai/profiles/)
         data_dir = user_data_dir
@@ -207,6 +238,8 @@ class Crawl4AIProvider:
         self._data_dir = data_dir
         self._headless = headless
         self._cookies = cookies
+        self._settings = settings or FetchSettings()
+        self._gates = gates or JunkGates()
 
         browser_kwargs: dict = {"headless": headless}
         if data_dir:
@@ -217,22 +250,8 @@ class Crawl4AIProvider:
 
         self._browser_config = BrowserConfig(**browser_kwargs)
 
-        # Smart wait: 2s initial + poll until content stabilizes (10s ceiling)
-        self._wait_js = (
-            "js:() => new Promise(r => {"
-            "  setTimeout(() => {"
-            "    let last = document.body.innerText.length;"
-            "    let stable = 0;"
-            "    let checks = 0;"
-            "    const interval = setInterval(() => {"
-            "      const now = document.body.innerText.length;"
-            "      if (now === last) { stable++; } else { stable = 0; }"
-            "      if (stable >= 2 || checks > 16) { clearInterval(interval); r(true); }"
-            "      last = now; checks++;"
-            "    }, 500);"
-            "  }, 2000);"
-            "})"
-        )
+        # Smart wait: initial delay + poll until content stabilizes
+        self._wait_js = "js:" + _smart_wait_js(self._settings)
         # Use PruningContentFilter to populate fit_markdown (strips nav/footer chrome)
         self._md_generator = DefaultMarkdownGenerator(
             content_filter=PruningContentFilter(),
@@ -241,7 +260,7 @@ class Crawl4AIProvider:
             magic=magic,
             simulate_user=True,
             screenshot=True,
-            page_timeout=30000,
+            page_timeout=self._settings.page_timeout_ms,
             wait_for=self._wait_js,
             markdown_generator=self._md_generator,
         )
@@ -266,7 +285,7 @@ class Crawl4AIProvider:
     def fetch(self, url: str) -> WebResult:
         # PDF detection: fetch directly with httpx, extract text with pymupdf
         if _is_pdf_url(url):
-            result = _fetch_pdf(url)
+            result = _fetch_pdf(url, self._settings)
             if result is not None:
                 return result
             # Fallback to browser if PDF fetch failed (might be a landing page, not actual PDF)
@@ -279,8 +298,8 @@ class Crawl4AIProvider:
 
         # Post-fetch PDF detection: if the browser got binary garbage (PDF served
         # inline without proper content-type handling), re-fetch as a direct PDF download.
-        if result.content and _looks_like_binary(result.content):
-            pdf_result = _fetch_pdf(url)
+        if result.content and _looks_like_binary(result.content, self._gates):
+            pdf_result = _fetch_pdf(url, self._settings)
             if pdf_result is not None:
                 return pdf_result
 
@@ -302,22 +321,10 @@ class Crawl4AIProvider:
                 ignore_https_errors=True,
             )
             page = context.pages[0] if context.pages else await context.new_page()
-            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=self._settings.page_timeout_ms)
 
-            # Smart wait — same logic as crawl4ai config
-            await page.evaluate("""() => new Promise(r => {
-                setTimeout(() => {
-                    let last = document.body.innerText.length;
-                    let stable = 0;
-                    let checks = 0;
-                    const interval = setInterval(() => {
-                        const now = document.body.innerText.length;
-                        if (now === last) { stable++; } else { stable = 0; }
-                        if (stable >= 2 || checks > 16) { clearInterval(interval); r(true); }
-                        last = now; checks++;
-                    }, 500);
-                }, 2000);
-            })""")
+            # Smart wait — same logic (and same builder) as the headless config
+            await page.evaluate(_smart_wait_js(self._settings))
 
             html = await page.content()
             title = await page.title()
@@ -413,7 +420,7 @@ class Crawl4AIProvider:
 
         # Fetch PDFs directly (no browser needed)
         for url in pdf_urls:
-            pdf_result = _fetch_pdf(url)
+            pdf_result = _fetch_pdf(url, self._settings)
             if pdf_result is not None:
                 web_results.append(pdf_result)
 
@@ -436,8 +443,8 @@ class Crawl4AIProvider:
                         content = ""
 
                     # Post-fetch binary check — browser may have fetched a PDF inline
-                    if content and _looks_like_binary(content):
-                        pdf_result = _fetch_pdf(url)
+                    if content and _looks_like_binary(content, self._gates):
+                        pdf_result = _fetch_pdf(url, self._settings)
                         if pdf_result is not None:
                             web_results.append(pdf_result)
                             continue

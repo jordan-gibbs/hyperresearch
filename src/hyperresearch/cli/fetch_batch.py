@@ -55,21 +55,18 @@ def fetch_batch(
     vault.auto_sync()
     conn = vault.db
 
-    _auth_aggressive = (
-        "linkedin.com", "twitter.com", "x.com", "facebook.com",
-        "instagram.com", "tiktok.com",
-    )
-
     def _needs_visible(fetch_url: str) -> bool:
         if not vault.config.web_profile:
             return False
         domain = urlparse(fetch_url).netloc.lower()
-        return any(d in domain for d in _auth_aggressive)
+        return any(d in domain for d in vault.config.fetch.visible_browser_domains)
 
     prov = get_provider(
         provider_name or vault.config.web_provider,
         profile=vault.config.web_profile,
         magic=vault.config.web_magic,
+        settings=vault.config.fetch,
+        gates=vault.config.junk,
     )
 
     # Filter out already-fetched URLs
@@ -121,6 +118,8 @@ def fetch_batch(
             profile=vault.config.web_profile,
             magic=vault.config.web_magic,
             headless=False,
+            settings=vault.config.fetch,
+            gates=vault.config.junk,
         )
         for url in visible_urls:
             try:
@@ -135,7 +134,7 @@ def fetch_batch(
         url = result.url
 
         # Skip login redirects
-        if result.looks_like_login_wall(url):
+        if result.looks_like_login_wall(url, vault.config.junk):
             if not json_output:
                 console.print(
                     f"  [yellow]Auth required:[/] {url} — login page detected, skipping. "
@@ -190,10 +189,14 @@ def fetch_batch(
 
         # Save assets if requested
         if save_assets:
-            from hyperresearch.cli.fetch import _save_assets
+            from hyperresearch.cli.fetch import _save_assets as _save_assets_fn
 
             assets_dir = vault.root / "research" / "assets" / note_id
-            _save_assets(conn, result, note_id, assets_dir)
+            _save_assets_fn(
+                conn, result, note_id, assets_dir,
+                settings=vault.config.assets,
+                image_timeout_s=vault.config.fetch.image_timeout_s,
+            )
 
         created_notes.append({
             "note_id": note_id,

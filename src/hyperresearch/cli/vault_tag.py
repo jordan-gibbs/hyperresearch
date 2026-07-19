@@ -67,6 +67,14 @@ def _existing_tags(vault_root: Path, research_dir: Path) -> set[str]:
             m = _REPORT_FILE_RE.match(p.name)
             if m:
                 tags.add(m.group(1))
+    # 3.0 per-run workspaces: every research/runs/<tag>/ directory IS a tag
+    # (excluding archive-* dirs from `archive-run`, which embed old tags with
+    # a prefix that can't collide with fresh mints).
+    runs_dir = research_dir / "runs"
+    if runs_dir.is_dir():
+        for d in runs_dir.iterdir():
+            if d.is_dir() and not d.name.startswith("archive-"):
+                tags.add(d.name)
     return tags
 
 
