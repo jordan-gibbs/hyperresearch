@@ -173,6 +173,8 @@ prompt: |
   - citation_style: "<wikilink|inline|none>"
   - modality: "<collect|synthesize|compare|forecast>"
 
+  RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/drafting.md here, verbatim.
+
   Read every note on must_read_note_ids before writing. Do NOT survey
   the vault — your reading list is curated. Do NOT fetch new sources.
   Write your draft from your assigned angle, citing your curated sources.

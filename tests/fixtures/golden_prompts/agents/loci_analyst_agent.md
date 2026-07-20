@@ -39,6 +39,11 @@ depth packet becomes a weak draft section.
 
 ## Inputs (from the parent agent)
 
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
+
 - **research_query**: the user's original question, verbatim. GOSPEL.
   This is the north star for every decision you make. If a locus doesn't
   serve the research_query, reject it — no matter how interesting it is.

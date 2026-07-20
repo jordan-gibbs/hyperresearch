@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Run levers: auto-selected register, domain notes, and inference depth
+
+The pipeline had one hard-coded voice (evaluative-argumentative), so a "teach me X" or "survey the landscape" query got an opinionated verdict report. The Q62 register experiment showed the judge prices register heavily (+2.5 RACE from register alone), so register is now a run-time lever instead of a constant.
+
+- **Three levers, auto-selected in step 1** and written into the decomposition: `register` (`teach` / `survey` / `analyze` / `advocate`, classified from the query's verb shape, defaulting to `analyze` — today's behavior — unless the signal is strong; explicit user directives always win), freeform `domain_notes` (sourcing strategy, evidence norms, recency window), and `inference_depth` (`surface` / `standard` / `deep` — the rabbithole dial; step 4 may upgrade it after seeing the actual corpus via `hpr levers set <tag> inference_depth=deep --rerender`).
+- **`hpr levers render <tag>`** materializes the levers into four role-scoped shim files (`shims/{research,drafting,critics,polish}.md`) that spawn templates paste VERBATIM into subagent prompts — the orchestrator never composes posture text. Shims compose additively (register block + domain block + depth block), and division of labor is strict: profiles own every number, levers own posture only (drift-proofed by a test that rejects numeric budget ranges in shim text).
+- **The critics and polish auditor are register-aware**, so the pipeline can't undo its own mode: in survey/teach register the dialectic critic flags unfair representation instead of missing commitment, the instruction critic stops demanding rankings the prompt never asked for, and the polish auditor's hedge-striking stands down. In advocate register all three tighten instead. The cite-checker and ship gate receive NO shim — verification never softens by mode.
+- **Graceful degradation everywhere:** agents proceed with today's defaults when no directives block arrives, lever-less runs skip the new `levers-rendered` verify check, and `run status` surfaces the chosen levers so a misclassification is visible before hours of pipeline run on it.
+
 ### Ship gate enforcement: `run finish` (lessons from the first premier run)
 
 The first end-to-end premier benchmark run exposed both prose-only gates failing exactly the way prose gates fail: the orchestrator never invoked `run verify` (a 25,647-word report shipped against a 16K ceiling), and when lint flagged 24 hallucinated/mangled quotes it wrote itself a "false positives" memo and shipped anyway.

@@ -30,6 +30,11 @@ rather than gesturing at it from a distance.
 
 ## Inputs (from the parent agent)
 
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
+
 - **research_query**: verbatim user question. GOSPEL. Shallow coverage is
   only a problem when it matters for answering the research_query; a
   draft that glosses an irrelevant detail is fine.

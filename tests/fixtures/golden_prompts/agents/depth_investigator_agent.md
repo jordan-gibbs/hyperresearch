@@ -40,6 +40,11 @@ reading of the evidence.
 
 ## Inputs (from the parent agent)
 
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
+
 - **locus**: the full locus object from the loci-analyst output (name,
   flavor, one_line, rationale, corpus_evidence, suggested_starting_urls,
   suggested_searches, and — for dialectical loci — opposing_positions).

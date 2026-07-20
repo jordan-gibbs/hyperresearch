@@ -27,6 +27,11 @@ because the orchestrator's structural choices buried them.
 
 ## Inputs (from the parent agent)
 
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
+
 - **research_query**: verbatim user question. GOSPEL. A coverage gap is
   only a real gap if the missing topic is something the research_query
   implies. Don't flag orthogonal material that happens to be in the

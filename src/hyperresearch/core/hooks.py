@@ -129,6 +129,11 @@ depth packet becomes a weak draft section.
 
 ## Inputs (from the parent agent)
 
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
+
 - **research_query**: the user's original question, verbatim. GOSPEL.
   This is the north star for every decision you make. If a locus doesn't
   serve the research_query, reject it — no matter how interesting it is.
@@ -328,6 +333,11 @@ commit, the draft commits. Take the research_query seriously and own a
 reading of the evidence.
 
 ## Inputs (from the parent agent)
+
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
 
 - **locus**: the full locus object from the loci-analyst output (name,
   flavor, one_line, rationale, corpus_evidence, suggested_starting_urls,
@@ -600,6 +610,11 @@ actually gathered, not guesses.
 
 ## Inputs (from the parent agent)
 
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
+
 - **research_query**: verbatim user question. GOSPEL. Every critique you
   emit must be traceable back to a gap between what the user asked and
   what the draft delivered. A finding that doesn't serve the
@@ -662,6 +677,12 @@ Use the **Write tool** to save your findings JSON to `output_path`. Do NOT use B
   the vault covers. Should be patched.
 - **Severity `minor`** — a hedge or qualifier would strengthen the claim
   but the draft isn't wrong.
+- **Register-conditional standard.** Your commitment expectations follow
+  the Run directives block when one is present: in teach or survey
+  register, even-handed hedged treatment of a contested point is CORRECT
+  — flag unfair or missing representation of a view instead of the
+  absence of a committed position. In advocate register, the steel-man's
+  quality is the central standard and a weak opposing case is critical.
 - **At most << p.critic_finding_caps.dialectic >> findings.** If you see more than << p.critic_finding_caps.dialectic >>, return the << p.critic_finding_caps.dialectic >> most
   load-bearing. Returning 40 small findings buries the critical ones.
 - **Never propose deleting and retyping an entire section.** That is
@@ -715,6 +736,11 @@ positions. Your job is to verify the draft actually USES that evidence
 rather than gesturing at it from a distance.
 
 ## Inputs (from the parent agent)
+
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
 
 - **research_query**: verbatim user question. GOSPEL. Shallow coverage is
   only a problem when it matters for answering the research_query; a
@@ -818,6 +844,11 @@ collapsed that coverage — either because it concentrated on the loci
 because the orchestrator's structural choices buried them.
 
 ## Inputs (from the parent agent)
+
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
 
 - **research_query**: verbatim user question. GOSPEL. A coverage gap is
   only a real gap if the missing topic is something the research_query
@@ -973,6 +1004,11 @@ dialectic-critic, depth-critic, width-critic. The four of you collectively
 hand findings to the patcher (Layer 6). You do NOT modify the draft.
 
 ## Inputs (from the parent agent)
+
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
 
 - **research_query**: the user's original question, verbatim. GOSPEL.
   This is THE primary input for you — your critiques are measured by
@@ -1209,6 +1245,11 @@ let these crowd out core instruction-following findings. Use
 - **Keep recommendations surgical.** Same discipline as the other critics —
   your recommendation should describe a minimal change that addresses
   the atomic item.
+- **Register-conditional.** When the Run directives block sets teach or
+  survey register, do not emit findings demanding a committed ranking or
+  verdict the user's prompt did not itself name — coverage-shaped
+  delivery is correct in those registers. Format cues the prompt names
+  explicitly always win, regardless of register.
 - **For `wrong-format` findings**, a full format change (ranked-list
   → FAQ) is structural — flag `severity: critical` with a description
   in `issue`. These escalate to the orchestrator, not the revisor.
@@ -1290,6 +1331,11 @@ Concretely:
   exactly); YOU prevent this by sizing edits intentionally.
 
 ## Inputs (from the parent agent)
+
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
 
 - **research_query**: the user's original question, verbatim. GOSPEL.
   Before applying any finding, ask: does this edit bring the draft
@@ -1443,6 +1489,11 @@ find a structural problem this hunk pass cannot fix, escalate — do not
 attempt it yourself.
 
 ## Inputs (from the parent agent)
+
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
 
 - **research_query**: the user's original question, verbatim. GOSPEL.
   Use it to check prompt adherence — does the final draft actually
@@ -1632,6 +1683,12 @@ section number.
 
 ### 3a. Hedge language that softens committed claims
 
+**Register guard:** when the Run directives block sets teach or survey
+register, SKIP the commitment-forcing rules in this section — even-handed
+hedged language on contested points is correct there — and apply only
+the hedge-stack rule. In advocate register, apply this section at
+maximum strength.
+
 The draft upstream was built to commit to positions. If the patcher
 or any earlier layer added hedging verbs that soften a claim the
 paragraph already supports with evidence, strike the hedge. This is
@@ -1799,6 +1856,11 @@ sub-orchestrators' drafts and writes a fresh integrated final draft from
 all three. Your draft is an INPUT to the synthesis, not the final output.
 
 ## Inputs (from the main orchestrator)
+
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
 
 - **research_query**: the user's original question, verbatim. GOSPEL.
 - **query_file_path**: path to the persisted query file.
@@ -1995,6 +2057,11 @@ mental model; writing the final report is a fresh act.
 
 ## Inputs (from the orchestrator)
 
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
+
 - **research_query**: the user's original question, verbatim. GOSPEL.
 - **query_file_path**: path to the persisted query file.
 - **draft_paths**: array of 3 paths — `[research/runs/<vault_tag>/temp/draft-a.md,
@@ -2079,7 +2146,9 @@ permitted to be uneven — pass 2 cleans it up. Goals for pass 1:
    section's topic. Don't gesture at them — argue through them.
 7. **Commit, don't hedge.** Where the synthesis plan says "commit to side
    X on tension Y," commit. The counterargument gets explicit engagement,
-   not equal-weighted hedging.
+   not equal-weighted hedging. (Register-conditional: the Run directives
+   block adjusts this posture — in teach or survey register, present
+   contested points even-handedly instead of committing.)
 8. **Forward-looking analysis (REQUIRED for `argumentative` format,
    STRONGLY RECOMMENDED for `structured`).** Include at least one
    substantial paragraph (200+ chars) or a dedicated subsection
@@ -2379,6 +2448,11 @@ apply. You are advisory.
 
 ## Inputs (from the orchestrator)
 
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
+
 - **research_query**: verbatim user question. GOSPEL.
 - **draft_path**: `research/notes/final_report_<vault_tag>.md` — the polished report.
 - **recommendations_path**: `research/runs/<vault_tag>/readability-recommendations.json`
@@ -2585,6 +2659,11 @@ analyst, fetch new sources, or move on.
 
 ## Inputs (from the parent agent)
 
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
+
 - **research_query**: canonical, verbatim. GOSPEL. Your analysis is
   scoped to this question — the digest should surface what matters for
   this specific research_query, not a generic abstract.
@@ -2744,6 +2823,11 @@ color: blue
 You are a research fetcher with agency to chase primary sources. Your job
 has two phases: (1) fetch and process the URLs you were assigned, then
 (2) follow the most promising leads to primary sources those pages reference.
+
+Your spawn prompt may end with a `## Run directives` block — sourcing
+posture (domain notes / inference depth) auto-selected for this run. It
+is BINDING and wins wherever it adjusts a default in this prompt. No
+block = this prompt's defaults apply unchanged.
 
 ## Period-pinned filings (READ FIRST)
 
@@ -3004,6 +3088,11 @@ to drafting.
 
 ## Inputs (from the parent agent)
 
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
+
 - **research_query**: verbatim. GOSPEL.
 - **corpus_tag**: vault tag for searching.
 - **comparisons_path**: `research/runs/<vault_tag>/comparisons.md`
@@ -3107,6 +3196,11 @@ color: orange
 You are the hyperresearch browser-lane fetcher. You drain the escalation
 queue — URLs that headless crawling could not reach — by driving the user's
 real Chrome browser through the Claude-in-Chrome tools.
+
+Your spawn prompt may end with a `## Run directives` block — sourcing
+posture (domain notes / inference depth) auto-selected for this run. It
+is BINDING for how you read and summarize what you fetch. It never
+overrides the hard scope boundary below.
 
 ## Hard scope boundary (read first)
 

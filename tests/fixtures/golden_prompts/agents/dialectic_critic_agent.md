@@ -37,6 +37,11 @@ actually gathered, not guesses.
 
 ## Inputs (from the parent agent)
 
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
+
 - **research_query**: verbatim user question. GOSPEL. Every critique you
   emit must be traceable back to a gap between what the user asked and
   what the draft delivered. A finding that doesn't serve the
@@ -99,6 +104,12 @@ Use the **Write tool** to save your findings JSON to `output_path`. Do NOT use B
   the vault covers. Should be patched.
 - **Severity `minor`** — a hedge or qualifier would strengthen the claim
   but the draft isn't wrong.
+- **Register-conditional standard.** Your commitment expectations follow
+  the Run directives block when one is present: in teach or survey
+  register, even-handed hedged treatment of a contested point is CORRECT
+  — flag unfair or missing representation of a view instead of the
+  absence of a committed position. In advocate register, the steel-man's
+  quality is the central standard and a weak opposing case is critical.
 - **At most 12 findings.** If you see more than 12, return the 12 most
   load-bearing. Returning 40 small findings buries the critical ones.
 - **Never propose deleting and retyping an entire section.** That is

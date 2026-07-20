@@ -358,13 +358,32 @@ def verify_run(vault, vault_tag: str) -> dict:
         decomp_path = run_dir / "prompt-decomposition.json"
         response_format = None
         required_headings: list[str] = []
+        declares_levers = False
         if decomp_path.exists():
             try:
                 decomp = json.loads(decomp_path.read_text(encoding="utf-8-sig"))
                 response_format = decomp.get("response_format")
                 required_headings = decomp.get("required_section_headings", []) or []
+                declares_levers = bool(decomp.get("levers"))
             except json.JSONDecodeError:
                 check("decomposition-readable", False, "prompt-decomposition.json is not valid JSON")
+
+        # Runs that declared levers must have rendered the shim files the
+        # spawn contract pastes downstream. Lever-less runs (pre-levers or
+        # defaults-only) skip the check entirely.
+        if declares_levers:
+            from hyperresearch.core.levers import ROLES
+
+            missing_shims = [
+                role for role in ROLES
+                if not (run_dir / "shims" / f"{role}.md").exists()
+            ]
+            check(
+                "levers-rendered",
+                not missing_shims,
+                "all shim files present" if not missing_shims
+                else f"missing shims: {missing_shims} (run `hpr levers render {vault_tag}`)",
+            )
 
         if response_format and response_format in profile.word_targets:
             low, high = profile.word_targets[response_format]

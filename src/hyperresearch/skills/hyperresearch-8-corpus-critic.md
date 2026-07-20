@@ -80,6 +80,8 @@ The targeted fetch wave in the next step will pull these filings BEFORE the corp
      - comparisons_path: research/runs/<vault_tag>/comparisons.md
      - loci_path: research/runs/<vault_tag>/loci.json
      - output_path: research/runs/<vault_tag>/corpus-critic-gaps.json
+
+     RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/research.md here, verbatim.
    ```
 
 2. **Read the gaps output** (`research/runs/<vault_tag>/corpus-critic-gaps.json`). Each gap has a `priority` (critical / high) and a `type` (overturning / strengthening / independent-verification).
@@ -105,6 +107,8 @@ The targeted fetch wave in the next step will pull these filings BEFORE the corp
      - search_queries: [<gap.search_queries>]
      - source_type: <gap.source_type>
      - gap_id: <gap.id>
+
+     RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/research.md here, verbatim.
    ```
 
 4. **Assess results.**

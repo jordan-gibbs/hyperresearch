@@ -179,6 +179,8 @@ prompt: |
   - response_format: "<short|structured|argumentative>"
   - citation_style: "<wikilink|inline|none>"
 
+  RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/drafting.md here, verbatim.
+
   Read everything. Write pass 1 to pass1_output_path. Then audit pass 1
   for redundancy, voice consistency, weak sections, and length, and
   write the cleaned pass 2 to final_output_path. Do not paste paragraphs

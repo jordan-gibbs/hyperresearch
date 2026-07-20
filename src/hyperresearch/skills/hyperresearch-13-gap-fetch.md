@@ -62,6 +62,8 @@ Read these inputs:
      - vault_tag: <vault_tag>
      - urls: [<gap-targeted URLs>]
      - extra_tags: ["post-critic-fill"]
+
+     RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/research.md here, verbatim.
    ```
 
    Each fetcher: fetches, quality-checks, summarizes, extracts claims (same procedure as step 2). Tags notes with `vault_tag` + `post-critic-fill`. Writes claims to `research/runs/<vault_tag>/temp/claims-<note-id>.json`.

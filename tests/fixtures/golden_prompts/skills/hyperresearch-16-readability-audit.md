@@ -57,6 +57,8 @@ prompt: |
   - draft_path: research/notes/final_report_<vault_tag>.md
   - recommendations_path: research/runs/<vault_tag>/readability-recommendations.json
 
+  RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/polish.md here, verbatim.
+
   Write recommendations as a JSON array per the schema in your agent
   prompt. Cap at 50 recommendations, prioritized by impact.
 ```

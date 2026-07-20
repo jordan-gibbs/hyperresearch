@@ -105,6 +105,12 @@ def run_status(
         output(success(summary, vault=str(vault.root)), json_mode=True)
     else:
         console.print(f"[bold]{summary['vault_tag']}[/]  ({summary['profile']})  status: {summary['status']}")
+        levers = summary.get("levers")
+        if levers:
+            console.print(
+                f"  levers: register={levers.get('register', 'analyze')} "
+                f"inference_depth={levers.get('inference_depth', 'standard')}"
+            )
         esc = summary.get("escalations")
         if esc and (esc.get("queued") or esc.get("needs_human")):
             console.print(

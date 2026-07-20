@@ -89,6 +89,8 @@ prompt: |
     ]
   - patch_log_path: research/runs/<vault_tag>/patch-log.json   (already stubbed)
   - evidence_digest_path: research/runs/<vault_tag>/temp/evidence-digest.md
+
+  RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/critics.md here, verbatim.
 ```
 
 The patcher's job:

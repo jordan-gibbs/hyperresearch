@@ -90,7 +90,14 @@ Read both before starting. The vault_tag is in the scaffold's "Run config" secti
   "scope_conditions": ["urban rail specifically, not mainline"],
   "pipeline_tier": "full",
   "response_format": "argumentative",
-  "citation_style": "wikilink"
+  "citation_style": "wikilink",
+  "levers": {
+    "register": "analyze",
+    "register_confidence": "high",
+    "domain_notes": "Sourcing: academic APIs first (arXiv, Nature); recency matters within 24 months for hardware claims; measured figures outrank vendor claims.",
+    "inference_depth": "standard",
+    "rationale": {"register": "query asks which approaches are most effective — evaluation-shaped", "inference_depth": "surface literature appears rich; revisit at loci analysis"}
+  }
 }
 ```
 
@@ -133,6 +140,25 @@ Read both before starting. The vault_tag is in the scaffold's "Run config" secti
 
    **Wrapper override:** if `research/wrapper_contract.json` exists and specifies `citation_style`, it overrides the default. The benchmark harness sets `"inline"` via wrapper_contract so RACE evaluators can read numbered references; everything else gets the wikilink default.
 
+   **`levers`** — run-time posture, auto-selected here and rendered into shim files that every downstream spawn receives. Three fields:
+
+   **`register`** — the report's voice. Classify from the query's verb shape:
+
+   | Register | Signal words / patterns |
+   |----------|------------------------|
+   | `"teach"` | "explain", "how does X work", "help me understand", "walk me through", "what is X and why" |
+   | `"survey"` | "overview of", "survey", "landscape", "compile", "list the approaches", "what are the main X" — coverage-shaped, no verdict requested |
+   | `"analyze"` | "evaluate", "assess", "compare and determine", "which is most effective", "feasibility of" — evaluation-shaped (the default) |
+   | `"advocate"` | "should we", "argue for/against", "make the case", "recommend a course of action" |
+
+   **Confidence rule:** set `register_confidence`. Deviate from `"analyze"` ONLY when the signal is strong (`"high"` confidence); ambiguous or mixed-signal queries get `"analyze"` with `"low"` confidence. A wrong register costs more than a default one.
+
+   **Precedence:** an explicit user directive in the query ("make it a survey", "just teach me", "mode=teach") ALWAYS wins over your classification. If `research/wrapper_contract.json` has a `levers` key, it wins over classification but not over explicit user text.
+
+   **`domain_notes`** — 2-3 freeform sentences: sourcing strategy for this topic (academic-first? primary documents? filings?), evidence norms (what counts as strong here), and the recency window that matters. Always write them; downstream research and drafting agents read them verbatim.
+
+   **`inference_depth`** — `"surface"` (bounded question, authoritative consensus suffices), `"standard"` (default), or `"deep"` (the answer likely lives beyond the clear web: gray literature, filings, inference over absences). This is PROVISIONAL — step 4 re-evaluates it against the actual corpus and may upgrade it.
+
 8. **Coverage matrix self-audit.** Re-read the verbatim query. Walk through it phrase by phrase and extract every **significant noun phrase, proper noun, technical term, and category name**. For each:
    - Does it map to at least one atomic item in the decomposition?
    - Is the decomposition's interpretation **as broad as the phrase's natural scope**? (e.g., "SaaS applications" must not be narrowed to "POS SaaS"; "rugged tablets" must not be collapsed into "payment terminals")
@@ -154,12 +180,21 @@ Read both before starting. The vault_tag is in the scaffold's "Run config" secti
 
 9. **Update the scaffold.** Append a "Tier rationale" subsection to `research/runs/<vault_tag>/scaffold.md` with a 2-3 sentence justification for the tier classification.
 
+10. **Render the lever shims:**
+
+    ```bash
+    $HPR levers render <vault_tag> -j
+    ```
+
+    This writes `research/runs/<vault_tag>/shims/{research,drafting,critics,polish}.md` from the levers block. Later steps paste these files VERBATIM into subagent spawn prompts — you never compose or edit shim text yourself. If the command errors on an enum value, fix the levers block in the decomposition and re-run it.
+
 ---
 
 ## Exit criterion
 
 - `research/runs/<vault_tag>/prompt-decomposition.json` exists, is valid JSON, every atomic item traces to the research_query
-- `pipeline_tier` + `response_format` + `citation_style` are all set
+- `pipeline_tier` + `response_format` + `citation_style` are all set, and the `levers` block is present (register, domain_notes, inference_depth)
+- `$HPR levers render` succeeded — all four shim files exist under `research/runs/<vault_tag>/shims/`
 - `research/runs/<vault_tag>/temp/coverage-matrix.md` exists with **zero `Gap? = YES` rows**
 - `research/runs/<vault_tag>/scaffold.md` includes a Tier rationale subsection
 

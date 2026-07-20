@@ -58,6 +58,8 @@ prompt: |
   YOUR INPUTS:
   - draft_path: research/notes/final_report_<vault_tag>.md
   - polish_log_path: research/runs/<vault_tag>/polish-log.json   (already stubbed)
+
+  RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/polish.md here, verbatim.
 ```
 
 The polish auditor strips:

@@ -150,6 +150,8 @@ prompt: |
   - vault_tag: <vault_tag>
   - urls: [<batch URLs, exactly as assigned — with each URL's utility score when scored, e.g. "https://... (utility: 14)">]
   - batch_id: <number>
+
+  RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/research.md here, verbatim.
 ```
 
 **CRITICAL: no token waste.** Each fetcher gets ONLY its batch. No fetcher searches for new URLs or duplicates another fetcher's work. If a fetcher finishes early, it's done.
@@ -263,6 +265,8 @@ prompt: |
   YOUR INPUTS:
   - vault_tag: <vault_tag>
   - drain up to 10 items (claim via `$HPR escalation claim --tag <vault_tag>`)
+
+  RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/research.md here, verbatim.
 ```
 
 **When the browser-fetcher returns with `needs_human` items** (CAPTCHAs, logins, 2FA — it NEVER solves these itself):
@@ -315,6 +319,8 @@ prompt: |
   - source_note_id: <vault note id of the long source>
   - output_path: research/runs/<vault_tag>/temp/source-analysis-<source_note_id>.md
   - vault_tag: <vault_tag>
+
+  RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/research.md here, verbatim.
 ```
 
 ---

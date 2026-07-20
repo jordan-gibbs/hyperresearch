@@ -31,6 +31,11 @@ hand findings to the patcher (Layer 6). You do NOT modify the draft.
 
 ## Inputs (from the parent agent)
 
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
+
 - **research_query**: the user's original question, verbatim. GOSPEL.
   This is THE primary input for you — your critiques are measured by
   how the draft maps to THIS text, in THIS shape, with THESE named
@@ -266,6 +271,11 @@ let these crowd out core instruction-following findings. Use
 - **Keep recommendations surgical.** Same discipline as the other critics —
   your recommendation should describe a minimal change that addresses
   the atomic item.
+- **Register-conditional.** When the Run directives block sets teach or
+  survey register, do not emit findings demanding a committed ranking or
+  verdict the user's prompt did not itself name — coverage-shaped
+  delivery is correct in those registers. Format cues the prompt names
+  explicitly always win, regardless of register.
 - **For `wrong-format` findings**, a full format change (ranked-list
   → FAQ) is structural — flag `severity: critical` with a description
   in `issue`. These escalate to the orchestrator, not the revisor.

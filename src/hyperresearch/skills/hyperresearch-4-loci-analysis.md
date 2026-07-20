@@ -52,6 +52,8 @@ Survey the corpus: `$HPR note list --tag <vault_tag> --all -j` to confirm width 
      - corpus_tag: <vault_tag>
      - analyst_id: "a" (for one) / "b" (for the other)
      - output_path: research/runs/<vault_tag>/loci-a.json (or research/runs/<vault_tag>/loci-b.json)
+
+     RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/research.md here, verbatim.
    ```
 
 2. **Wait for both.** If one fails, proceed with the single successful output. If both fail (empty loci lists), tell the user the width sweep was too thin and stop — do not force depth on a weak corpus.
@@ -100,6 +102,14 @@ Survey the corpus: `$HPR note list --tag <vault_tag> --all -j` to confirm width 
    ```
 
 6. **Decide investigator count.** Spawn ONE depth-investigator (in step 5) per locus with `source_budget > 0`, capped at << p.investigator_max >>. If only 1 locus passes scoring, spawn 1.
+
+7. **Reconsider `inference_depth` against the actual corpus.** Step 1 set it provisionally from the query alone; you have now seen what the surface web actually holds. Upgrade to `deep` when the corpus shows the load-bearing questions are underdetermined by clearly-published sources — high-uncertainty loci where the missing evidence is gray literature, filings, or unpublished figures rather than papers nobody fetched yet. Downgrade to `surface` only if step 1 chose `deep` and the corpus turned out rich and univocal. To change it:
+
+   ```bash
+   $HPR levers set <vault_tag> inference_depth=deep --rerender -j
+   ```
+
+   The `--rerender` refreshes the shim files so step 5's investigators inherit the new posture. If the step-1 value still fits, do nothing.
 
 **INVARIANT:** at least one `flavor: "dialectical"` locus must be present unless an analyst's `skip_loci` justifies its absence with specific evidence of a univocal corpus. No dialectical locus + no justification = re-spawn the loci-analyst with a tighter prompt.
 

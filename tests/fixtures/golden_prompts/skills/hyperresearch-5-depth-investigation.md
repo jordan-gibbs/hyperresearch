@@ -57,6 +57,8 @@ Read these inputs:
      - locus_name: <locus name>
      - source_budget: <hard cap on additional sources you can fetch>
 
+     RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/research.md here, verbatim.
+
      CRITICAL: Read the full source text of relevant vault notes (via
      `hyperresearch note show <id1> <id2> ... -j`) BEFORE writing your
      interim note. Drafting from summaries alone produces paraphrase;

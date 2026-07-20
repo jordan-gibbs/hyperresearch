@@ -41,6 +41,11 @@ apply. You are advisory.
 
 ## Inputs (from the orchestrator)
 
+The spawn prompt may end with a `## Run directives` block — posture
+(register / domain notes / inference depth) auto-selected for this run
+in step 1. It is BINDING and wins wherever it adjusts a default in this
+prompt. No block = this prompt's defaults apply unchanged.
+
 - **research_query**: verbatim user question. GOSPEL.
 - **draft_path**: `research/notes/final_report_<vault_tag>.md` — the polished report.
 - **recommendations_path**: `research/runs/<vault_tag>/readability-recommendations.json`

@@ -53,6 +53,8 @@ Read these inputs:
      - output_path: research/runs/<vault_tag>/critic-findings-<critic-name>.json
      - vault_tag: <vault_tag>
      - decomposition_path: research/runs/<vault_tag>/prompt-decomposition.json   (instruction-critic only)
+
+     RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/critics.md here, verbatim.
    ```
 
 3. **Wait for all critics.** If one fails, you can proceed with the partial set, but log the absence to the run log — the patch pass is less robust with missing critic coverage. **Do NOT skip the instruction-critic specifically** — it's the only critic measuring prompt adherence, which is the dimension with the widest variance.

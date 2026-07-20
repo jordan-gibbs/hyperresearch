@@ -131,6 +131,7 @@ from hyperresearch.cli.citecheck_cmd import app as citecheck_app
 from hyperresearch.cli.claims_cmd import app as claims_app
 from hyperresearch.cli.embed_cmd import app as embed_app
 from hyperresearch.cli.escalation_cmd import app as escalation_app
+from hyperresearch.cli.levers_cmd import app as levers_app
 from hyperresearch.cli.link import app as link_app
 from hyperresearch.cli.profile_cmd import app as profile_app
 from hyperresearch.cli.run_cmd import app as run_app
@@ -142,6 +143,7 @@ app.add_typer(embed_app, name="embed", help="Semantic-search embeddings.")
 app.add_typer(run_app, name="run", help="Per-run workspaces + manifest (init/status/resume).")
 app.add_typer(escalation_app, name="escalation", help="Browser-lane queue for blocked fetches.")
 app.add_typer(citecheck_app, name="citecheck", help="Citation-sentence binding verification.")
+app.add_typer(levers_app, name="levers", help="Run levers (register/domain/inference shims).")
 
 app.add_typer(sources_app, name="sources", help="Fetched web sources.")
 app.add_typer(assets_app, name="assets", help="Downloaded images, screenshots, and media.")

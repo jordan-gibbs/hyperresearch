@@ -172,6 +172,8 @@ When a step skill instructs you to spawn a subagent, the prompt you pass MUST in
 
 3. **The subagent's specific inputs** (vault_tag, output_path, locus, etc.). Each step skill's spawn template documents the required fields.
 
+4. **The run's shim file, pasted VERBATIM.** Step 1 renders posture shims (register / domain notes / inference depth) to `research/runs/<vault_tag>/shims/{research,drafting,critics,polish}.md`. Each step skill's spawn template names which shim its subagents receive; append that file's FULL contents to the end of the spawn prompt, unedited. You never write, summarize, or trim shim text — the file is the single source of truth. The cite-checker receives NO shim (verification is register-independent). If the shims directory is missing, run `$HPR levers render <vault_tag> -j` before spawning.
+
 Skipping any of these in a Task prompt is a process violation.
 
 ---
@@ -260,6 +262,7 @@ Ship only after `run finish` reports `"passed": true`: the final report lives at
 12. **Subagents read full source text.** Draft sub-orchestrators MUST batch-read every note in their `must_read_note_ids` list before writing. Fetchers MUST chase 3-8 primary sources via citation chains.
 13. **NEVER emit a bare text response while subagent tasks are in flight.**
 14. **A run is complete ONLY when `run finish` reports `passed: true`.** Gate failures are fixed by changing the report, never by re-interpreting, downgrading, or memo-ing away the checks. If 3 fix rounds don't clear the gate, the run stays `blocked` and you say so.
+15. **Shim files are pasted verbatim.** The lever shims under `research/runs/<vault_tag>/shims/` go into spawn prompts whole and unedited, per the spawn contract. The orchestrator never composes, summarizes, or omits shim text, and never gives the cite-checker one.
 
 ---
 

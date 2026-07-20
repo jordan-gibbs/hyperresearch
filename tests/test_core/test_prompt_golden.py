@@ -63,6 +63,16 @@ Deliberate deviations already folded into the goldens (2026-07-19):
     end placement, run consolidation with number-bearing anchors kept), and
     register discipline (meta-discourse ban, hedging discipline, kicker
     rationing) distilled from the humanize-ai-text skill.
+  - Run levers (2026-07-20): step 1 now auto-selects register / domain
+    notes / inference depth and renders them to shim files via `hpr levers
+    render`; the router's spawn contract gained item 4 (paste the role's
+    shim verbatim) and invariant 15; every spawning skill's spawn template
+    gained a RUN DIRECTIVES paste line (research/drafting/critics/polish
+    roles); every shim-receiving agent gained a Run-directives acceptance
+    paragraph; the dialectic and instruction critics gained
+    register-conditional standards. The cite-checker and
+    9-evidence-digest are deliberately untouched (no shim: verification
+    is register-independent; step 9 spawns nothing).
 """
 
 from __future__ import annotations
@@ -318,3 +328,38 @@ def test_rendered_agents_have_no_cost_or_model_claims(const_name, ctx):
     rendered = render_prompt(getattr(hooks, const_name), ctx)
     assert not _DOLLAR_RANGE.search(rendered), f"dollar-cost range in {const_name}"
     assert not _MODEL_CLAIM.search(rendered), f"hardcoded model claim in {const_name}"
+
+
+# ---------------------------------------------------------------------------
+# Lever shims: every spawning skill pastes its role's shim file; the
+# cite-checker gets none (verification is register-independent).
+# ---------------------------------------------------------------------------
+
+_SKILL_SHIM_ROLES = {
+    "hyperresearch-2-width-sweep": "research",
+    "hyperresearch-4-loci-analysis": "research",
+    "hyperresearch-5-depth-investigation": "research",
+    "hyperresearch-8-corpus-critic": "research",
+    "hyperresearch-13-gap-fetch": "research",
+    "hyperresearch-10-triple-draft": "drafting",
+    "hyperresearch-11-synthesize": "drafting",
+    "hyperresearch-12-critics": "critics",
+    "hyperresearch-14-patcher": "critics",
+    "hyperresearch-15-polish": "polish",
+    "hyperresearch-16-readability-audit": "polish",
+}
+
+
+@pytest.mark.parametrize("skill_name,role", sorted(_SKILL_SHIM_ROLES.items()))
+def test_spawning_skills_carry_their_shim_paste_line(skill_name, role, ctx):
+    rendered = render_prompt(_read_skill_source(f"{skill_name}.md"), ctx)
+    assert f"shims/{role}.md" in rendered, (
+        f"{skill_name} spawn template lost its shims/{role}.md paste line"
+    )
+
+
+def test_cite_check_skill_gets_no_shim(ctx):
+    rendered = render_prompt(
+        _read_skill_source("hyperresearch-14-5-cite-check.md"), ctx
+    )
+    assert "shims/" not in rendered
