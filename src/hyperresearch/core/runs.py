@@ -452,6 +452,10 @@ def verify_run(vault, vault_tag: str) -> dict:
         if ok:
             try:
                 findings = json.loads(cc_findings.read_text(encoding="utf-8-sig"))
+                # The cite-check step writes {"findings": [...]}; older runs
+                # (and the original design sketch) used a bare list. Accept both.
+                if isinstance(findings, dict):
+                    findings = findings.get("findings", [])
                 criticals = [f for f in findings if f.get("severity") == "critical"]
                 if criticals:
                     log_path = run_dir / "cite-check-patch-log.json"

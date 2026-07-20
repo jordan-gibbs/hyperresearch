@@ -382,6 +382,31 @@ class TestFinishGate:
         assert "quote-integrity" in names
         assert "retracted-citations" in names
 
+    def test_cite_check_findings_accepts_both_shapes(self, tmp_vault):
+        """The pipeline writes {"findings": [...]}; verify must not crash on
+        it (it did, on the first live gate run) and must still resolve
+        criticals for the bare-list shape."""
+        from hyperresearch.core.runs import set_step
+
+        for tag, payload in (
+            ("fin-07", {"findings": [{"severity": "critical", "verdict": "unsupported"}]}),
+            ("fin-08", [{"severity": "critical", "verdict": "unsupported"}]),
+        ):
+            self._well_formed_light_run(tmp_vault, tag)
+            run_dir = tmp_vault.run_dir(tag)
+            set_step(tmp_vault, tag, "14.5", "done")
+            (run_dir / "cite-check-findings.json").write_text(
+                json.dumps(payload), encoding="utf-8"
+            )
+            result = verify_run(tmp_vault, tag)  # must not raise
+            by_name = {c["name"]: c for c in result["checks"]}
+            # A critical finding with no patch log fails the check cleanly.
+            assert by_name["cite-check-resolved"]["ok"] is False
+            (run_dir / "cite-check-patch-log.json").write_text("[]", encoding="utf-8")
+            result = verify_run(tmp_vault, tag)
+            by_name = {c["name"]: c for c in result["checks"]}
+            assert by_name["cite-check-resolved"]["ok"] is True
+
 
 class TestCiteCheckerAgentInstall:
     def test_agent_installs(self, tmp_vault):
