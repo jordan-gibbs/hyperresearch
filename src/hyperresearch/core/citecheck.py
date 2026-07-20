@@ -28,7 +28,7 @@ from hyperresearch.core.patterns import WIKI_LINK_RE
 
 # Sentence split: period/question/exclamation followed by space+capital, or newline.
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z一-鿿])|\n+")
-_NUMBERED_CITE_RE = re.compile(r"\[(\d{1,3})\]")
+_NUMBERED_CITE_RE = re.compile(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\]")
 _SOURCES_ENTRY_RE = re.compile(r"^\s*\[(\d{1,3})\]\s+(.+)$")
 _NUMBER_RE = re.compile(r"\d[\d,]*\.?\d*%?")
 
@@ -91,8 +91,9 @@ def extract_pairs(report_text: str, conn) -> list[dict]:
     for sentence in _split_sentences(body):
         cited: list[str | None] = []
         for m in _NUMBERED_CITE_RE.finditer(sentence):
-            if m.group(1) in numbered_map:
-                cited.append(numbered_map[m.group(1)])
+            for num in re.split(r"\s*,\s*", m.group(1)):
+                if num in numbered_map:
+                    cited.append(numbered_map[num])
         for m in WIKI_LINK_RE.finditer(sentence):
             target = m.group(1).strip()
             cited.append(target if target in known_ids else None)

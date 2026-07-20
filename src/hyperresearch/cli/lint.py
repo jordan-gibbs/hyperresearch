@@ -104,7 +104,7 @@ def _report_body_only(report_text: str) -> str:
     import re as _re
 
     body = _re.split(r"^##\s+(?:Sources|References)\b", report_text, maxsplit=1, flags=_re.M | _re.I)[0]
-    return _re.sub(r"\[\d{1,3}\]", "", body)
+    return _re.sub(r"\[\d{1,3}(?:\s*,\s*\d{1,3})*\]", "", body)
 
 
 def _check_quote_integrity(vault, conn, report_path, report_text) -> list[dict]:
@@ -1482,7 +1482,9 @@ def lint(
 
                 elif citation_style == "inline":
                     import re as _re
-                    has_numbered_ref = bool(_re.search(r"\[\d+\]", report_text))
+                    has_numbered_ref = bool(
+                        _re.search(r"\[\d+(?:\s*,\s*\d+)*\]", report_text)
+                    )
                     has_refs_heading = bool(_re.search(
                         r"^#{1,6}\s*(sources|references)\b",
                         report_text,

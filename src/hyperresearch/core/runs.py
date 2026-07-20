@@ -384,9 +384,12 @@ def verify_run(vault, vault_tag: str) -> dict:
 
         import re as _re
 
-        cites = len(_re.findall(r"\[\d{1,3}\]", report_text)) + len(
-            _re.findall(r"\[\[[^\]]+\]\]", report_text)
-        )
+        # Grouped markers ([7, 12]) count one citation per source number,
+        # so consolidating stacks never lowers measured density.
+        cites = sum(
+            len(g.split(","))
+            for g in _re.findall(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\]", report_text)
+        ) + len(_re.findall(r"\[\[[^\]]+\]\]", report_text))
         density = cites / max(1, len(report_text)) * 1000
         floor = 1.5  # instruction-critic's re-count trigger
         check(

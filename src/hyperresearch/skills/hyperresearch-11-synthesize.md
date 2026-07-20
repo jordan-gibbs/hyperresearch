@@ -190,10 +190,11 @@ prompt: |
     separate `## Sources` section. The wiki-link IS the citation —
     readers click through to the source note's frontmatter for title +
     URL. Do NOT add numbered references.
-  - If citation_style == "inline": every citation is a `[N]` marker,
-    AND the report ends with a `## Sources` section listing each cited
-    source as `[N] Title. URL` (read each cited note's YAML frontmatter
-    for title + URL).
+  - If citation_style == "inline": every citation is a `[N]` marker
+    (multiple sources at one point grouped in a single bracket:
+    `[7, 12]`, never stacked `[7][12]`), AND the report ends with a
+    `## Sources` section listing each cited source as `[N] Title. URL`
+    (read each cited note's YAML frontmatter for title + URL).
   - If citation_style == "none": no citation markers anywhere, no
     Sources section.
 ```
@@ -221,6 +222,8 @@ When the synthesizer returns:
    - **LENGTH GATE (mechanical, not a judgment call):** count the words (`wc -w` or python). The profile ceiling for the response_format is a HARD limit — the ship gate (`run finish`) fails any report more than 20% over target, so an over-long report here is guaranteed rework later. Check it now, when fixing is cheapest.
    - Has all H2s from `required_section_headings`
    - Citations match `citation_style`: `[[note-id]]` markers for `"wikilink"` (no Sources section); `[N]` markers + a `## Sources` section for `"inline"`; no markers for `"none"`
+   - No adjacent citation stacks (`grep -c ']['` should be 0 — grouped brackets like `[7, 12]` are the style)
+   - Major body sections open with a plain-language primer before the analysis (spot-check 3 sections)
    - No YAML frontmatter, no scaffold leaks, no pipeline vocabulary
 
 If pass 2 is longer than pass 1 (positive delta), something went wrong — pass 2 is supposed to cut. Investigate before proceeding.
@@ -242,7 +245,7 @@ After this step, the final report is only modified by Edit hunks from the patche
 - `research/notes/final_report_<vault_tag>.md` exists, **word count verified ≤ target high** (counted mechanically, not estimated)
 - `research/runs/<vault_tag>/temp/synthesis-pass1.md` exists (debugging artifact)
 - All H2s from `required_section_headings` present
-- Citations match `citation_style` (wikilink → `[[note-id]]` no Sources section; inline → `[N]` + Sources section; none → no markers)
+- Citations match `citation_style` (wikilink → `[[note-id]]` no Sources section; inline → `[N]` + Sources section; none → no markers), with no adjacent citation stacks
 - No YAML frontmatter, no pipeline vocabulary, no scaffold leaks
 
 ---

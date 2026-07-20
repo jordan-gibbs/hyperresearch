@@ -1159,9 +1159,10 @@ them on first use (inline parenthetical or dedicated glossary), emit:
     a brief parenthetical definition on first mention
 
 **Check R2: Citation density.**
-Count inline `[N]` citations in the body (excluding the ## Sources
-section). Count total body characters. If the ratio is below **1.5
-citations per 1000 characters**, emit:
+Count cited-source references in the body (excluding the ## Sources
+section) — a grouped marker like `[7, 12]` counts as two. Count total
+body characters. If the ratio is below **1.5 citations per 1000
+characters**, emit:
   - `failure_mode`: `"low-citation-density"`
   - `severity`: `major`
   - `recommendation`: identify 5-8 claim-dense passages with no
@@ -1182,6 +1183,16 @@ prose (no comparison table), emit:
   - `failure_mode`: `"missing-comparison-table"`
   - `severity`: `minor`
   - `recommendation`: suggest converting the comparison to a table
+
+**Check R5: Section primers.**
+If 2+ major body sections open directly with evaluation, ranking, or
+dense quantitative analysis — no 3-5 sentence plain-language primer
+explaining the section's subject (what it is, how it works, why it
+matters here) before the judgment starts — emit ONE finding:
+  - `failure_mode`: `"missing-section-primers"`
+  - `severity`: `major`
+  - `recommendation`: name the sections that need a primer and, for
+    each, the concept the primer should teach
 
 **Cap:** At most **3** readability-structural findings total. Do not
 let these crowd out core instruction-following findings. Use
@@ -1470,7 +1481,10 @@ Also strip:
   decorative quote you leave is a guaranteed gate failure.
 - **Citation pass-through.** Leave all `[N]` inline citations and the
   Sources/References section exactly as the drafter wrote them.
-  Citations are a product feature, not a polish target.
+  Citations are a product feature, not a polish target. The ONE
+  permitted citation edit: merging an adjacent stack (`[3][4][5]`)
+  into a single grouped bracket (`[3, 4, 5]`) — numbers preserved
+  verbatim, nothing dropped, nothing renumbered.
 
 Every leak is a **critical** polish fix. Apply as an Edit that removes
 the offending block entirely.
@@ -1595,6 +1609,27 @@ Edit out sentences that restate the prior sentence. If a paragraph ends
 with a sentence that summarizes what the prior two sentences said, the
 summary sentence usually goes.
 
+**3-meta. Meta-discourse (high priority — the signature machine-writing
+tell).** Delete every clause that narrates what the report or section is
+doing instead of saying the thing:
+
+- "This report examines / evaluates / turns to..."
+- "This section maps / covers / addresses..."
+- "As noted above / as discussed in section N" when the point is
+  restated right there (keep the restatement, cut the narration)
+- "a caveat developed in section 10" / "declared up front so the
+  analysis can return to them"
+- "The interpretive point the sources do not make:" and kin — cut the
+  frame, keep the interpretive point
+- Self-describing adjectives about the report's own prose ("a brief
+  overview", "a quick summary", "this concise assessment")
+
+The fix is deletion or a minimal splice, not a rewrite: "This section
+maps the four strategies. The first is X..." becomes "The first
+strategy is X...". If a cross-reference is genuinely load-bearing,
+rephrase it by topic ("the yield question, below") rather than by
+section number.
+
 ### 3a. Hedge language that softens committed claims
 
 The draft upstream was built to commit to positions. If the patcher
@@ -1626,6 +1661,10 @@ would support a stronger claim:
   Either delete it (if the claim is strong enough to stand) or
   escalate to the orchestrator noting the claim may need scoping —
   but do not leave a bare "may be different" hedge on the draft.
+- **Hedge-stacks.** Two or more softeners on one claim ("may
+  potentially indicate", "could arguably suggest", "seems to
+  possibly") always collapse to at most one hedge — or none, when
+  the paragraph's evidence supports the bare claim.
 
 Do NOT strike hedges on genuinely speculative claims (forecasts
 without data, open questions, places where the underlying evidence
@@ -1660,8 +1699,9 @@ Look for:
 - Sentences longer than ~50 words — break in two
 - Paragraphs longer than ~200 words — break in two by finding a natural
   hinge
-- Dense stacked citations (`[3][4][5][6]`) — consolidate to 1-2 per
-  claim for readability.
+- Adjacent citation brackets (`[3][4][5]`) — merge into one grouped
+  bracket (`[3, 4, 5]`), numbers verbatim; if a group exceeds 3
+  sources, escalate rather than dropping any yourself.
 
 ## Procedure
 
@@ -2023,13 +2063,16 @@ permitted to be uneven — pass 2 cleans it up. Goals for pass 1:
    evidence from whichever draft surfaced it. Pull the strongest
    argumentative beat from whichever draft made it best. Re-state both
    in your voice.
-4. **Cite as you write — high density.** Use `[N]` markers (numbered fresh
-   from `[1]` at first citation in pass 1). Build the `## Sources` list as
-   you go. **Citation density target: 80-150 total citations** for
-   `argumentative` format, 40-80 for `structured`, 15-30 for `short` —
-   roughly 2+ citations per 1000 characters. Every claim-dense paragraph
-   should have at least one inline citation. Under-citation is a
-   consistent scoring gap versus reference reports.
+4. **Cite as you write — high density, calm presentation.** Use `[N]`
+   markers (numbered fresh from `[1]` at first citation in pass 1). Build
+   the `## Sources` list as you go. **Citation density target: 80-150
+   total cited-source references** for `argumentative` format, 40-80 for
+   `structured`, 15-30 for `short` — roughly 2+ per 1000 characters,
+   where a grouped marker like `[7, 12]` counts as two. Every claim-dense
+   paragraph needs at least one citation point. Under-citation is a
+   consistent scoring gap versus reference reports. Placement follows the
+   calm citation style in the pass-2 Citation discipline section — write
+   to it from the start so pass 2 isn't a citation rewrite.
 5. **Cover every atomic item.** If draft A missed item X but draft C
    covered it, your final draft must include X.
 6. **Engage cross-locus tensions explicitly** where they bear on a
@@ -2053,6 +2096,17 @@ permitted to be uneven — pass 2 cleans it up. Goals for pass 1:
     frameworks) across 2 or more dimensions (cost, performance, scope,
     timeline), use a markdown table — not prose. Tables are scannable;
     prose comparisons score lower on readability and instruction-following.
+11. **Open every major body section with a pedagogy primer.** Before any
+    evaluation, ranking, or audit, give the reader 3-5 plain sentences
+    that teach the section's subject to a technically informed
+    non-specialist: what the thing is, how it works mechanically, and why
+    it matters for the research question. THEN argue. Reference-quality
+    reports win their readability scores on exactly this move — patient
+    explanation first, dense judgment second — and expert-pitched reports
+    that skip straight to the analysis lose those points every time. The
+    primer is not filler; it is the on-ramp that makes the density that
+    follows legible. Skip it only for the executive summary and for
+    short connective sections with nothing new to explain.
 
 Pass 1 length target: in the response_format range, leaning slightly long
 (15-20% over target). Pass 2 cuts.
@@ -2135,8 +2189,67 @@ If pass 1 is under target, EXPAND. Specifically:
 Three citation styles. Match `citation_style` from the decomposition:
 
 - **`"wikilink"`** (default for non-wrapped runs): every citation is a `[[<source-note-id>]]` marker pointing at the source note in the vault. No separate `## Sources` section. Each wiki-link self-resolves to the source note's frontmatter (title + URL). Aim for 2+ citations per 1000 characters. Copy note IDs verbatim from the input drafts and the evidence digest.
-- **`"inline"`** (benchmark + public deliverables): `[N]` citations renumbered from `[1]` deterministically in order of first appearance, AND a single `## Sources` section at the end with one entry per cited source (deduplicated). Format: `[1] Author(s). "Title." *Publication*, Year. URL`. Aim for 2+ citations per 1000 characters.
+- **`"inline"`** (benchmark + public deliverables): `[N]` citations renumbered from `[1]` deterministically in order of first appearance, AND a single `## Sources` section at the end with one entry per cited source (deduplicated). Format: `[1] Author(s). "Title." *Publication*, Year. URL`.
 - **`"none"`**: no citation markers anywhere, no Sources section.
+
+**Calm citation placement (applies to both marker styles).** Density
+without clutter. The failure mode this prevents: sentences studded with
+three or four bracket stacks that make the prose read like a parts list.
+
+- **One citation point per sentence, at the end** (before the final
+  period) is the default.
+- **Group, never stack.** Multiple sources at one citation point go in
+  ONE bracket, comma-separated: `[7, 12]`, never `[7][12]`. Adjacent
+  brackets (`][`) must not appear anywhere in the report. Cap a group at
+  3 sources — beyond that, cite the strongest and drop the rest.
+- **Mid-sentence citations only anchor specifics.** A specific figure,
+  measured value, or verbatim quote keeps its citation directly beside
+  it. Everything else waits for the sentence end.
+- **Consolidate runs.** When consecutive sentences in a paragraph draw
+  on the same source(s), cite once at the end of the run — EXCEPT
+  sentences carrying a specific number or a verbatim quote, which always
+  keep their own anchor (the citation checker verifies number-bearing
+  sentences pair-by-pair, and an unanchored figure is an automatic
+  finding).
+
+### Register discipline (write like an expert author, not a model)
+
+Four rules, applied while editing pass 1. They make the report denser
+and less annoying to read; each targets a documented machine-writing
+tell.
+
+- **Zero meta-discourse.** Delete every clause that narrates what the
+  report, section, or sentence is doing rather than saying the thing:
+  "This report evaluates...", "This section maps the strategies",
+  "declared up front so the analysis can return to them", "a caveat
+  developed in section 10", "The interpretive point the sources do not
+  make:", "as noted above", "It is worth pausing to observe that".
+  State the content and trust the reader. Cross-references earn their
+  place only when the reader genuinely cannot follow without one, and
+  they point at the topic ("the yield question"), not at a section
+  number. Announcing what you are about to argue is not argument.
+- **Hedging discipline.** Hedge unverified specifics; own your
+  conclusions. A secondhand figure nobody has replicated gets its
+  provenance stated ("the only published measurement is X; nothing
+  above 30 qubits exists in print") — that is scoping, not hedging.
+  But conclusions this report argues for are asserted bare: no "may
+  suggest", no "it could be argued that", and never a hedge-stack
+  ("may potentially indicate"). Hedging everything reads as mush;
+  hedging nothing reads as bravado. Put the uncertainty in the
+  evidence, not in the verb.
+- **Ration the kickers.** A short dramatic standalone sentence built
+  for effect ("Width and width do not compose into speed.") is a
+  strong move exactly once per section, at most. When every paragraph
+  ends on a bolded aphorism the report reads as performance and the
+  genuine findings drown. Fold the surplus into the surrounding
+  sentence as a plain clause; keep the one that earns the emphasis.
+- **Vary the rhythm.** Alternate the register: after a dense
+  evidence-heavy passage, give the reader a plain declarative sentence
+  or two. Mix sentence lengths — a 500-word stretch where every
+  sentence runs 20-30 words with two subordinate clauses and a
+  bracketed citation is exhausting no matter how good the content is.
+  The primer paragraphs (pass 1, item 11) are the natural breathing
+  points; keep them plain.
 
 ### Hygiene
 
@@ -2171,12 +2284,17 @@ cause of low instruction-following scores:
   subsection near the end).
 - **Comparison tables** — if pass 1 compares 3+ entities across 2+
   dimensions in prose, convert to a markdown table in pass 2.
-- **Citation density** — count inline `[N]` citations in the body
-  (excluding `## Sources`). If the ratio is below 1.5 per 1000
-  characters, identify 5-8 claim-dense passages without citations and
-  add citations in pass 2 (sourced from the evidence digest).
+- **Section primers** — verify every major body section opens with the
+  3-5 sentence plain-language primer (pass 1, item 11) before the
+  analysis starts. Where a section dives straight into evaluation,
+  write the primer in pass 2.
+- **Citation density** — count cited-source references in the body
+  (excluding `## Sources`; a grouped `[7, 12]` counts as two). If the
+  ratio is below 1.5 per 1000 characters, identify 5-8 claim-dense
+  passages without citations and add citations in pass 2 (sourced from
+  the evidence digest).
 
-These five checks are NOT optional polish — they're structural
+These six checks are NOT optional polish — they're structural
 requirements that drive instruction-following scores. Pass 2 is the
 LAST chance to add them. The polish auditor (step 15) only does
 hygiene/filler cuts; the readability recommender (step 16) only

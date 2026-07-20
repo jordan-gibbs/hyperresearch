@@ -1510,6 +1510,31 @@ def test_citation_preservation_inline_passes_with_refs_and_heading(tmp_vault):
     assert _citation_issues(out) == []
 
 
+def test_citation_preservation_inline_accepts_grouped_markers(tmp_vault):
+    _write_source(tmp_vault, "Battery Paper", "battery-paper")
+    _write_decomposition(tmp_vault, citation_style="inline")
+    _write_final_report(
+        tmp_vault,
+        "# Report\n\nDensity doubled [1, 2].\n\n## Sources\n\n"
+        "1. Chen et al. 2025\n2. Park 2026\n",
+    )
+    _, out = _run_lint(tmp_vault, rule="citation-style-preservation")
+    assert _citation_issues(out) == []
+
+
+def test_report_body_only_strips_grouped_citation_markers():
+    from hyperresearch.cli.lint import _report_body_only
+
+    body = _report_body_only(
+        "Claim one [1]. Claim two [2, 14]. Claim three [3,4]. "
+        "A 12,000-unit figure survives.\n\n## Sources\n[1] A\n"
+    )
+    assert "[1]" not in body
+    assert "[2, 14]" not in body
+    assert "[3,4]" not in body
+    assert "12,000-unit" in body
+
+
 def test_citation_preservation_inline_flags_missing_refs(tmp_vault):
     _write_source(tmp_vault, "Battery Paper", "battery-paper")
     _write_decomposition(tmp_vault, citation_style="inline")

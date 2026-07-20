@@ -56,6 +56,17 @@ class TestCiteCheckExtraction:
         assert len(pairs) == 1
         assert pairs[0]["note_id"] == "python-async-patterns"
 
+    def test_grouped_citation_pairs_split_per_source(self, cited_vault):
+        report = (
+            "Throughput improves 10x under load [1, 2].\n\n"
+            "## Sources\n[1] Python Async Patterns. https://example.com/async\n"
+            "[2] Unrelated Study. https://example.com/other\n"
+        )
+        pairs = extract_pairs(report, cited_vault.db)
+        assert len(pairs) == 2
+        assert pairs[0]["note_id"] == "python-async-patterns"
+        assert pairs[1]["note_id"] is None
+
     def test_dangling_citation_detected(self, cited_vault):
         report = "A bold claim [[no-such-note]]."
         pairs = extract_pairs(report, cited_vault.db)
@@ -258,6 +269,25 @@ class TestTelemetryAndVerify:
         assert by_name["length-in-range"]["ok"]
         assert by_name["citation-density"]["ok"]
         assert result["passed"] is True
+
+    def test_verify_density_counts_each_grouped_source(self, tmp_vault):
+        init_run(tmp_vault, "vf-04", profile="light")
+        run_dir = tmp_vault.run_dir("vf-04")
+        (run_dir / "prompt-decomposition.json").write_text(json.dumps({
+            "response_format": "short",
+            "required_section_headings": ["## Findings"],
+        }), encoding="utf-8")
+        report = tmp_vault.root / "research" / "notes" / "final_report_vf-04.md"
+        filler = "Substantive analysis continues with replicated evidence in view. " * 11
+        block = filler + "The consensus across measurements holds [1, 2, 3]. "
+        report.write_text("## Findings\n\n" + block * 8, encoding="utf-8")
+
+        result = verify_run(tmp_vault, "vf-04")
+        by_name = {c["name"]: c for c in result["checks"]}
+        # One bracket per ~770 chars sits under the 1.5/1000 floor; the three
+        # sources inside each grouped bracket clear it. Counting markers
+        # instead of cited-source numbers would fail this check.
+        assert by_name["citation-density"]["ok"]
 
     def test_verify_fails_on_missing_heading_and_report(self, tmp_vault):
         init_run(tmp_vault, "vf-02", profile="light")

@@ -54,6 +54,15 @@ Deliberate deviations already folded into the goldens (2026-07-19):
     + manifest flip, no-override language, bounded fix loop) instead of the
     advisory verify+lint checklist, and invariant 14 makes `passed: true`
     the only definition of complete.
+  - Report register + calm citations (2026-07-20, after the Q62 four-report
+    comparison showed the judge's only consistent losses were pedagogy and
+    readability): the instruction critic gained check R5 (section primers)
+    and R2 now counts grouped citation markers (`[7, 12]` = two citations).
+    The synthesizer and polish auditor (not golden-covered) gained the
+    primer requirement, the calm citation style (grouped brackets, sentence-
+    end placement, run consolidation with number-bearing anchors kept), and
+    register discipline (meta-discourse ban, hedging discipline, kicker
+    rationing) distilled from the humanize-ai-text skill.
 """
 
 from __future__ import annotations

@@ -216,9 +216,10 @@ them on first use (inline parenthetical or dedicated glossary), emit:
     a brief parenthetical definition on first mention
 
 **Check R2: Citation density.**
-Count inline `[N]` citations in the body (excluding the ## Sources
-section). Count total body characters. If the ratio is below **1.5
-citations per 1000 characters**, emit:
+Count cited-source references in the body (excluding the ## Sources
+section) — a grouped marker like `[7, 12]` counts as two. Count total
+body characters. If the ratio is below **1.5 citations per 1000
+characters**, emit:
   - `failure_mode`: `"low-citation-density"`
   - `severity`: `major`
   - `recommendation`: identify 5-8 claim-dense passages with no
@@ -239,6 +240,16 @@ prose (no comparison table), emit:
   - `failure_mode`: `"missing-comparison-table"`
   - `severity`: `minor`
   - `recommendation`: suggest converting the comparison to a table
+
+**Check R5: Section primers.**
+If 2+ major body sections open directly with evaluation, ranking, or
+dense quantitative analysis — no 3-5 sentence plain-language primer
+explaining the section's subject (what it is, how it works, why it
+matters here) before the judgment starts — emit ONE finding:
+  - `failure_mode`: `"missing-section-primers"`
+  - `severity`: `major`
+  - `recommendation`: name the sections that need a primer and, for
+    each, the concept the primer should teach
 
 **Cap:** At most **3** readability-structural findings total. Do not
 let these crowd out core instruction-following findings. Use
