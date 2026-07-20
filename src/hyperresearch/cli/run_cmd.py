@@ -434,3 +434,47 @@ def run_verify(
         console.print("[green]PASSED[/]" if result["passed"] else "[red]FAILED[/]")
     if not result["passed"]:
         raise typer.Exit(1)
+
+
+@app.command("finish")
+def run_finish(
+    vault_tag: str | None = typer.Argument(None, help="Run tag (default: newest run)"),
+    json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
+) -> None:
+    """Terminal ship gate: verify the run, then flip the manifest.
+
+    Pass -> status "done". Fail -> status "blocked" (blocked_on: verify),
+    exit 1. This is the ONLY way a run reaches "done"; the fix for a failed
+    gate is changing the report until the gate passes, never re-running the
+    checks by hand and re-interpreting the results.
+    """
+    from hyperresearch.core.runs import RunError, finish_run
+
+    vault = _vault_or_exit(json_output)
+    tag = _resolve_tag(vault, vault_tag, json_output)
+    try:
+        result = finish_run(vault, tag)
+    except RunError as e:
+        if json_output:
+            output(error(str(e), "RUN_ERROR"), json_mode=True)
+        else:
+            console.print(f"[red]Error:[/] {e}")
+        raise typer.Exit(1)
+
+    verify = result["verify"]
+    if json_output:
+        output(success(result, vault=str(vault.root)), json_mode=True)
+    else:
+        for c in verify["checks"]:
+            mark = "[green]ok[/]" if c["ok"] else "[red]FAIL[/]"
+            console.print(f"  {mark} {c['name']}: {c['detail']}")
+        status = result["manifest"]["status"]
+        if verify["passed"]:
+            console.print(f"[green]SHIPPED[/] — run status: {status}")
+        else:
+            console.print(
+                f"[red]BLOCKED[/] — run status: {status} (blocked_on: verify). "
+                "Fix the report, then run finish again."
+            )
+    if not verify["passed"]:
+        raise typer.Exit(1)

@@ -132,6 +132,8 @@ If any artifact is missing, the responsible step failed silently. Re-spawn the r
    - `scaffold-prompt`: scaffold's User Prompt section doesn't match the query file exactly — fix the scaffold
    - `patch-surgery`: draft churn from step 11 → final exceeds the safety threshold — read the patch log and investigate
 
+   These four rules are pre-checks. The BINDING gate is `$HPR run finish <vault_tag>` in the router's final phase — it re-runs the battery (including quote-integrity and retracted-citations) and refuses to mark the run done while any check fails. Gate errors are facts about the report, not opinions to assess: never classify a gate error as a false positive. In particular, quotation marks are reserved for verbatim source text — the fix for a flagged rhetorical/framing quote is removing its quotation marks, not a memo explaining why it's fine.
+
 ---
 
 ## Step 15.6 — Ship

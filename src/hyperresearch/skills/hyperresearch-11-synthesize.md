@@ -218,14 +218,16 @@ When the synthesizer returns:
    - Sections flagged as still weak
 
 3. **Sanity checks on the final report:**
-   - Length is in the target range for `response_format` (not 3x)
+   - **LENGTH GATE (mechanical, not a judgment call):** count the words (`wc -w` or python). The profile ceiling for the response_format is a HARD limit — the ship gate (`run finish`) fails any report more than 20% over target, so an over-long report here is guaranteed rework later. Check it now, when fixing is cheapest.
    - Has all H2s from `required_section_headings`
    - Citations match `citation_style`: `[[note-id]]` markers for `"wikilink"` (no Sources section); `[N]` markers + a `## Sources` section for `"inline"`; no markers for `"none"`
    - No YAML frontmatter, no scaffold leaks, no pipeline vocabulary
 
 If pass 2 is longer than pass 1 (positive delta), something went wrong — pass 2 is supposed to cut. Investigate before proceeding.
 
-If a sanity check fails, hand-craft an Edit on `research/notes/final_report_<vault_tag>.md` yourself to fix it. Do NOT re-spawn the synthesizer — that's regeneration, which violates the patch-not-regenerate invariant once we have a final draft.
+**If the length gate fails (word count above the target high):** re-spawn the synthesizer ONCE for a compression pass — input is its own final report, directive is "cut to <middle of target range> words: collapse redundant sections, cut the weakest evidence per point, keep every load-bearing claim and citation." This is the ONE permitted regeneration, because the write-once invariant starts only after this step's exit criteria pass; length violations discovered later can only be fixed by exactly this move at higher cost.
+
+If any other sanity check fails, hand-craft an Edit on `research/notes/final_report_<vault_tag>.md` yourself to fix it. Do NOT re-spawn the synthesizer for non-length issues — that's regeneration, which violates the patch-not-regenerate invariant once we have a final draft.
 
 ---
 
@@ -237,7 +239,7 @@ After this step, the final report is only modified by Edit hunks from the patche
 
 ## Exit criterion
 
-- `research/notes/final_report_<vault_tag>.md` exists, length in target range
+- `research/notes/final_report_<vault_tag>.md` exists, **word count verified ≤ target high** (counted mechanically, not estimated)
 - `research/runs/<vault_tag>/temp/synthesis-pass1.md` exists (debugging artifact)
 - All H2s from `required_section_headings` present
 - Citations match `citation_style` (wikilink → `[[note-id]]` no Sources section; inline → `[N]` + Sources section; none → no markers)
