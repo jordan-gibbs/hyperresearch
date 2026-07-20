@@ -620,8 +620,6 @@ def _download_image(
     min_image_bytes: int = 50_000, timeout_s: int = 15,
 ) -> dict | None:
     """Download a single image. Returns asset info dict or None if skipped."""
-    import urllib.request
-
     # Generate filename from URL
     parsed = urlparse(img_url)
     url_path = parsed.path.rstrip("/")
@@ -643,11 +641,12 @@ def _download_image(
         file_path = assets_dir / f"{clean_name}-{counter}{ext}"
         counter += 1
 
+    from hyperresearch.web.safe_http import MAX_BYTES_IMAGE, safe_get
+
     try:
-        req = urllib.request.Request(img_url, headers={"User-Agent": "hyperresearch/0.1"})
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-            data = resp.read()
-            content_type = resp.headers.get("Content-Type", "")
+        resp = safe_get(img_url, max_bytes=MAX_BYTES_IMAGE, timeout=timeout_s)
+        data = resp.content
+        content_type = resp.headers.get("content-type", "")
     except Exception:
         return None
 
