@@ -48,6 +48,12 @@ Deliberate deviations already folded into the goldens (2026-07-19):
     column, gap-fetch's "+$1-3 per run" became fetcher-count overhead
     framing, the source-analyst's "$2-5 per spawn" block became "Effort
     discipline", and its Sonnet-1M context claims became model-neutral).
+  - Ship-gate enforcement (2026-07-19, after bench Q62 shipped a 25.6K-word
+    report with 24 hallucinated-quote lint errors "assessed as false
+    positives"): the router's final gate now centers on `run finish` (verify
+    + manifest flip, no-override language, bounded fix loop) instead of the
+    advisory verify+lint checklist, and invariant 14 makes `passed: true`
+    the only definition of complete.
 """
 
 from __future__ import annotations

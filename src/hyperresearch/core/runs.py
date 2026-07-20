@@ -401,6 +401,36 @@ def verify_run(vault, vault_tag: str) -> dict:
             "scaffold gospel header must not ship",
         )
 
+        # Content gates: the blocking lint rules run in-process, so this ONE
+        # command carries the whole ship verdict. Bench Q62 shipped with 24
+        # hallucinated-quote errors because the orchestrator ran the lint
+        # separately and re-interpreted the failures as false positives —
+        # folding the rules in here removes that seam.
+        try:
+            from hyperresearch.cli.lint import (
+                _check_quote_integrity,
+                _check_retracted_citations,
+            )
+
+            for rule, fn in (
+                ("quote-integrity", _check_quote_integrity),
+                ("retracted-citations", _check_retracted_citations),
+            ):
+                errors = [
+                    i for i in fn(vault, vault.db, report_path, report_text)
+                    if i.get("severity") == "error"
+                ]
+                check(
+                    rule,
+                    not errors,
+                    "clean" if not errors else (
+                        f"{len(errors)} error(s) — first: "
+                        f"{errors[0].get('message', '')[:160]}"
+                    ),
+                )
+        except Exception as exc:
+            check("content-lints", False, f"content lint rules failed to run: {exc}")
+
     # Tier-mandated artifacts
     steps = set(manifest.get("profile_steps", []))
     if {"12", "14"} <= steps:
@@ -433,3 +463,35 @@ def verify_run(vault, vault_tag: str) -> dict:
         check("cite-check-resolved", ok, detail)
 
     return {"vault_tag": vault_tag, "passed": all(c["ok"] for c in checks), "checks": checks}
+
+
+def finish_run(vault, vault_tag: str) -> dict:
+    """The terminal ship gate: verify, then flip the manifest accordingly.
+
+    This is the ONLY path to status "done". Verification failure flips the
+    run to blocked (blocked_on="verify") instead — the caller's job is then
+    to change the REPORT until the gate passes, never to re-interpret the
+    checks. The verify result is recorded in the manifest either way, so
+    `run status` and the bench harness can see whether a "done" run actually
+    earned it.
+    """
+    result = verify_run(vault, vault_tag)
+    manifest = load_manifest(vault, vault_tag)
+    manifest["verify"] = {
+        "passed": result["passed"],
+        "at": _now(),
+        "failed_checks": [c["name"] for c in result["checks"] if not c["ok"]],
+    }
+    if result["passed"]:
+        manifest["status"] = "done"
+        manifest["blocked_on"] = None
+    else:
+        manifest["status"] = "blocked"
+        manifest["blocked_on"] = "verify"
+    _save(vault, vault_tag, manifest)
+    record_event(vault, vault_tag, {
+        "type": "finish",
+        "passed": result["passed"],
+        "failed_checks": manifest["verify"]["failed_checks"],
+    })
+    return {"manifest": manifest, "verify": result}

@@ -1461,6 +1461,13 @@ Also strip:
 - Literal prompt echoes ("User prompt:", "The query is:", etc.)
 - Leftover backticks around section headings
 - Stray "Here is the report:" / "Below is the draft:" preamble lines
+- **Non-verbatim quotation marks.** Quotation marks are reserved for text
+  quoted VERBATIM from a source. Rhetorical framing, paraphrase, imagined
+  objections, and the report's own coinages ("the scaling wall", "a chip
+  cannot hold enough ions") must NOT be wrapped in quotation marks —
+  rewrite as plain prose or italics. The ship gate mechanically rejects
+  any quoted span it cannot find verbatim in the vault, so every
+  decorative quote you leave is a guaranteed gate failure.
 - **Citation pass-through.** Leave all `[N]` inline citations and the
   Sources/References section exactly as the drafter wrote them.
   Citations are a product feature, not a polish target.
@@ -2050,11 +2057,19 @@ permitted to be uneven — pass 2 cleans it up. Goals for pass 1:
 Pass 1 length target: in the response_format range, leaning slightly long
 (15-20% over target). Pass 2 cuts.
 
-| `response_format` | Pass 1 target | Pass 2 final target |
-|---|---|---|
-| `"short"` | 600-2400 words | 500-2000 words |
-| `"structured"` | 2400-6000 words | 2000-5000 words |
-| `"argumentative"` | 6000-12000 words | 5000-10000 words |
+| `response_format` | Pass 2 final target (the high end is a HARD ceiling) |
+|---|---|
+| `"short"` | << p.word_targets["short"]|hyphen >> words |
+| `"structured"` | << p.word_targets["structured"]|hyphen >> words |
+| `"argumentative"` | << p.word_targets["argumentative"]|hyphen >> words |
+
+The ceiling is mechanical, not stylistic: the pipeline's ship gate fails
+any report more than 20% over the high end, and the only remedy at that
+point is a forced compression rewrite of your own output. Count your words
+before finishing pass 2; if you are over the ceiling, cut until you are
+under it. A large corpus is never a reason to exceed the ceiling —
+selectivity is the skill being graded, and burying the argument under
+every available source scores WORSE on insight, not better.
 
 When pass 1 is done, write it to `pass1_output_path`.
 

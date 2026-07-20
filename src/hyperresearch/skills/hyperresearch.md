@@ -223,20 +223,24 @@ done
 
 (Light tier skips critics + patcher entirely — the critic-findings and patch-log files won't exist. That's expected; only `polish-log.json` is required for light.)
 
-Then run the verification battery + lint:
+Then refresh retraction data and run the SHIP GATE:
 ```bash
-$HPR run verify <vault_tag> --json          # structural: headings, length, citation density, artifacts, cite-check resolution
 $HPR sources retractions --tag <vault_tag> --json   # ship-time retraction re-check (bypasses cache)
-$HPR lint --rule wrapper-report --json
-$HPR lint --rule locus-coverage --json
-$HPR lint --rule scaffold-prompt --json
-$HPR lint --rule patch-surgery --json
-$HPR lint --rule quote-integrity --json     # every quoted span must exist verbatim in a vault note
-$HPR lint --rule retracted-citations --json # retracted sources cited unmarked block the ship
-$HPR lint --rule numeric-consistency --json # warnings: numbers untraceable to evidence — verify or remove
+$HPR run finish <vault_tag> --json                  # THE ship gate: verify + manifest flip
 ```
 
-If `run verify` fails or any rule returns `error` severity issues, address them before declaring complete. Then ship: the final report lives at `research/notes/final_report_<vault_tag>.md`.
+`run finish` runs the whole verification battery — report exists, required headings, **length within the profile's word target (±20%)**, citation density, tier artifacts, cite-check resolution, **quote-integrity**, and **retracted-citations** — and flips the manifest to `done` only when every check passes. On failure it flips the run to `blocked (verify)` and exits 1.
+
+**The gate's verdict is final. You may not re-run individual rules and re-classify their errors as false positives.** If a check fails, change the REPORT until the gate passes:
+
+- `length-in-range` over the ceiling → spawn the synthesizer for ONE compression pass (its own output as input, target = middle of the word range). Do not re-run the critics afterward — go straight back to `run finish`.
+- `quote-integrity` → quotation marks are reserved for verbatim source text. Rhetorical or framing "quotes" lose their quotation marks (rewrite as plain or italicized prose via Edit); real quotes get fixed to verbatim or cut.
+- `retracted-citations` → acknowledge the retraction in the sentence or remove the citation.
+- Anything else → fix the specific artifact the check names.
+
+Re-run `$HPR run finish <vault_tag> --json` after each fix round. Maximum 3 rounds; if the gate still fails, leave the run `blocked` and report the failing checks to the user honestly — a blocked run with a true manifest beats a shipped report that lies. Optional advisory: `$HPR lint --rule numeric-consistency --json` (warnings only, never blocks).
+
+Ship only after `run finish` reports `"passed": true`: the final report lives at `research/notes/final_report_<vault_tag>.md`.
 
 ---
 
@@ -255,6 +259,7 @@ If `run verify` fails or any rule returns `error` severity issues, address them 
 11. **Step 11 synthesis is MANDATORY for `full` tier.** The synthesizer subagent (Read+Write tool-locked) writes the final report from the 3 drafts. The orchestrator does NOT write the final report itself for these tiers.
 12. **Subagents read full source text.** Draft sub-orchestrators MUST batch-read every note in their `must_read_note_ids` list before writing. Fetchers MUST chase 3-8 primary sources via citation chains.
 13. **NEVER emit a bare text response while subagent tasks are in flight.**
+14. **A run is complete ONLY when `run finish` reports `passed: true`.** Gate failures are fixed by changing the report, never by re-interpreting, downgrading, or memo-ing away the checks. If 3 fix rounds don't clear the gate, the run stays `blocked` and you say so.
 
 ---
 

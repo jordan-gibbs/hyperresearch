@@ -275,6 +275,114 @@ class TestTelemetryAndVerify:
         assert r.exit_code == 1  # no report -> fail
 
 
+class TestFinishGate:
+    """`run finish` is the terminal gate: it must be impossible to reach
+    status "done" past a failing check, and the two Q62 failure modes
+    (hallucinated quotes assessed away, length gate never run) must now be
+    mechanically blocking."""
+
+    def _well_formed_light_run(self, tmp_vault, tag: str, body: str | None = None):
+        init_run(tmp_vault, tag, profile="light")
+        run_dir = tmp_vault.run_dir(tag)
+        (run_dir / "prompt-decomposition.json").write_text(json.dumps({
+            "response_format": "short",
+            "required_section_headings": ["## Findings"],
+        }), encoding="utf-8")
+        (run_dir / "polish-log.json").write_text('{"applied": []}', encoding="utf-8")
+        report = tmp_vault.root / "research" / "notes" / f"final_report_{tag}.md"
+        if body is None:
+            body = "## Findings\n\n" + (
+                "Substantive sentence with real evidence attached [[src-note]]. " * 80
+            )
+        report.write_text(body, encoding="utf-8")
+        return report
+
+    def test_finish_marks_clean_run_done(self, tmp_vault):
+        from hyperresearch.core.runs import finish_run, load_manifest
+
+        self._well_formed_light_run(tmp_vault, "fin-01")
+        result = finish_run(tmp_vault, "fin-01")
+        assert result["verify"]["passed"] is True
+        manifest = load_manifest(tmp_vault, "fin-01")
+        assert manifest["status"] == "done"
+        assert manifest["blocked_on"] is None
+        assert manifest["verify"]["passed"] is True
+        assert manifest["verify"]["failed_checks"] == []
+
+    def test_finish_blocks_hallucinated_quote(self, tmp_vault):
+        from hyperresearch.core.runs import finish_run, load_manifest
+
+        body = "## Findings\n\n" + (
+            "Substantive sentence with real evidence attached [[src-note]]. " * 80
+        ) + '\n\nAs one expert put it, "this quotation was never fetched into any vault note anywhere."\n'
+        self._well_formed_light_run(tmp_vault, "fin-02", body=body)
+        result = finish_run(tmp_vault, "fin-02")
+        assert result["verify"]["passed"] is False
+        by_name = {c["name"]: c for c in result["verify"]["checks"]}
+        assert by_name["quote-integrity"]["ok"] is False
+        manifest = load_manifest(tmp_vault, "fin-02")
+        assert manifest["status"] == "blocked"
+        assert manifest["blocked_on"] == "verify"
+        assert "quote-integrity" in manifest["verify"]["failed_checks"]
+
+    def test_finish_blocks_over_length_report(self, tmp_vault):
+        from hyperresearch.core.runs import finish_run, load_manifest
+
+        # light/short target is 500-2000 words; 20% tolerance caps at 2400.
+        body = "## Findings\n\n" + (
+            "Substantive sentence with real evidence attached [[src-note]]. " * 500
+        )
+        self._well_formed_light_run(tmp_vault, "fin-03", body=body)
+        result = finish_run(tmp_vault, "fin-03")
+        assert result["verify"]["passed"] is False
+        by_name = {c["name"]: c for c in result["verify"]["checks"]}
+        assert by_name["length-in-range"]["ok"] is False
+        manifest = load_manifest(tmp_vault, "fin-03")
+        assert manifest["status"] == "blocked"
+        assert manifest["blocked_on"] == "verify"
+
+    def test_finish_then_fix_then_done(self, tmp_vault):
+        """The intended loop: blocked -> fix the report -> finish passes."""
+        from hyperresearch.core.runs import finish_run, load_manifest
+
+        body = "## Findings\n\n" + (
+            "Substantive sentence with real evidence attached [[src-note]]. " * 80
+        ) + '\n\nAs one expert put it, "this quotation was never fetched into any vault note anywhere."\n'
+        report = self._well_formed_light_run(tmp_vault, "fin-04", body=body)
+        assert finish_run(tmp_vault, "fin-04")["verify"]["passed"] is False
+
+        # The prescribed fix: drop the quotation marks, not the gate.
+        fixed = report.read_text(encoding="utf-8").replace(
+            '"this quotation was never fetched into any vault note anywhere."',
+            "this claim stands as the report's own framing.",
+        )
+        report.write_text(fixed, encoding="utf-8")
+        assert finish_run(tmp_vault, "fin-04")["verify"]["passed"] is True
+        assert load_manifest(tmp_vault, "fin-04")["status"] == "done"
+
+    def test_finish_cli_exit_code(self, tmp_vault, monkeypatch):
+        from typer.testing import CliRunner
+
+        from hyperresearch.cli import app
+
+        init_run(tmp_vault, "fin-05", profile="light")
+        monkeypatch.chdir(tmp_vault.root)
+        r = CliRunner().invoke(app, ["run", "finish", "fin-05", "--json"])
+        assert r.exit_code == 1  # no report -> gate fails -> blocked
+        from hyperresearch.core.runs import load_manifest
+
+        assert load_manifest(tmp_vault, "fin-05")["status"] == "blocked"
+
+    def test_verify_includes_content_gates(self, tmp_vault):
+        """verify_run itself must carry quote-integrity + retracted-citations
+        checks — one command, whole verdict."""
+        self._well_formed_light_run(tmp_vault, "fin-06")
+        result = verify_run(tmp_vault, "fin-06")
+        names = {c["name"] for c in result["checks"]}
+        assert "quote-integrity" in names
+        assert "retracted-citations" in names
+
+
 class TestCiteCheckerAgentInstall:
     def test_agent_installs(self, tmp_vault):
         from hyperresearch.core.hooks import _install_cite_checker_agent

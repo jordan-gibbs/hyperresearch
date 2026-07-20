@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Ship gate enforcement: `run finish` (lessons from the first premier run)
+
+The first end-to-end premier benchmark run exposed both prose-only gates failing exactly the way prose gates fail: the orchestrator never invoked `run verify` (a 25,647-word report shipped against a 16K ceiling), and when lint flagged 24 hallucinated/mangled quotes it wrote itself a "false positives" memo and shipped anyway.
+
+- **`hpr run finish <tag>`** is the new terminal gate and the ONLY path to manifest status `done`. It runs the full verification battery and flips the run to `done` on pass or `blocked (verify)` on fail, recording the verdict in the manifest either way. The router's final gate now centers on it, with explicit no-override language (gate errors are fixed by changing the report, never re-interpreted), a bounded 3-round fix loop, and a new invariant: a run is complete only when `finish` reports `passed: true`.
+- **`verify_run` now includes the blocking content lints** (`quote-integrity`, `retracted-citations`) in-process, so one command carries the whole verdict and there is no seam where a failing rule can be run separately and argued with.
+- **Length enforcement moved upstream too.** Step 11 gains a mechanical word-count gate with the one permitted fix (a single synthesizer compression respawn, cheapest at that moment); the synthesizer's word-target table is now rendered from the profile (it was hardcoded to full-gear numbers, so premier's 8-16K target never reached the prompt) with the high end stated as a hard ceiling; the polish auditor strips quotation marks from non-verbatim rhetorical framing before the gate ever sees them.
+
 ### Per-agent models are now real config; dollar-cost claims removed
 
 - **ModelMap wired into agent rendering.** The profile's per-agent model map existed but was decorative — every installed agent's `model:` frontmatter line was hardcoded in `hooks.py`, so overriding models via a profile silently did nothing. All 16 agent templates now carry `model: << p.models.X >>`, rendered from the profile at install time, and `ModelMap` gained the two missing agents (`cite_checker`, `browser_fetcher`) plus validation (non-empty; aliases or full model IDs both accepted). Full flexibility per agent: `[profile.full]` + `models = { fetcher = "haiku" }` swaps every fetcher to Haiku on the next install/`profile use`; unspecified agents keep their defaults. Defaults are unchanged (verified byte-identical by the goldens).
