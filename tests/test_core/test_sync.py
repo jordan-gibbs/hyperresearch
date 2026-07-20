@@ -75,6 +75,31 @@ def test_sync_populates_tags(seeded_vault):
     assert "concurrency" in tags
 
 
+def test_sync_lowercases_tags(tmp_vault):
+    """Frontmatter tags must be stored lowercase so SearchFilters (which
+    lowercases the query side) can match them. Without this, `--tag llm`
+    silently returns zero rows for any note tagged `LLM`."""
+    from hyperresearch.core.note import write_note
+
+    write_note(
+        tmp_vault.notes_dir,
+        "Mixed-case tags note",
+        body="# Body\n",
+        tags=["LLM", "Mamba", "rust"],
+    )
+    plan = compute_sync_plan(tmp_vault, force=True)
+    execute_sync(tmp_vault, plan)
+
+    rows = tmp_vault.db.execute(
+        "SELECT tag FROM tags ORDER BY tag"
+    ).fetchall()
+    stored = sorted(r["tag"] for r in rows)
+    assert stored == ["llm", "mamba", "rust"]
+    # Crucially, no uppercase variant slipped through.
+    assert "LLM" not in stored
+    assert "Mamba" not in stored
+
+
 def test_sync_populates_links(seeded_vault):
     rows = seeded_vault.db.execute(
         "SELECT source_id, target_ref, target_id FROM links"

@@ -276,7 +276,10 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
     except Exception:
         pass
     for tag in meta.tags:
-        resolved = alias_map.get(tag, tag)
+        # Lowercase: SearchFilters lowercases query-side tags, so the stored
+        # value must match. Without this, a canonical alias like `LLM` is
+        # invisible to `--tag llm` filtering and silently empties the result.
+        resolved = alias_map.get(tag, tag).lower()
         conn.execute("INSERT OR IGNORE INTO tags (note_id, tag) VALUES (?, ?)", (meta.id, resolved))
 
     # Update aliases

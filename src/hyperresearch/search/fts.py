@@ -48,14 +48,23 @@ def preprocess_query(raw: str) -> str:
             words = part.strip().split()
             for word in words:
                 if word:
-                    clean = re.sub(r'[*^():{}]', '', word)
-                    if not clean:
+                    # Strip FTS5-special chars that would break syntax. The
+                    # double-quote is included because quoted phrases were
+                    # already extracted by the outer split — any quote left
+                    # here is an unbalanced fragment.
+                    clean = re.sub(r'[*^():{}"]', '', word)
+                    # FTS5 reads `-` as the NOT operator, which raises a
+                    # syntax error mid-query (returns zero results to the
+                    # caller). Replace with whitespace so `foo-bar` becomes
+                    # two prefix-matched tokens.
+                    clean = clean.replace('-', ' ')
+                    if not clean.strip():
                         continue
-                    # Split glued alphanumeric (mamba3 -> mamba + 3)
-                    subwords = _split_alphanum(clean)
-                    for sw in subwords:
-                        if sw:
-                            processed.append(f'"{sw}"*')
+                    for token in clean.split():
+                        # Split glued alphanumeric (mamba3 -> mamba + 3)
+                        for sw in _split_alphanum(token):
+                            if sw:
+                                processed.append(f'"{sw}"*')
     return " ".join(processed)
 
 
