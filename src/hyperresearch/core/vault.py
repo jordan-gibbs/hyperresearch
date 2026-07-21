@@ -109,7 +109,12 @@ class Vault:
         self.close()
 
     @staticmethod
-    def init(root: Path, name: str = "Research Base", research_dir: str = "research") -> Vault:
+    def init(
+        root: Path,
+        name: str = "Research Base",
+        research_dir: str = "research",
+        inject_docs: bool = True,
+    ) -> Vault:
         """Initialize a new vault at the given path."""
         root = root.resolve()
         hyperresearch_dir = root / HYPERRESEARCH_DIR
@@ -140,8 +145,8 @@ class Vault:
         template_path = hyperresearch_dir / "templates" / "note.md"
         template_path.write_text(
             "---\n"
-            "title: \"{{ title }}\"\n"
-            "id: \"{{ id }}\"\n"
+            'title: "{{ title }}"\n'
+            'id: "{{ id }}"\n'
             "tags: []\n"
             "status: draft\n"
             "type: note\n"
@@ -150,9 +155,11 @@ class Vault:
             "# {{ title }}\n\n"
         )
 
-        # Inject CLAUDE.md at vault root
-        from hyperresearch.core.agent_docs import inject_agent_docs
-        inject_agent_docs(root)
+        # Inject CLAUDE.md at vault root for backward-compatible Claude installs.
+        if inject_docs:
+            from hyperresearch.core.agent_docs import inject_agent_docs
+
+            inject_agent_docs(root)
 
         return vault
 
