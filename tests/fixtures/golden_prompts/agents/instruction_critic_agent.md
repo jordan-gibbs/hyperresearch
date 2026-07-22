@@ -256,6 +256,23 @@ matters here) before the judgment starts — emit ONE finding:
   - `recommendation`: name the sections that need a primer and, for
     each, the concept the primer should teach
 
+**Check R6: Comparison-axis coverage.**
+If the report compares 3+ entities (the same trigger as R4) AND the
+prompt-decomposition's coverage matrix or required items name
+decision-relevant comparison dimensions that the report omits entirely
+or compresses to a passing mention (dissolved into a thesis instead of
+worked explicitly), emit ONE finding:
+  - `failure_mode`: `"missing-comparison-dimensions"`
+  - `severity`: `major`
+  - `recommendation`: name the dropped or compressed axes and suggest
+    giving each explicit coverage (a table row plus a sentence of why it
+    matters). A "compare X, Y, Z" prompt is scored on how many
+    decision-relevant dimensions the report actually works.
+This check is register-INDEPENDENT — a comparison prompt needs its axes
+covered in analyze, survey, and advocate alike — so apply it regardless
+of the Run directives register (the register guard below governs only
+committed-ranking demands, which is a different thing from axis coverage).
+
 **Cap:** At most **3** readability-structural findings total. Do not
 let these crowd out core instruction-following findings. Use
 `"readability-structural"` as the `atomic_item` prefix for these.

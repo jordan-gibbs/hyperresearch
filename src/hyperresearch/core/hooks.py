@@ -773,6 +773,14 @@ prompt. No block = this prompt's defaults apply unchanged.
      interim note actually provides
    - A named mechanism is mentioned but not explained even though the
      interim note explains it
+   - **A developed quantitative mechanism is compressed to a bare mention.**
+     The interim note works a named decomposition (e.g. a factor model with
+     its loadings), a formula with its terms, or a specific causal chain with
+     its numbers — and the draft names it in one clause and moves on. This is
+     the highest-insight loss a draft can take: the mechanism was the whole
+     reason the depth budget was spent, and a gesture at it recovers none of
+     that value. Flag it `major` and tell the revisor to develop it to the
+     depth the interim note supports.
    - A comparison between sources is summarized but the actual
      disagreement is blanded out
    - A citation is dropped where the interim note specifically supports
@@ -1229,6 +1237,23 @@ matters here) before the judgment starts — emit ONE finding:
   - `severity`: `major`
   - `recommendation`: name the sections that need a primer and, for
     each, the concept the primer should teach
+
+**Check R6: Comparison-axis coverage.**
+If the report compares 3+ entities (the same trigger as R4) AND the
+prompt-decomposition's coverage matrix or required items name
+decision-relevant comparison dimensions that the report omits entirely
+or compresses to a passing mention (dissolved into a thesis instead of
+worked explicitly), emit ONE finding:
+  - `failure_mode`: `"missing-comparison-dimensions"`
+  - `severity`: `major`
+  - `recommendation`: name the dropped or compressed axes and suggest
+    giving each explicit coverage (a table row plus a sentence of why it
+    matters). A "compare X, Y, Z" prompt is scored on how many
+    decision-relevant dimensions the report actually works.
+This check is register-INDEPENDENT — a comparison prompt needs its axes
+covered in analyze, survey, and advocate alike — so apply it regardless
+of the Run directives register (the register guard below governs only
+committed-ranking demands, which is a different thing from axis coverage).
 
 **Cap:** At most **3** readability-structural findings total. Do not
 let these crowd out core instruction-following findings. Use
@@ -2176,6 +2201,29 @@ permitted to be uneven — pass 2 cleans it up. Goals for pass 1:
     primer is not filler; it is the on-ramp that makes the density that
     follows legible. Skip it only for the executive summary and for
     short connective sections with nothing new to explain.
+12. **Coverage and mechanism depth are load-bearing content, spent before
+    elegance.** Two failure modes cost more points than any prose flaw, and
+    both hide as "tightening":
+    - *The comparison surface.* On a compare/survey task, the systematic
+      multi-dimensional comparison IS content, not optional structure. Every
+      dimension the corpus treats as decision-relevant — read them off
+      `comparisons.md` and `source-tensions.json` — gets explicit coverage:
+      a table row and a sentence of why it matters. Do NOT dissolve a
+      ten-axis comparison into a single elegant thesis that gestures at the
+      axes. A "compare X, Y, Z" prompt is scored on how many decision-relevant
+      dimensions you actually work, so a narrative that absorbs the comparison
+      covers less than a report that lays it out.
+    - *Developed mechanisms.* A quantitative mechanism the sources develop —
+      a named decomposition (e.g. a factor model with its loadings), a formula
+      with its terms, a specific causal chain with its numbers — must be
+      DEVELOPED in the report, not compressed to a one-line mention. A
+      mechanism named but not unpacked has lost the exact insight that made it
+      worth citing; it reads as a gesture, and the insight score reflects that.
+      When an interim note works a mechanism in depth, carry that depth
+      through — that is what the depth budget was spent on.
+    Elegance is spent on the words BETWEEN points, never on the number of
+    points. If you must choose, on these tasks coverage and developed depth
+    win over a cleaner line.
 
 Pass 1 length target: in the response_format range, leaning slightly long
 (15-20% over target). Pass 2 cuts.
@@ -2192,7 +2240,12 @@ point is a forced compression rewrite of your own output. Count your words
 before finishing pass 2; if you are over the ceiling, cut until you are
 under it. A large corpus is never a reason to exceed the ceiling —
 selectivity is the skill being graded, and burying the argument under
-every available source scores WORSE on insight, not better.
+every available source scores WORSE on insight, not better. But be exact
+about what selectivity means: it is choosing which SOURCES to cite for a
+point, not which POINTS to make. Cutting a comparison dimension or
+compressing a developed mechanism to a bare mention is not selectivity —
+it is a coverage and insight gap that scores worse, not better. Prune
+redundant citations of the same point; never prune the point.
 
 When pass 1 is done, write it to `pass1_output_path`.
 
@@ -2238,13 +2291,19 @@ drafts. State the committed position from the synthesis plan.
 
 ### Length discipline
 
-If pass 1 is over the response_format target, CUT. Specifically:
+If pass 1 is over the response_format target, CUT. Cut prose, never points:
 - Cut the most redundant sentences first (you've already flagged them above)
 - Cut filler ("It is worth noting", "Importantly", "Of note,", "It bears
   mentioning")
 - Compress 3-sentence ideas into 1-2 sentences where the third sentence
   is restating
 - Drop weak adverbs ("really", "quite", "notably" when not load-bearing)
+
+What you NEVER cut to hit the target: a comparison dimension, a developed
+quantitative mechanism, a counterargument, or a load-bearing primary source.
+Those are points, not prose. If cutting redundancy and filler does not get
+you under the ceiling, the report has too many words per point, not too many
+points — tighten more points, do not amputate one.
 
 If pass 1 is under target, EXPAND. Specifically:
 - Add interpretive beats where you have factual claims without

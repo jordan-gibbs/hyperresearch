@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Coverage before elegance: the synthesizer stops trading substance for prose
+
+A rerun of a comparison query scored below its own older baseline on comprehensiveness and insight, and reading both reports side by side showed why: same word count, spent differently. The humanization work (primers, calm citations, one committed thesis) had quietly taught the synthesizer to dissolve a systematic ten-axis comparison into an elegant narrative and to compress a fully developed quantitative mechanism down to a one-line mention. Cleaner to read, and worse on exactly the axes a "compare X, Y, Z" prompt is graded on. The prompts were conflating two different edits: cutting prose, which is right, and cutting substance, which is not.
+
+- **The synthesizer now treats coverage and mechanism depth as content, not optional structure.** On a compare or survey task, every decision-relevant dimension the corpus names gets explicit coverage, and a mechanism the sources develop (a named decomposition, a formula with its terms, a causal chain with its numbers) gets developed in the report rather than gestured at. The rule it now follows: elegance is spent on the words between points, never on the number of points.
+- **"Selectivity" is now defined precisely.** The anti-sprawl guidance used to read as license to drop points; it now says selectivity means choosing which sources to cite for a point, not which points to make. Dropping a comparison axis or compressing a mechanism is a coverage gap, not economy.
+- **The length pass cuts prose, never points.** When trimming to the word ceiling, redundancy and filler go first; a comparison dimension, a developed mechanism, a counterargument, and a load-bearing primary source are off limits. If prose cuts do not get under the ceiling, the report has too many words per point, not too many points.
+- **Two adversarial backstops.** The depth critic now flags a developed quantitative mechanism compressed to a bare mention as the highest-insight loss a draft can take. The instruction critic gains a comparison-axis coverage check (register-independent, since a comparison prompt needs its axes covered whatever the register) that names dropped or compressed dimensions.
+
 ### Run levers: auto-selected register, domain notes, and inference depth
 
 The pipeline had one hard-coded voice (evaluative-argumentative), so a "teach me X" or "survey the landscape" query got an opinionated verdict report. The Q62 register experiment showed the judge prices register heavily (+2.5 RACE from register alone), so register is now a run-time lever instead of a constant.

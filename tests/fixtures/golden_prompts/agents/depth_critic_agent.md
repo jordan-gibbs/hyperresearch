@@ -66,6 +66,14 @@ prompt. No block = this prompt's defaults apply unchanged.
      interim note actually provides
    - A named mechanism is mentioned but not explained even though the
      interim note explains it
+   - **A developed quantitative mechanism is compressed to a bare mention.**
+     The interim note works a named decomposition (e.g. a factor model with
+     its loadings), a formula with its terms, or a specific causal chain with
+     its numbers — and the draft names it in one clause and moves on. This is
+     the highest-insight loss a draft can take: the mechanism was the whole
+     reason the depth budget was spent, and a gesture at it recovers none of
+     that value. Flag it `major` and tell the revisor to develop it to the
+     depth the interim note supports.
    - A comparison between sources is summarized but the actual
      disagreement is blanded out
    - A citation is dropped where the interim note specifically supports

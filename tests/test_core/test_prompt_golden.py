@@ -73,6 +73,16 @@ Deliberate deviations already folded into the goldens (2026-07-19):
     register-conditional standards. The cite-checker and
     9-evidence-digest are deliberately untouched (no shim: verification
     is register-independent; step 9 spawns nothing).
+  - Coverage before elegance (2026-07-22, after the Q52 rerun scored below
+    baseline on comprehensiveness and insight by trading the systematic
+    comparison surface and a developed factor decomposition for a cleaner
+    thesis, at the same word count): the depth critic gained a shallow-spot
+    bullet for developed quantitative mechanisms compressed to a bare mention
+    (the highest-insight loss), and the instruction critic gained check R6
+    (comparison-axis coverage, register-independent). The synthesizer (not
+    golden-covered) gained pass-1 item 12 (coverage and mechanism depth are
+    load-bearing content), a reframed selectivity paragraph (select sources,
+    not points), and a "never cut a point to hit the ceiling" clause.
 """
 
 from __future__ import annotations
@@ -363,3 +373,35 @@ def test_cite_check_skill_gets_no_shim(ctx):
         _read_skill_source("hyperresearch-14-5-cite-check.md"), ctx
     )
     assert "shims/" not in rendered
+
+
+# ---------------------------------------------------------------------------
+# Coverage before elegance: the synthesizer and the depth/instruction critics
+# must carry the anti-compression guards so a rerun can't silently regress into
+# trading substance for prose (see the 2026-07-22 deviation-log entry).
+# ---------------------------------------------------------------------------
+
+
+def test_synthesizer_carries_coverage_before_elegance_guards(ctx):
+    rendered = render_prompt(hooks.SYNTHESIZER_AGENT, ctx)
+    # pass-1 item 12: coverage + mechanism depth are load-bearing content
+    assert "load-bearing content" in rendered
+    assert "Elegance is spent on the words BETWEEN points" in rendered
+    # reframed selectivity: pick sources, not points
+    assert "which SOURCES to cite for a" in rendered
+    assert "not which POINTS to make" in rendered
+    # length discipline: never cut a point to hit the ceiling
+    assert "Cut prose, never points" in rendered
+
+
+def test_depth_critic_flags_compressed_mechanisms(ctx):
+    rendered = render_prompt(hooks.DEPTH_CRITIC_AGENT, ctx)
+    assert "compressed to a bare mention" in rendered
+    assert "highest-insight loss" in rendered
+
+
+def test_instruction_critic_has_comparison_axis_check(ctx):
+    rendered = render_prompt(hooks.INSTRUCTION_CRITIC_AGENT, ctx)
+    assert "missing-comparison-dimensions" in rendered
+    # must be register-independent (applies in analyze/survey/advocate alike)
+    assert "register-INDEPENDENT" in rendered
