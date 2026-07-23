@@ -17,6 +17,28 @@ def test_preprocess_quoted_phrase():
     assert '"async await"' in result
 
 
+def test_preprocess_hyphenated_word_stays_a_phrase():
+    """Bare tokens are emitted inside double quotes, where FTS5 reads `-` as
+    a plain character, not the NOT operator — so `foo-bar` is a valid phrase
+    query as-is. It must NOT be split into AND'd tokens, which would loosen
+    phrase matching."""
+    result = preprocess_query("foo-bar")
+    assert '"foo-bar"*' in result
+
+
+def test_preprocess_mixed_hyphen_query():
+    result = preprocess_query("python 3-async")
+    assert '"python"*' in result
+    assert '"3-async"*' in result
+
+
+def test_preprocess_strips_stray_quote():
+    """Quoted phrases survive whole, but a single unbalanced `"` inside a
+    bare word would otherwise break FTS5 syntax."""
+    result = preprocess_query('foo"bar')
+    assert '"foobar"*' in result
+
+
 def test_preprocess_passthrough_operators():
     query = "python AND async"
     assert preprocess_query(query) == query

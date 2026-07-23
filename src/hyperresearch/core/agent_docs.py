@@ -17,7 +17,7 @@ HYPERRESEARCH_SECTION_END = "<!-- hyperresearch:end -->"
 
 HYPERRESEARCH_BLURB = """
 {marker}
-## Research Base (hyperresearch) — Today is {today}
+## Research Base (hyperresearch)
 
 **CLI path: `{hpr}`** — use this exact path for every hyperresearch command. It may not be on your system PATH.
 
@@ -175,12 +175,12 @@ def inject_agent_docs(vault_root: Path) -> list[str]:
     hpr_path = _resolve_executable()
     # Use forward slashes — bash on Windows eats backslashes
     hpr_path = hpr_path.replace("\\", "/")
-    from datetime import date
+    # No date interpolation here: a `Today is YYYY-MM-DD` line in the
+    # cached prefix would bust Claude Code's prompt cache once per day.
     blurb = HYPERRESEARCH_BLURB.format(
         marker=HYPERRESEARCH_SECTION_MARKER,
         end_marker=HYPERRESEARCH_SECTION_END,
         hpr=hpr_path,
-        today=date.today().isoformat(),
     )
 
     modified: list[str] = []

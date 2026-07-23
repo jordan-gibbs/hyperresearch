@@ -418,17 +418,26 @@ class Crawl4AIProvider:
 
         web_results = []
 
-        # Fetch PDFs directly (no browser needed)
+        # Fetch PDFs directly (no browser needed). When _fetch_pdf returns
+        # None (parser failure, non-PDF body served at a .pdf URL) we fall
+        # back to the browser path — mirrors the single-fetch behaviour in
+        # fetch() so batch callers don't silently lose academic PDFs that
+        # need JS-rendered landing pages.
+        failed_pdf_urls = []
         for url in pdf_urls:
             pdf_result = _fetch_pdf(url, self._settings)
             if pdf_result is not None:
                 web_results.append(pdf_result)
+            else:
+                failed_pdf_urls.append(url)
+
+        browser_urls = html_urls + failed_pdf_urls
 
         # Fetch HTML pages with browser
-        if html_urls:
+        if browser_urls:
             async with self._make_crawler() as crawler:
-                results = await crawler.arun_many(urls=html_urls, config=self._run_config)
-                for cr, url in zip(results, html_urls, strict=False):
+                results = await crawler.arun_many(urls=browser_urls, config=self._run_config)
+                for cr, url in zip(results, browser_urls, strict=False):
                     if not cr.success:
                         continue
                     metadata = cr.metadata or {}

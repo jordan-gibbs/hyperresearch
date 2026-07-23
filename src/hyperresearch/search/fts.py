@@ -48,7 +48,11 @@ def preprocess_query(raw: str) -> str:
             words = part.strip().split()
             for word in words:
                 if word:
-                    clean = re.sub(r'[*^():{}]', '', word)
+                    # Strip FTS5-special chars that would break syntax. The
+                    # double-quote is included because quoted phrases were
+                    # already extracted by the outer split — any quote left
+                    # here is an unbalanced fragment.
+                    clean = re.sub(r'[*^():{}"]', '', word)
                     if not clean:
                         continue
                     # Split glued alphanumeric (mamba3 -> mamba + 3)
