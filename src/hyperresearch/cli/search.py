@@ -159,9 +159,12 @@ def search(
     if want_body and results:
         for r in results:
             row = vault.db.execute(
-                "SELECT body FROM note_content WHERE note_id = ?", (r["id"],)
+                "SELECT c.body, n.source FROM note_content c "
+                "JOIN notes n ON n.id = c.note_id WHERE c.note_id = ?",
+                (r["id"],),
             ).fetchone()
             r["body"] = row["body"] if row else ""
+            r["source"] = row["source"] if row else None
 
     # Token budget: truncate results to fit within limit
     if max_tokens and results:
@@ -182,6 +185,17 @@ def search(
             used += overhead + len(body)
             trimmed.append(r)
         results = trimmed
+
+    # Wrap fetched bodies as untrusted data — same policy as `note show`.
+    # Runs AFTER token-budget truncation so the closing fence can never be
+    # severed by the cut.
+    if want_body and results:
+        from hyperresearch.core.untrusted import is_untrusted, wrap_body
+
+        for r in results:
+            if r.get("body") and is_untrusted(r.get("source"), r.get("type")):
+                r["body"] = wrap_body(r["body"], r["source"])
+                r["untrusted"] = True
 
     if json_output:
         output(

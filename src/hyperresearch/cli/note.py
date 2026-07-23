@@ -192,7 +192,13 @@ def note_show(
             "parent": row["parent"], "summary": row["summary"],
         }
         if not meta:
-            data["body"] = row["body"]
+            body = row["body"]
+            from hyperresearch.core.untrusted import is_untrusted, wrap_body
+            if is_untrusted(data.get("source"), data.get("type")):
+                data["body"] = wrap_body(body, data["source"])
+                data["untrusted"] = True
+            else:
+                data["body"] = body
         return data
 
     # Single note — original behavior

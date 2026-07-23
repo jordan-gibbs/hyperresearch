@@ -8,6 +8,10 @@ or template deliberately requires updating the golden, which makes prompt
 changes reviewable instead of silent.
 
 Deliberate deviations already folded into the goldens (2026-07-19):
+  - Untrusted-source policy (2026-07-20): RESEARCHER_AGENT and
+    DEPTH_INVESTIGATOR_AGENT gained the "Untrusted content policy" block
+    (fetched note bodies arrive fenced in <untrusted-source> delimiters and
+    must be treated as data, not instructions).
   - width-sweep: the three inconsistent full-tier source-target statements
     (40-100 / 40–80 / 55–80) were unified to the profile value 55–80; the
     light target 12–20 was unified to the table value 15–25; the tier table's

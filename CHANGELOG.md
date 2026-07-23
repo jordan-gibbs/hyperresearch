@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fetched note bodies are wrapped as untrusted data (core/untrusted.py)
+
+- **Prompt-injection fence:** note bodies fetched from the web (http/https `source`, non-summary type) now arrive wrapped in `<untrusted-source url="...">` … `</untrusted-source>` delimiters with an inline treat-as-data preamble, on BOTH body-serving paths: `note show` (single, batch, `-j`) and `search` with bodies included. Notes produced by our own pipeline subagents (`interim`, `source-analysis`, `moc`, `index`) pass through unwrapped.
+- **Fence hardening:** forged fence tags inside a fetched body — opening or closing, any case, any internal whitespace — are neutralized to `untrusted-source-inner` (kept visible for forensics), and the `url` attribute is HTML-escaped with control characters stripped, so neither the body nor a crafted source URL can plant text outside the fence. In `search`, wrapping runs after token-budget truncation so the closing fence is never severed.
+- **Agent prompts updated:** the researcher, depth-investigator, draft-orchestrator, and source-analyst prompts and the vault CLAUDE.md blurb gained an "Untrusted content policy" block instructing agents to treat fenced content as data, never instructions, and not to launder its directives into trusted outputs.
+
 ## [0.9.0] - 2026-07-23
 
 ### Coverage before elegance: the synthesizer stops trading substance for prose
