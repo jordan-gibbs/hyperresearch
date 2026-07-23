@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hyperresearch"
-version = "0.8.7"
+version = "0.9.0"
 description = "Claude Code harness for disciplined, adversarially-audited deep research with full provenance."
 readme = "README.md"
 license = "MIT"
@@ -34,7 +34,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-crawl4ai = ["Crawl4AI>=0.4"]
+crawl4ai = ["Crawl4AI>=0.7.3"]
 mcp = ["mcp>=1.24,<2"]
 exa = ["exa-py>=2.0.0"]
 tavily = ["tavily-python>=0.3"]
