@@ -40,10 +40,14 @@ crawl4ai = ["Crawl4AI>=0.7.3"]
 # fresh `pip install hyperresearch[mcp]` resolves 2.x and `hyperresearch mcp`
 # dies on import, reporting the extra as missing when it is in fact installed.
 mcp = ["mcp>=1.6,<2"]
+# The Parallel provider needs the Streamable HTTP client introduced in mcp 1.8.
+# Keep this separate so installing the Hyperresearch MCP server does not force
+# an unrelated SDK upgrade.
+parallel = ["mcp>=1.8,<2"]
 exa = ["exa-py>=2.0.0"]
 tavily = ["tavily-python>=0.3"]
 watch = ["watchdog>=4.0"]
-all = ["hyperresearch[crawl4ai,mcp,exa,tavily,watch]"]
+all = ["hyperresearch[crawl4ai,mcp,parallel,exa,tavily,watch]"]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
