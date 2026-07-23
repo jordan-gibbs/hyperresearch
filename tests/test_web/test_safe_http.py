@@ -102,6 +102,68 @@ def test_check_url_dns_failure_raises():
 
 
 # ---------------------------------------------------------------------------
+# check_url — encoded-loopback bypass vectors. These are the forms an attacker
+# reaches for once the plain "http://127.0.0.1/" literal is blocked. Grouped by
+# whether they resolve purely from the string (parse-only) or need the resolver.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://[::ffff:127.0.0.1]/",  # IPv4-mapped IPv6 — blocked as is_private
+        "http://[64:ff9b::7f00:1]/",  # NAT64 well-known prefix — blocked as is_reserved
+        "http://8.8.8.8@127.0.0.1/",  # userinfo trick: hostname is 127.0.0.1, not 8.8.8.8
+    ],
+)
+def test_check_url_rejects_parse_only_loopback_bypasses(url):
+    """These encode loopback/reserved space without a DNS lookup — the IP
+    literal or the real hostname is right there in the URL. If the address
+    classifier stops covering mapped/NAT64/reserved ranges, or urlparse's
+    hostname extraction is second-guessed, one of these silently reaches an
+    internal address."""
+    with pytest.raises(SafeHTTPError, match="non-public address"):
+        check_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://2130706433/",  # decimal 127.0.0.1
+        "http://0x7f000001/",  # hex 127.0.0.1
+        "http://017700000001/",  # octal 127.0.0.1
+        "http://localhost./",  # trailing-dot hostname
+    ],
+)
+def test_check_url_rejects_resolver_dependent_loopback_bypasses(url):
+    """`ipaddress.ip_address` rejects these numeric encodings, so they fall to
+    the resolver, which normalizes them to 127.0.0.1. getaddrinfo is stubbed
+    so the test is deterministic and offline. This pins the contract that such
+    forms are *resolved and gated*, not parsed as public — a regression that
+    made `_resolve` parse the literal itself (e.g. via inet_aton) would need to
+    keep blocking them."""
+    with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
+        gai.return_value = [(socket.AF_INET, None, None, "", ("127.0.0.1", 0))]
+        with pytest.raises(SafeHTTPError, match="non-public address"):
+            check_url(url)
+
+
+def test_check_url_uppercase_http_scheme_is_normalized_then_ip_gated():
+    """An uppercase HTTP scheme must not fail open: it normalizes to http and
+    the loopback host is still refused by the address gate, not waved through
+    as an unrecognized scheme."""
+    with pytest.raises(SafeHTTPError, match="non-public address"):
+        check_url("HTTP://127.0.0.1/")
+
+
+def test_check_url_uppercase_disallowed_scheme_still_rejected():
+    """Scheme matching is case-folded on the reject path too — FILE:// is
+    refused exactly like file://, not accidentally allowed by case."""
+    with pytest.raises(SafeHTTPError, match="scheme"):
+        check_url("FILE:///etc/passwd")
+
+
+# ---------------------------------------------------------------------------
 # safe_get — refuses bad URLs without even attempting a connection
 # ---------------------------------------------------------------------------
 
