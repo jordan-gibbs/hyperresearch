@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-23
+
 ### Coverage before elegance: the synthesizer stops trading substance for prose
 
 A rerun of a comparison query scored below its own older baseline on comprehensiveness and insight, and reading both reports side by side showed why: same word count, spent differently. The humanization work (primers, calm citations, one committed thesis) had quietly taught the synthesizer to dissolve a systematic ten-axis comparison into an elegant narrative and to compress a fully developed quantitative mechanism down to a one-line mention. Cleaner to read, and worse on exactly the axes a "compare X, Y, Z" prompt is graded on. The prompts were conflating two different edits: cutting prose, which is right, and cutting substance, which is not.
@@ -100,6 +102,8 @@ Source quality becomes a persistent, queryable property instead of ephemeral pro
 - **Pipeline profiles** (`hyperresearch profile list/show/validate`). Every research-scale knob — source gates, fetcher fan-out, loci caps, depth budgets, draft counts, word targets, critic caps, per-agent models — lives in a named, validated profile. Built-in `full` and `light` reproduce the shipped V8 values exactly; users override keys or define new profiles (`[profile.dissertation] extends = "full"`) in config.toml.
 - **Skill/agent prompts are now templates rendered at install.** `hyperresearch install --profile <name>` renders the 17 skills and 15 agent prompts from the chosen profile (custom `<< >>` Jinja delimiters — prompt-native `{{...}}` placeholders and JSON braces pass through untouched). Rendered files carry a `rendered from profile "..."` provenance header after the frontmatter. Golden tests pin the `full`-profile render byte-for-byte against the pre-template prompts, so profile/template drift is a test failure, not a silent prompt change.
 - **Width-sweep consistency fix** (roadmap phase-0 WS5, pulled forward): the three contradictory full-tier source-target statements (40-100 / 40–80 / 55–80) are unified to the profile value (55–80); the light target (12–20 vs 15–25) and the tier-table fetchers-per-wave (8–12 vs 10–12) are likewise unified to the table/Wave-1 values.
+
+## [0.8.7] - 2026-07-18
 
 Community-fix release: five contributed PRs plus two maintainer follow-ups, closing #32, #33, #35, #37, and #39.
 
