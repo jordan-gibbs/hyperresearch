@@ -52,6 +52,11 @@ class BuiltinProvider:
 
     name = "builtin"
 
+    def __init__(self, settings=None):
+        from hyperresearch.core.config import FetchSettings
+
+        self._settings = settings or FetchSettings()
+
     def fetch(self, url: str) -> WebResult:
         html, final_url = self._download(url)
         title, content = self._extract(html)
@@ -72,9 +77,9 @@ class BuiltinProvider:
     def _download(self, url: str) -> tuple[str, str]:
         """Download URL, return (html, final_url). All requests go through the
         SSRF gate in :mod:`hyperresearch.web.safe_http`."""
-        from hyperresearch.web.safe_http import MAX_BYTES_HTML, safe_get
+        from hyperresearch.web.safe_http import safe_get
 
-        resp = safe_get(url, max_bytes=MAX_BYTES_HTML)
+        resp = safe_get(url, max_bytes=self._settings.max_html_bytes)
         if resp.status_code >= 400:
             raise RuntimeError(f"HTTP {resp.status_code} fetching {url}")
         return resp.text, resp.url

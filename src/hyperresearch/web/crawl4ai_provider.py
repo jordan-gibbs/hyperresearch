@@ -134,42 +134,45 @@ _PDF_FETCH_HEADERS = {
 def _is_cert_error(exc: Exception) -> bool:
     import ssl
 
-    cause = exc.__cause__
-    return isinstance(cause, ssl.SSLCertVerificationError) or "CERTIFICATE_VERIFY_FAILED" in str(exc)
+    # httpx nests the ssl error two causes deep (httpx.ConnectError ->
+    # httpcore.ConnectError -> SSLCertVerificationError), so walk the chain
+    # rather than checking only the direct cause. String match as fallback.
+    cause: BaseException | None = exc
+    for _ in range(5):
+        if cause is None:
+            break
+        if isinstance(cause, ssl.SSLCertVerificationError):
+            return True
+        cause = cause.__cause__
+    return "CERTIFICATE_VERIFY_FAILED" in str(exc)
 
 
 def _safe_get_pdf(url: str, settings: FetchSettings):
-    """SSRF-gated PDF download: TLS-verified first, one unverified retry.
+    """SSRF-gated, size-capped PDF download.
 
-    Academic/institutional PDF hosts are disproportionately likely to serve
-    expired or misconfigured certificates. Refusing them outright loses real
-    sources; skipping verification everywhere silently drops integrity for
-    every fetch. So: verify by default, and only on a certificate error retry
-    once with verification off, logged loudly for provenance. The SSRF and
-    size gates apply to both attempts, and the fetched body is treated as
-    untrusted data downstream either way.
-
-    ``pdf_verify_tls = false`` in config remains an explicit opt-out for
-    mirrors the user has declared cert-broken and trusted: it skips the
-    verified attempt entirely, preserving the configured behavior.
+    TLS verification follows ``pdf_verify_tls`` (default on) with NO
+    automatic unverified retry: a MITM can serve a bad certificate
+    precisely to force such a retry, which would turn verify-by-default
+    into something the attacker controls. Mirrors with known-broken
+    certificates are handled by the explicit, user-declared
+    ``pdf_verify_tls = false`` opt-out.
     """
-    from hyperresearch.web.safe_http import MAX_BYTES_PDF, safe_get
+    from hyperresearch.web.safe_http import SafeHTTPError, safe_get
 
-    if not settings.pdf_verify_tls:
-        return safe_get(url, max_bytes=MAX_BYTES_PDF, timeout=settings.pdf_timeout_s,
-                        headers=_PDF_FETCH_HEADERS, verify=False)
     try:
-        return safe_get(url, max_bytes=MAX_BYTES_PDF, timeout=settings.pdf_timeout_s,
-                        headers=_PDF_FETCH_HEADERS)
+        return safe_get(url, max_bytes=settings.max_pdf_bytes,
+                        timeout=settings.pdf_timeout_s,
+                        headers=_PDF_FETCH_HEADERS,
+                        verify=settings.pdf_verify_tls)
     except Exception as exc:
-        if not _is_cert_error(exc):
-            raise
-        _pdf_log().warning(
-            "tls-unverified fetch: certificate verification failed for %s (%s); "
-            "retrying once without TLS verification", url, exc,
-        )
-        return safe_get(url, max_bytes=MAX_BYTES_PDF, timeout=settings.pdf_timeout_s,
-                        headers=_PDF_FETCH_HEADERS, verify=False)
+        if settings.pdf_verify_tls and _is_cert_error(exc):
+            # Refuse, but say how to opt out for a trusted cert-broken mirror.
+            raise SafeHTTPError(
+                f"certificate verification failed for {url!r}: {exc}. "
+                "If this host is a known cert-broken mirror you trust, set "
+                "pdf_verify_tls = false under [fetch] in config.toml."
+            ) from exc
+        raise
 
 
 def _fetch_pdf(url: str, settings: FetchSettings | None = None) -> WebResult | None:
@@ -468,9 +471,24 @@ class Crawl4AIProvider:
         return asyncio.run(self._fetch_many_async(urls))
 
     async def _fetch_many_async(self, urls: list[str]) -> list[WebResult]:
+        # SSRF gate: same entry-point check as fetch(). Refused URLs are
+        # skipped (logged), not fatal — one hostile URL must not kill the
+        # whole batch.
+        from hyperresearch.web.safe_http import SafeHTTPError, check_url
+
+        allowed_urls = []
+        for url in urls:
+            try:
+                check_url(url)
+                allowed_urls.append(url)
+            except SafeHTTPError as exc:
+                logging.getLogger("hyperresearch.web").warning(
+                    "refused batch fetch for %s: %s", url, exc
+                )
+
         # Split: PDFs go direct, rest go through browser
-        pdf_urls = [u for u in urls if _is_pdf_url(u)]
-        html_urls = [u for u in urls if not _is_pdf_url(u)]
+        pdf_urls = [u for u in allowed_urls if _is_pdf_url(u)]
+        html_urls = [u for u in allowed_urls if not _is_pdf_url(u)]
 
         web_results = []
 
