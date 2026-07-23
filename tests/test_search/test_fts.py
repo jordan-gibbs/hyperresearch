@@ -17,22 +17,19 @@ def test_preprocess_quoted_phrase():
     assert '"async await"' in result
 
 
-def test_preprocess_hyphenated_word_becomes_separate_tokens():
-    """FTS5 reads `-` as NOT; passing it through raises a syntax error and
-    the wrapping try/except OperationalError silently returns zero rows.
-    Replacing hyphens with whitespace turns `foo-bar` into two prefix-
-    matched tokens."""
+def test_preprocess_hyphenated_word_stays_a_phrase():
+    """Bare tokens are emitted inside double quotes, where FTS5 reads `-` as
+    a plain character, not the NOT operator — so `foo-bar` is a valid phrase
+    query as-is. It must NOT be split into AND'd tokens, which would loosen
+    phrase matching."""
     result = preprocess_query("foo-bar")
-    assert '"foo"*' in result
-    assert '"bar"*' in result
-    assert "-" not in result  # the operator char must be gone
+    assert '"foo-bar"*' in result
 
 
 def test_preprocess_mixed_hyphen_query():
     result = preprocess_query("python 3-async")
     assert '"python"*' in result
-    assert '"3"*' in result
-    assert '"async"*' in result
+    assert '"3-async"*' in result
 
 
 def test_preprocess_strips_stray_quote():
