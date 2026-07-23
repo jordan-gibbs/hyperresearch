@@ -6,7 +6,8 @@ the platform — every PDF on every domain silently fell through to the browser
 lane, arrived as binary, and was discarded as junk, with nothing logged to say
 why. These tests pin the diagnostics, not just the happy path.
 
-Offline: httpx is stubbed, no network is touched.
+Offline: the download layer (`_safe_get_pdf` / `safe_get`) is stubbed, no
+network is touched.
 """
 
 from __future__ import annotations
@@ -28,12 +29,10 @@ class _Resp:
 
 @pytest.fixture
 def stub_httpx(monkeypatch):
-    """Replace httpx.get with a canned response."""
+    """Replace the SSRF-gated download call with a canned response."""
 
     def _install(resp: _Resp):
-        import httpx
-
-        monkeypatch.setattr(httpx, "get", lambda *a, **k: resp)
+        monkeypatch.setattr(provider, "_safe_get_pdf", lambda url, settings: resp)
 
     return _install
 
@@ -156,3 +155,74 @@ def test_scanned_pdf_without_text_layer_explains_itself(stub_httpx, caplog):
 
     assert "no extractable text layer" in caplog.text
     assert "OCR" in caplog.text
+
+
+def _cert_error() -> Exception:
+    import ssl
+
+    import httpx
+
+    err = httpx.ConnectError("TLS handshake failed")
+    err.__cause__ = ssl.SSLCertVerificationError("CERTIFICATE_VERIFY_FAILED")
+    return err
+
+
+def test_cert_error_refuses_with_no_unverified_retry(monkeypatch):
+    """A certificate error is a refusal, never an automatic unverified retry —
+    a MITM can serve a bad cert precisely to force such a retry. The refusal
+    names the pdf_verify_tls opt-out so a trusted cert-broken mirror stays
+    reachable by explicit operator decision."""
+    from hyperresearch.web.safe_http import SafeHTTPError
+
+    calls: list[bool] = []
+
+    def fake_safe_get(url, *, max_bytes, timeout=None, headers=None, verify=True):
+        calls.append(verify)
+        raise _cert_error()
+
+    monkeypatch.setattr("hyperresearch.web.safe_http.safe_get", fake_safe_get)
+
+    with pytest.raises(SafeHTTPError, match="pdf_verify_tls"):
+        provider._safe_get_pdf(
+            "https://broken-cert.example.edu/paper.pdf", provider.FetchSettings()
+        )
+
+    assert calls == [True], "exactly one verified attempt, no unverified retry"
+
+
+def test_non_cert_error_propagates_untranslated(monkeypatch):
+    """A refused connection is not a certificate problem — it must propagate
+    as-is, without the pdf_verify_tls hint."""
+    import httpx
+
+    calls: list[bool] = []
+
+    def fake_safe_get(url, *, max_bytes, timeout=None, headers=None, verify=True):
+        calls.append(verify)
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr("hyperresearch.web.safe_http.safe_get", fake_safe_get)
+
+    with pytest.raises(httpx.ConnectError):
+        provider._safe_get_pdf("https://down.example.com/x.pdf", provider.FetchSettings())
+
+    assert calls == [True]
+
+
+def test_pdf_verify_tls_false_fetches_unverified(monkeypatch):
+    """An explicit `pdf_verify_tls = false` in config is an operator decision:
+    fetch unverified directly. SSRF/size gates still apply (same safe_get)."""
+    calls: list[bool] = []
+
+    def fake_safe_get(url, *, max_bytes, timeout=None, headers=None, verify=True):
+        calls.append(verify)
+        return _Resp(b"%PDF- direct")
+
+    monkeypatch.setattr("hyperresearch.web.safe_http.safe_get", fake_safe_get)
+
+    resp = provider._safe_get_pdf(
+        "https://mirror.example.org/x.pdf", provider.FetchSettings(pdf_verify_tls=False)
+    )
+
+    assert calls == [False], "config opt-out must fetch unverified on the first attempt"
+    assert resp.content == b"%PDF- direct"

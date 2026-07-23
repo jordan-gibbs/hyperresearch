@@ -122,6 +122,59 @@ def _import_pymupdf():
         return None
 
 
+_PDF_FETCH_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
+}
+
+
+def _is_cert_error(exc: Exception) -> bool:
+    import ssl
+
+    # httpx nests the ssl error two causes deep (httpx.ConnectError ->
+    # httpcore.ConnectError -> SSLCertVerificationError), so walk the chain
+    # rather than checking only the direct cause. String match as fallback.
+    cause: BaseException | None = exc
+    for _ in range(5):
+        if cause is None:
+            break
+        if isinstance(cause, ssl.SSLCertVerificationError):
+            return True
+        cause = cause.__cause__
+    return "CERTIFICATE_VERIFY_FAILED" in str(exc)
+
+
+def _safe_get_pdf(url: str, settings: FetchSettings):
+    """SSRF-gated, size-capped PDF download.
+
+    TLS verification follows ``pdf_verify_tls`` (default on) with NO
+    automatic unverified retry: a MITM can serve a bad certificate
+    precisely to force such a retry, which would turn verify-by-default
+    into something the attacker controls. Mirrors with known-broken
+    certificates are handled by the explicit, user-declared
+    ``pdf_verify_tls = false`` opt-out.
+    """
+    from hyperresearch.web.safe_http import SafeHTTPError, safe_get
+
+    try:
+        return safe_get(url, max_bytes=settings.max_pdf_bytes,
+                        timeout=settings.pdf_timeout_s,
+                        headers=_PDF_FETCH_HEADERS,
+                        verify=settings.pdf_verify_tls)
+    except Exception as exc:
+        if settings.pdf_verify_tls and _is_cert_error(exc):
+            # Refuse, but say how to opt out for a trusted cert-broken mirror.
+            raise SafeHTTPError(
+                f"certificate verification failed for {url!r}: {exc}. "
+                "If this host is a known cert-broken mirror you trust, set "
+                "pdf_verify_tls = false under [fetch] in config.toml."
+            ) from exc
+        raise
+
+
 def _fetch_pdf(url: str, settings: FetchSettings | None = None) -> WebResult | None:
     """Download a PDF and extract text using pymupdf. Returns None if extraction fails.
 
@@ -135,7 +188,7 @@ def _fetch_pdf(url: str, settings: FetchSettings | None = None) -> WebResult | N
 
     settings = settings or FetchSettings()
 
-    import httpx
+    from hyperresearch.web.safe_http import SafeHTTPError
 
     try:
         # Convert arXiv abs links to PDF links
@@ -144,14 +197,12 @@ def _fetch_pdf(url: str, settings: FetchSettings | None = None) -> WebResult | N
             if not url.endswith(".pdf"):
                 url += ".pdf"
 
-        resp = httpx.get(url, follow_redirects=True, timeout=settings.pdf_timeout_s,
-                         verify=settings.pdf_verify_tls, headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            ),
-            "Accept": "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
-        })
+        try:
+            resp = _safe_get_pdf(url, settings)
+        except SafeHTTPError as exc:
+            _pdf_log().warning("refused PDF fetch for %s: %s", url, exc)
+            return None
+
         if resp.status_code != 200:
             _pdf_log().warning("PDF fetch for %s returned HTTP %s", url, resp.status_code)
             return None
@@ -283,6 +334,14 @@ class Crawl4AIProvider:
         return AsyncWebCrawler(crawler_strategy=strategy, config=self._browser_config)
 
     def fetch(self, url: str) -> WebResult:
+        # SSRF gate: reject private/loopback/etc. before any browser or http
+        # call. Re-checked on PDF redirects via safe_get; browser hops are
+        # not re-checked (Playwright drives navigation internally), so this
+        # entry-point check is the primary protection for the browser path.
+        from hyperresearch.web.safe_http import check_url
+
+        check_url(url)
+
         # PDF detection: fetch directly with httpx, extract text with pymupdf
         if _is_pdf_url(url):
             result = _fetch_pdf(url, self._settings)
@@ -412,9 +471,24 @@ class Crawl4AIProvider:
         return asyncio.run(self._fetch_many_async(urls))
 
     async def _fetch_many_async(self, urls: list[str]) -> list[WebResult]:
+        # SSRF gate: same entry-point check as fetch(). Refused URLs are
+        # skipped (logged), not fatal — one hostile URL must not kill the
+        # whole batch.
+        from hyperresearch.web.safe_http import SafeHTTPError, check_url
+
+        allowed_urls = []
+        for url in urls:
+            try:
+                check_url(url)
+                allowed_urls.append(url)
+            except SafeHTTPError as exc:
+                logging.getLogger("hyperresearch.web").warning(
+                    "refused batch fetch for %s: %s", url, exc
+                )
+
         # Split: PDFs go direct, rest go through browser
-        pdf_urls = [u for u in urls if _is_pdf_url(u)]
-        html_urls = [u for u in urls if not _is_pdf_url(u)]
+        pdf_urls = [u for u in allowed_urls if _is_pdf_url(u)]
+        html_urls = [u for u in allowed_urls if not _is_pdf_url(u)]
 
         web_results = []
 

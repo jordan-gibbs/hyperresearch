@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from hyperresearch.core.config import FetchSettings, JunkGates
+from hyperresearch.web.safe_http import SafeResponse
 
 crawl4ai_provider = pytest.importorskip(
     "hyperresearch.web.crawl4ai_provider",
@@ -76,3 +79,36 @@ class TestGetProviderThreading:
         )
         assert prov._run_config.page_timeout == 12345
         assert prov._gates.binary_garbage_ratio == 0.9
+
+
+class TestByteCapThreading:
+    """The configurable size caps only protect anything if the FetchSettings
+    field actually reaches safe_get's max_bytes. safe_get's own enforcement is
+    tested in test_safe_http; these pin the wiring from config to gate, which
+    is what a refactor to the hardcoded MAX_BYTES_* constants would silently
+    break."""
+
+    def test_html_cap_reaches_safe_get(self):
+        from hyperresearch.web.builtin import BuiltinProvider
+
+        seen = {}
+
+        def spy(url, *, max_bytes, **kwargs):
+            seen["max_bytes"] = max_bytes
+            return SafeResponse(url=url, status_code=200, headers={}, content=b"<html></html>")
+
+        prov = BuiltinProvider(settings=FetchSettings(max_html_bytes=1234))
+        with patch("hyperresearch.web.safe_http.safe_get", spy):
+            prov._download("http://8.8.8.8/page")
+        assert seen["max_bytes"] == 1234
+
+    def test_pdf_cap_reaches_safe_get(self):
+        seen = {}
+
+        def spy(url, *, max_bytes, **kwargs):
+            seen["max_bytes"] = max_bytes
+            return SafeResponse(url=url, status_code=200, headers={}, content=b"%PDF-")
+
+        with patch("hyperresearch.web.safe_http.safe_get", spy):
+            crawl4ai_provider._safe_get_pdf("http://8.8.8.8/paper.pdf", FetchSettings(max_pdf_bytes=777))
+        assert seen["max_bytes"] == 777

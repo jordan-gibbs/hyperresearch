@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 import typer
 
-from hyperresearch.cli._output import console, output
+from hyperresearch.cli._output import console, err_console, output
 from hyperresearch.core.config import AssetSettings, FetchSettings
 from hyperresearch.models.output import error, success
 
@@ -505,6 +505,7 @@ def fetch(
         saved_assets = _save_assets(
             conn, result, note_id, assets_dir,
             settings=vault.config.assets, image_timeout_s=vault.config.fetch.image_timeout_s,
+            max_image_bytes=vault.config.fetch.max_image_bytes,
         )
 
     data = {
@@ -558,10 +559,13 @@ def _save_assets(
     assets_dir: Path,
     settings: AssetSettings | None = None,
     image_timeout_s: int | None = None,
+    max_image_bytes: int | None = None,
 ) -> list[dict]:
     """Save screenshot and images to assets dir, record in DB. Returns list of saved asset info."""
     settings = settings or AssetSettings()
-    timeout_s = image_timeout_s if image_timeout_s is not None else FetchSettings().image_timeout_s
+    fetch_defaults = FetchSettings()
+    timeout_s = image_timeout_s if image_timeout_s is not None else fetch_defaults.image_timeout_s
+    image_cap = max_image_bytes if max_image_bytes is not None else fetch_defaults.max_image_bytes
     saved: list[dict] = []
     now = datetime.now(UTC).isoformat()
 
@@ -605,6 +609,7 @@ def _save_assets(
             asset_info = _download_image(
                 conn, note_id, img_url, alt, assets_dir, now,
                 min_image_bytes=settings.min_image_bytes, timeout_s=timeout_s,
+                max_image_bytes=image_cap,
             )
             if asset_info:
                 saved.append(asset_info)
@@ -618,10 +623,9 @@ def _save_assets(
 def _download_image(
     conn, note_id: str, img_url: str, alt: str, assets_dir: Path, now: str,
     min_image_bytes: int = 50_000, timeout_s: int = 15,
+    max_image_bytes: int | None = None,
 ) -> dict | None:
     """Download a single image. Returns asset info dict or None if skipped."""
-    import urllib.request
-
     # Generate filename from URL
     parsed = urlparse(img_url)
     url_path = parsed.path.rstrip("/")
@@ -643,11 +647,23 @@ def _download_image(
         file_path = assets_dir / f"{clean_name}-{counter}{ext}"
         counter += 1
 
+    from hyperresearch.web.safe_http import MAX_BYTES_IMAGE, SafeHTTPError, safe_get
+
     try:
-        req = urllib.request.Request(img_url, headers={"User-Agent": "hyperresearch/0.1"})
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-            data = resp.read()
-            content_type = resp.headers.get("Content-Type", "")
+        resp = safe_get(
+            img_url,
+            max_bytes=max_image_bytes if max_image_bytes is not None else MAX_BYTES_IMAGE,
+            timeout=timeout_s,
+        )
+        data = resp.content
+        content_type = resp.headers.get("content-type", "")
+    except SafeHTTPError as exc:
+        # A gate refusal (SSRF / size cap) is a security event, not a skip —
+        # it must be visible, unlike routine 404s and timeouts below. Printed
+        # to stderr: this helper has no json_output flag, and stdout must stay
+        # pure JSON in --json mode.
+        err_console.print(f"  [yellow]Image refused by fetch gate:[/] {img_url} — {exc}")
+        return None
     except Exception:
         return None
 

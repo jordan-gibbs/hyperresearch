@@ -1,4 +1,4 @@
-"""Builtin web provider — uses httpx + beautifulsoup4 if available, else bare urllib."""
+"""Builtin web provider — SSRF-gated fetching via safe_http, beautifulsoup4 extraction if available."""
 
 from __future__ import annotations
 
@@ -52,6 +52,11 @@ class BuiltinProvider:
 
     name = "builtin"
 
+    def __init__(self, settings=None):
+        from hyperresearch.core.config import FetchSettings
+
+        self._settings = settings or FetchSettings()
+
     def fetch(self, url: str) -> WebResult:
         html, final_url = self._download(url)
         title, content = self._extract(html)
@@ -70,23 +75,14 @@ class BuiltinProvider:
         )
 
     def _download(self, url: str) -> tuple[str, str]:
-        """Download URL, return (html, final_url). Tries httpx first, falls back to urllib."""
-        try:
-            import httpx
+        """Download URL, return (html, final_url). All requests go through the
+        SSRF gate in :mod:`hyperresearch.web.safe_http`."""
+        from hyperresearch.web.safe_http import safe_get
 
-            with httpx.Client(follow_redirects=True, timeout=30) as client:
-                resp = client.get(url, headers={"User-Agent": "hyperresearch/0.1"})
-                resp.raise_for_status()
-                return resp.text, str(resp.url)
-        except ImportError:
-            pass
-
-        import urllib.request
-
-        req = urllib.request.Request(url, headers={"User-Agent": "hyperresearch/0.1"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            html = resp.read().decode("utf-8", errors="replace")
-            return html, resp.url or url
+        resp = safe_get(url, max_bytes=self._settings.max_html_bytes)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"HTTP {resp.status_code} fetching {url}")
+        return resp.text, resp.url
 
     def _extract(self, html: str) -> tuple[str, str]:
         """Extract title and clean text from HTML. Tries bs4 first, falls back to stdlib."""

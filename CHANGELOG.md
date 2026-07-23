@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### SSRF gate + size caps for outbound fetches (web/safe_http.py)
+
+- **All outbound fetch paths now go through an SSRF gate** (`web/safe_http.py`): http/https only; hostnames resolving to private, loopback, link-local, multicast, reserved, or unspecified addresses are refused (cloud metadata, RFC1918, `[::1]`, …). On the `safe_get` paths (builtin provider, PDF and image downloads) redirects are followed manually and every hop is revalidated; the browser lane (crawl4ai `fetch()` AND `fetch_many()`) is gated at entry, since Playwright drives its own navigation. Refused URLs in a batch are logged and skipped, not fatal. The hostname check is best-effort against DNS rebinding (httpx re-resolves at connect time); the residual window is documented in the module docstring.
+- **Response-size caps**, streamed and enforced mid-body so a lying or chunked server cannot exhaust memory. Configurable via new `[fetch]` settings `max_html_bytes` (10 MiB), `max_pdf_bytes` (25 MiB), `max_image_bytes` (2 MiB). A gate refusal on an image download is printed, not silently swallowed.
+- **No unverified-TLS retry.** A certificate failure on a PDF fetch is a refusal that names the existing `pdf_verify_tls = false` opt-out — never an automatic verify-off retry, which a MITM could force with a bad cert.
+
 ## [0.9.0] - 2026-07-23
 
 ### Coverage before elegance: the synthesizer stops trading substance for prose
