@@ -35,7 +35,7 @@ dependencies = [
 
 [project.optional-dependencies]
 crawl4ai = ["Crawl4AI>=0.4"]
-mcp = ["mcp>=1.6"]
+mcp = ["mcp>=1.24,<2"]
 exa = ["exa-py>=2.0.0"]
 tavily = ["tavily-python>=0.3"]
 watch = ["watchdog>=4.0"]
@@ -46,7 +46,7 @@ dev = [
     "ruff>=0.3",
     "mypy>=1.8",
     "exa-py>=2.0.0",
-    "mcp>=1.6",
+    "mcp>=1.24,<2",
     "types-PyYAML>=6.0.12",
     "watchdog>=4.0",
 ]
