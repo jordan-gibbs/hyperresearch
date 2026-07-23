@@ -13,6 +13,13 @@ downloader. Every request:
 - Streams the response into a fixed-size buffer so a hostile server
   cannot exhaust memory with an infinite or zip-bombed body.
 
+The address check is BEST-EFFORT against DNS rebinding: the gate
+resolves the hostname to validate it, but httpx re-resolves at connect
+time, so a low-TTL record that flips between the two lookups can still
+reach a private address. Closing that window needs the validated IP
+pinned into the actual connection, which httpx does not support without
+a custom transport; the residual risk is accepted and documented here.
+
 Returns a small :class:`SafeResponse` dataclass instead of an
 ``httpx.Response`` so callers don't depend on httpx internals.
 """
@@ -33,7 +40,10 @@ DEFAULT_MAX_REDIRECTS = 5
 DEFAULT_USER_AGENT = "hyperresearch/0.1"
 
 # Caller-intent size caps. Pick the smallest that fits the body type;
-# the gate refuses anything larger.
+# the gate refuses anything larger. These are the DEFAULTS — callers with
+# a FetchSettings in scope should pass its max_html_bytes / max_pdf_bytes
+# / max_image_bytes fields instead, which are user-configurable and
+# mirror these values.
 MAX_BYTES_HTML = 10 * 1024 * 1024
 MAX_BYTES_PDF = 25 * 1024 * 1024
 MAX_BYTES_IMAGE = 2 * 1024 * 1024
@@ -94,7 +104,12 @@ def _resolve(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
 
 
 def check_url(url: str) -> None:
-    """Validate the URL is safe to fetch. Raises :class:`SafeHTTPError`."""
+    """Validate the URL is safe to fetch. Raises :class:`SafeHTTPError`.
+
+    Best-effort: validation resolves the hostname here, but the connection
+    made afterwards re-resolves it (see the module docstring on DNS
+    rebinding).
+    """
     parsed = urlparse(url)
     if parsed.scheme.lower() not in _ALLOWED_SCHEMES:
         raise SafeHTTPError(
@@ -121,11 +136,17 @@ def safe_get(
     max_redirects: int = DEFAULT_MAX_REDIRECTS,
     headers: dict[str, str] | None = None,
     verify: bool | str = True,
+    transport: httpx.BaseTransport | None = None,
 ) -> SafeResponse:
     """GET ``url`` with SSRF + size protection.
 
-    ``max_bytes`` is required so callers consciously pick a cap. Use one
-    of the ``MAX_BYTES_*`` constants.
+    ``max_bytes`` is required so callers consciously pick a cap. Pass the
+    matching ``FetchSettings`` field when one is in scope, or a
+    ``MAX_BYTES_*`` constant otherwise.
+
+    ``transport`` is a test seam: it lets the suite exercise the redirect
+    revalidation and size-cap logic against ``httpx.MockTransport``
+    without opening sockets. Production callers must leave it None.
     """
     if max_bytes <= 0:
         raise ValueError("max_bytes must be > 0")
@@ -135,7 +156,9 @@ def safe_get(
         request_headers.update(headers)
 
     current_url = url
-    with httpx.Client(follow_redirects=False, timeout=timeout, verify=verify) as client:
+    with httpx.Client(
+        follow_redirects=False, timeout=timeout, verify=verify, transport=transport
+    ) as client:
         for _ in range(max_redirects + 1):
             check_url(current_url)
             declared = None

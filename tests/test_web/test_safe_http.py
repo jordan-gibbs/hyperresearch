@@ -5,6 +5,7 @@ from __future__ import annotations
 import socket
 from unittest.mock import patch
 
+import httpx
 import pytest
 
 from hyperresearch.web.safe_http import (
@@ -120,3 +121,85 @@ def test_safe_get_refuses_file_scheme():
 def test_safe_get_requires_positive_max_bytes():
     with pytest.raises(ValueError):
         safe_get("http://example.com/", max_bytes=0)
+
+
+# ---------------------------------------------------------------------------
+# Redirect revalidation and size caps — exercised offline via the transport
+# seam (httpx.MockTransport), so no socket is ever opened. All URLs use
+# public IP literals so check_url never needs DNS.
+# ---------------------------------------------------------------------------
+
+
+def _transport(routes: dict[str, httpx.Response]) -> httpx.MockTransport:
+    """Map url-path -> canned response."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return routes[request.url.path]
+
+    return httpx.MockTransport(handler)
+
+
+def test_redirect_to_private_address_is_refused():
+    """Every redirect hop goes back through the SSRF gate — a public host
+    must not be able to bounce the fetcher into loopback/RFC1918."""
+    transport = _transport({
+        "/start": httpx.Response(302, headers={"location": "http://127.0.0.1/secret"}),
+    })
+    with pytest.raises(SafeHTTPError, match="non-public address"):
+        safe_get("http://8.8.8.8/start", max_bytes=1024, transport=transport)
+
+
+def test_relative_redirect_is_resolved_and_followed():
+    transport = _transport({
+        "/a": httpx.Response(301, headers={"location": "/b"}),
+        "/b": httpx.Response(200, content=b"made it"),
+    })
+    resp = safe_get("http://8.8.8.8/a", max_bytes=1024, transport=transport)
+    assert resp.status_code == 200
+    assert resp.content == b"made it"
+    assert resp.url == "http://8.8.8.8/b"
+
+
+def test_too_many_redirects_refused():
+    transport = _transport({
+        "/loop": httpx.Response(302, headers={"location": "/loop"}),
+    })
+    with pytest.raises(SafeHTTPError, match="too many redirects"):
+        safe_get("http://8.8.8.8/loop", max_bytes=1024, transport=transport)
+
+
+def test_declared_content_length_over_cap_refused():
+    """An honest Content-Length over the cap is refused up front, before the
+    body is streamed. Response(content=...) auto-sets the header; the match
+    on "Content-Length" proves the header check fired, not the stream cap."""
+    transport = _transport({
+        "/big": httpx.Response(200, content=b"x" * 2048),
+    })
+    with pytest.raises(SafeHTTPError, match="Content-Length"):
+        safe_get("http://8.8.8.8/big", max_bytes=1024, transport=transport)
+
+
+def test_streamed_body_over_cap_refused():
+    """A body that exceeds the cap mid-stream (no Content-Length header, as
+    with chunked encoding) is cut off — a lying or chunked server cannot
+    exhaust memory. Uses a raw byte stream because Response(content=...)
+    would set Content-Length and trip the earlier header check instead."""
+
+    class _ChunkStream(httpx.SyncByteStream):
+        def __iter__(self):
+            for _ in range(4):
+                yield b"x" * 512
+
+    transport = _transport({
+        "/liar": httpx.Response(200, stream=_ChunkStream()),
+    })
+    with pytest.raises(SafeHTTPError, match="body exceeds cap"):
+        safe_get("http://8.8.8.8/liar", max_bytes=1024, transport=transport)
+
+
+def test_body_at_cap_passes():
+    transport = _transport({
+        "/fits": httpx.Response(200, content=b"x" * 1024),
+    })
+    resp = safe_get("http://8.8.8.8/fits", max_bytes=1024, transport=transport)
+    assert resp.content == b"x" * 1024

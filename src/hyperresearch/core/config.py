@@ -18,6 +18,11 @@ class FetchSettings:
     # cert-broken mirrors you explicitly trust.
     pdf_verify_tls: bool = True
     min_pdf_bytes: int = 100
+    # Response-size caps enforced by the SSRF gate (web/safe_http.py).
+    # Defaults mirror the MAX_BYTES_* constants there.
+    max_html_bytes: int = 10 * 1024 * 1024
+    max_pdf_bytes: int = 25 * 1024 * 1024
+    max_image_bytes: int = 2 * 1024 * 1024
     # Smart-wait DOM-stability loop (shared by headless and visible paths)
     wait_initial_ms: int = 2000
     poll_interval_ms: int = 500

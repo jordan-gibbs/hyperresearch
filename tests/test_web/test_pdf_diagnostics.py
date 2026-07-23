@@ -167,33 +167,32 @@ def _cert_error() -> Exception:
     return err
 
 
-def test_cert_error_triggers_single_unverified_retry(monkeypatch, caplog):
-    """Verified-first: a certificate error retries exactly once with verify=False,
-    loudly logged. SSRF/size gates stay active on the retry (same safe_get)."""
+def test_cert_error_refuses_with_no_unverified_retry(monkeypatch):
+    """A certificate error is a refusal, never an automatic unverified retry —
+    a MITM can serve a bad cert precisely to force such a retry. The refusal
+    names the pdf_verify_tls opt-out so a trusted cert-broken mirror stays
+    reachable by explicit operator decision."""
+    from hyperresearch.web.safe_http import SafeHTTPError
+
     calls: list[bool] = []
 
     def fake_safe_get(url, *, max_bytes, timeout=None, headers=None, verify=True):
         calls.append(verify)
-        if verify:
-            raise _cert_error()
-        return _Resp(b"%PDF- retried body")
+        raise _cert_error()
 
     monkeypatch.setattr("hyperresearch.web.safe_http.safe_get", fake_safe_get)
 
-    with caplog.at_level(logging.WARNING, logger="hyperresearch.pdf"):
-        resp = provider._safe_get_pdf(
+    with pytest.raises(SafeHTTPError, match="pdf_verify_tls"):
+        provider._safe_get_pdf(
             "https://broken-cert.example.edu/paper.pdf", provider.FetchSettings()
         )
 
-    assert calls == [True, False], "expected one verified attempt, then one unverified retry"
-    assert resp.content == b"%PDF- retried body"
-    assert "tls-unverified fetch" in caplog.text
-    assert "broken-cert.example.edu" in caplog.text
+    assert calls == [True], "exactly one verified attempt, no unverified retry"
 
 
-def test_non_cert_error_is_not_retried(monkeypatch):
-    """Only certificate failures earn the unverified retry — a refused
-    connection or SSRF refusal must propagate on the first attempt."""
+def test_non_cert_error_propagates_untranslated(monkeypatch):
+    """A refused connection is not a certificate problem — it must propagate
+    as-is, without the pdf_verify_tls hint."""
     import httpx
 
     calls: list[bool] = []
@@ -207,12 +206,12 @@ def test_non_cert_error_is_not_retried(monkeypatch):
     with pytest.raises(httpx.ConnectError):
         provider._safe_get_pdf("https://down.example.com/x.pdf", provider.FetchSettings())
 
-    assert calls == [True], "non-certificate error must not trigger an unverified retry"
+    assert calls == [True]
 
 
-def test_pdf_verify_tls_false_skips_verified_attempt(monkeypatch):
+def test_pdf_verify_tls_false_fetches_unverified(monkeypatch):
     """An explicit `pdf_verify_tls = false` in config is an operator decision:
-    go straight to the unverified fetch, no verified attempt, no retry dance."""
+    fetch unverified directly. SSRF/size gates still apply (same safe_get)."""
     calls: list[bool] = []
 
     def fake_safe_get(url, *, max_bytes, timeout=None, headers=None, verify=True):
