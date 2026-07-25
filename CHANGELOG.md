@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Four silent-failure leaks closed (tags, FTS syntax, batch PDFs, cache-busting date)
+
+- **Tag filtering:** frontmatter tags are now lowercased before the alias lookup and before storage, matching the lowercase alias keys and the lowercasing `SearchFilters` does on the query side — `--tag llm` now finds notes tagged `LLM`, including through aliases.
+- **FTS queries:** stray unbalanced double-quotes in bare words are stripped instead of raising an FTS5 syntax error that the caller saw as zero results. Hyphenated words are left intact — they were already valid inside the emitted quoted phrase tokens.
+- **Batch PDF fetches:** in `fetch_many`, a PDF whose direct download fails (parser failure, non-PDF body at a `.pdf` URL) now falls back to the browser path, mirroring single-fetch behaviour instead of being silently dropped. `fetch-batch` also falls back to per-URL fetches when a whole batch fails, and reports `failed_urls` in its output instead of losing them silently.
+- **Prompt-cache-busting date:** the vault CLAUDE.md blurb no longer interpolates `Today is YYYY-MM-DD`, which busted Claude Code's prompt cache once per day.
+
 ### Fetched note bodies are wrapped as untrusted data (core/untrusted.py)
 
 - **Prompt-injection fence:** note bodies fetched from the web (http/https `source`, non-summary type) now arrive wrapped in `<untrusted-source url="...">` … `</untrusted-source>` delimiters with an inline treat-as-data preamble, on BOTH body-serving paths: `note show` (single, batch, `-j`) and `search` with bodies included. Notes produced by our own pipeline subagents (`interim`, `source-analysis`, `moc`, `index`) pass through unwrapped.

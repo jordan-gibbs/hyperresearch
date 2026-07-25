@@ -34,7 +34,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-crawl4ai = ["Crawl4AI>=0.4"]
+crawl4ai = ["Crawl4AI>=0.7.3"]
 mcp = ["mcp>=1.6"]
 exa = ["exa-py>=2.0.0"]
 tavily = ["tavily-python>=0.3"]

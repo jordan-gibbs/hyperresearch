@@ -240,4 +240,10 @@ After the academic sweep, run web searches for context, news, non-academic angle
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=jordan-gibbs/hyperresearch&type=Date)](https://star-history.com/#jordan-gibbs/hyperresearch&Date)
+<a href="https://www.star-history.com/?repos=jordan-gibbs%2Fhyperresearch&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=jordan-gibbs/hyperresearch&type=date&theme=dark&legend=top-left&sealed_token=O15PJBZHscunDCjQoz5Uy-Ou7UFPsBi6XuY3Phok5EA_dC2WKUCI6og8VtOCv-6bHUPJZz51wpUoi6rAmsQzG6QTaxaZ58kyZ3GvRbOJv-vPJBtG7zD4ow" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=jordan-gibbs/hyperresearch&type=date&legend=top-left&sealed_token=O15PJBZHscunDCjQoz5Uy-Ou7UFPsBi6XuY3Phok5EA_dC2WKUCI6og8VtOCv-6bHUPJZz51wpUoi6rAmsQzG6QTaxaZ58kyZ3GvRbOJv-vPJBtG7zD4ow" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=jordan-gibbs/hyperresearch&type=date&legend=top-left&sealed_token=O15PJBZHscunDCjQoz5Uy-Ou7UFPsBi6XuY3Phok5EA_dC2WKUCI6og8VtOCv-6bHUPJZz51wpUoi6rAmsQzG6QTaxaZ58kyZ3GvRbOJv-vPJBtG7zD4ow" />
+ </picture>
+</a>

@@ -94,6 +94,15 @@ def fetch_batch(
     visible_urls = [u for u in new_urls if _needs_visible(u)]
 
     results = []
+    failed_urls: list[dict] = []  # surfaced in JSON output so callers see what was lost
+
+    def _fetch_one(provider, url: str, kind: str) -> None:
+        try:
+            results.append(provider.fetch(url))
+        except Exception as exc:
+            failed_urls.append({"url": url, "error": str(exc), "phase": kind})
+            if not json_output:
+                console.print(f"  [red]Failed ({kind}):[/] {url} — {exc}")
 
     # Batch fetch normal URLs
     if normal_urls:
@@ -101,15 +110,19 @@ def fetch_batch(
             try:
                 results.extend(prov.fetch_many(normal_urls))
             except Exception as e:
+                # fetch_many can return zero results on a single bad URL
+                # inside the batch comprehension. Fall back to per-URL so we
+                # don't silently lose the entire wave — partial progress
+                # beats none.
                 if not json_output:
-                    console.print(f"[red]Batch fetch failed:[/] {e}")
+                    console.print(
+                        f"[red]Batch fetch failed:[/] {e}. Falling back to per-URL fetches."
+                    )
+                for url in normal_urls:
+                    _fetch_one(prov, url, "batch-fallback")
         else:
             for url in normal_urls:
-                try:
-                    results.append(prov.fetch(url))
-                except Exception as e:
-                    if not json_output:
-                        console.print(f"  [red]Failed:[/] {url} — {e}")
+                _fetch_one(prov, url, "normal")
 
     # Fetch auth-aggressive URLs with visible browser (sequential)
     if visible_urls:
@@ -122,11 +135,7 @@ def fetch_batch(
             gates=vault.config.junk,
         )
         for url in visible_urls:
-            try:
-                results.append(visible_prov.fetch(url))
-            except Exception as e:
-                if not json_output:
-                    console.print(f"  [red]Failed (visible):[/] {url} — {e}")
+            _fetch_one(visible_prov, url, "visible")
 
     # Phase 1: Write all note files to disk (no sync yet)
     note_files = []  # (note_path, url, result, domain, content_hash)
@@ -223,12 +232,16 @@ def fetch_batch(
         "notes_created": created_notes,
         "total_fetched": len(created_notes),
         "skipped": len(all_urls) - len(new_urls),
+        "failed_urls": failed_urls,
     }
 
     if json_output:
         output(success(data, count=len(created_notes), vault=str(vault.root)), json_mode=True)
     else:
-        console.print(
+        msg = (
             f"\n[bold]Done:[/] {len(created_notes)} notes created, "
-            f"{len(all_urls) - len(new_urls)} skipped (already fetched)."
+            f"{len(all_urls) - len(new_urls)} skipped (already fetched)"
         )
+        if failed_urls:
+            msg += f", [red]{len(failed_urls)} failed[/]"
+        console.print(msg + ".")
