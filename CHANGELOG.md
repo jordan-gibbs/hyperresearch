@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-07-25
+
 ### Four silent-failure leaks closed (tags, FTS syntax, batch PDFs, cache-busting date)
 
 - **Tag filtering:** frontmatter tags are now lowercased before the alias lookup and before storage, matching the lowercase alias keys and the lowercasing `SearchFilters` does on the query side — `--tag llm` now finds notes tagged `LLM`, including through aliases.
