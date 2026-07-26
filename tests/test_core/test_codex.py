@@ -6,6 +6,7 @@ from pathlib import Path
 
 from hyperresearch.core.agent_docs import (
     HYPERRESEARCH_SECTION_MARKER,
+    detect_agent_platform,
     inject_agent_docs,
 )
 from hyperresearch.core.codex import install_codex
@@ -39,6 +40,14 @@ def test_codex_agent_docs_preserve_user_content_and_are_idempotent(tmp_path: Pat
     assert content.count(HYPERRESEARCH_SECTION_MARKER) == 1
 
 
+def test_unrelated_agents_md_does_not_enable_codex(tmp_vault):
+    (tmp_vault.root / "AGENTS.md").write_text(
+        "# User-authored Codex instructions\n",
+        encoding="utf-8",
+    )
+    assert detect_agent_platform(tmp_vault.root) == "claude"
+
+
 def test_install_codex_writes_native_skill_layout(tmp_vault):
     actions = install_codex(tmp_vault.root, hpr_path="/opt/bin/hyperresearch")
     skills_root = tmp_vault.root / ".agents" / "skills"
@@ -48,13 +57,28 @@ def test_install_codex_writes_native_skill_layout(tmp_vault):
     for name in _HYPERRESEARCH_STEP_SKILLS:
         assert (skills_root / name / "SKILL.md").exists()
 
-    entry = (skills_root / "hyperresearch" / "SKILL.md").read_text(encoding="utf-8")
+    entry_path = skills_root / "hyperresearch" / "SKILL.md"
+    entry = entry_path.read_text(encoding="utf-8")
     assert ".agents/skills/hyperresearch-1-decompose/SKILL.md" in entry
-    assert "Skill(skill:" not in entry
-    assert "TodoWrite" not in entry
     assert "--platform codex" in entry
-    for skill_file in skills_root.glob("hyperresearch-*/SKILL.md"):
-        assert "subagent_type:" not in skill_file.read_text(encoding="utf-8")
+    forbidden = (
+        "Skill(skill:",
+        "Skill tool",
+        "Skill invocation",
+        "TodoWrite",
+        "Task call",
+        "Task result",
+        "Task tool",
+        "subagent_type:",
+        ".claude/skills",
+        "Claude-in-Chrome",
+    )
+    generated_files = list(skills_root.glob("hyperresearch-*/SKILL.md"))
+    generated_files.append(entry_path)
+    for skill_file in generated_files:
+        text = skill_file.read_text(encoding="utf-8")
+        for phrase in forbidden:
+            assert phrase not in text, f"{phrase!r} remains in {skill_file}"
 
 
 def test_install_codex_writes_reusable_role_prompts(tmp_vault):

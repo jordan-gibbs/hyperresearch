@@ -54,6 +54,18 @@ Claude Code and Codex. The default remains `claude` for backward compatibility.
 > Python 3.11–3.13. (3.14 not yet supported. Use `pyenv install 3.13`, `uv venv -p 3.13`, or `py -3.13 -m venv .venv`.)
 >
 > Power users: `hyperresearch install --global` makes `/hyperresearch` reachable from every Claude Code session anywhere, at the cost of ~15 lines in every session's system reminder. Per-project install (above) keeps unrelated CC sessions clean.
+>
+> Codex power users can run `hyperresearch install --global --platform codex`.
+> This installs only the global router and its role-prompt references; the vault
+> and step skills are created in each project on first use.
+
+Platform selection is additive and never removes another integration:
+
+| Command | Durable instructions | Skills |
+|---|---|---|
+| `hyperresearch install` | `CLAUDE.md` | `.claude/skills/` |
+| `hyperresearch install --platform codex` | `AGENTS.md` | `.agents/skills/` |
+| `hyperresearch install --platform both` | both files | both skill trees |
 
 ---
 

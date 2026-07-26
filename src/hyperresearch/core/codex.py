@@ -8,6 +8,7 @@ default; this module is an additive adapter over the same prompt sources.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 from hyperresearch.core import hooks
@@ -67,12 +68,19 @@ def _codexify(content: str) -> str:
     """Translate Claude-only orchestration vocabulary to Codex conventions."""
     content = content.replace(".claude/skills", ".agents/skills")
     content = content.replace("Claude Code", "Codex")
+    content = content.replace("Claude-in-Chrome tools", "authenticated browser tools")
+    content = content.replace("Claude-in-Chrome", "authenticated browser integration")
     content = content.replace("TodoWrite list", "Codex plan")
     content = content.replace("TodoWrite", "Codex plan")
+    content = content.replace("all Task calls", "all subagent delegations")
+    content = content.replace("Task calls", "subagent delegations")
     content = content.replace("Task call", "subagent delegation")
+    content = content.replace("Task result", "subagent result")
     content = content.replace("Task prompt", "subagent prompt")
     content = content.replace("Task tool", "subagent delegation")
-    content = content.replace("Claude-in-Chrome extension", "authenticated browser integration")
+    content = content.replace("Skill tool", "skill file")
+    content = content.replace("Skill invocation", "skill path")
+    content = content.replace("[Task]", "[subagent delegation]")
     content = content.replace(
         "hyperresearch init . --json",
         "hyperresearch init . --platform codex --json",
@@ -211,7 +219,7 @@ def install_codex(
     config_path = root / ".hyperresearch" / "config.toml"
     hooks._set_render_state(profile, config_path if config_path.exists() else None)
     actions: list[str] = []
-    installers = [
+    installers: list[Callable[[], str | None]] = [
         lambda: _install_entry_skill(root),
         lambda: _install_role_prompts(root, hpr_path),
     ]

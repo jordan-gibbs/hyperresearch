@@ -170,9 +170,22 @@ by the skill.
 
 
 def detect_agent_platform(vault_root: Path) -> str:
-    """Infer installed integrations from their durable instruction files."""
-    has_claude = (vault_root / "CLAUDE.md").exists()
-    has_codex = (vault_root / "AGENTS.md").exists()
+    """Infer integrations installed by hyperresearch, not unrelated user files."""
+
+    def _has_managed_section(path: Path) -> bool:
+        if not path.exists():
+            return False
+        try:
+            return HYPERRESEARCH_SECTION_MARKER in path.read_text(encoding="utf-8-sig")
+        except OSError:
+            return False
+
+    has_claude = _has_managed_section(vault_root / "CLAUDE.md") or (
+        vault_root / ".claude" / "skills" / "hyperresearch" / "SKILL.md"
+    ).exists()
+    has_codex = _has_managed_section(vault_root / "AGENTS.md") or (
+        vault_root / ".agents" / "skills" / "hyperresearch" / "SKILL.md"
+    ).exists()
     if has_claude and has_codex:
         return "both"
     if has_codex:

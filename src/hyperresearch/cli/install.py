@@ -104,10 +104,14 @@ def install(
             if result:
                 results.append(result)
         if json_output:
+            # Preserve the pre-Codex JSON shape for the default Claude path.
+            steps_installed: str | list[str] | None = (
+                results if platform == "both" else results[0] if results else None
+            )
             output(
                 success(
                     {
-                        "steps_installed": results,
+                        "steps_installed": steps_installed,
                         "target": str(target),
                         "platform": platform,
                     },
@@ -124,11 +128,9 @@ def install(
             console.print(f"[dim]Step skills already installed at {target}[/]")
         return
 
-    # Global install path: only the user-level Claude Code entry skill +
-    # agents. No vault, no CLAUDE.md, no step skills — pure "make the
-    # slash command available everywhere" mode. Step skills install
-    # per-project, lazily, when the entry skill bootstrap calls
-    # `hyperresearch install --steps-only .` on first invocation.
+    # Global install path: only the selected platform's entry skill and role
+    # prompts. No vault, project instruction file, or step skills. Step skills
+    # install per-project, lazily, when the entry skill bootstraps there.
     if global_install:
         from hyperresearch.core.agent_docs import _resolve_executable
 
@@ -136,15 +138,15 @@ def install(
         home = Path.home()
         global_profile = profile if profile is not None else "full"
         _check_profile(global_profile, None)
-        hook_actions: list[str] = []
+        global_actions: list[str] = []
         if platform in {"claude", "both"}:
-            hook_actions.extend(
+            global_actions.extend(
                 install_global_hooks(home, hpr_path=hpr_path, profile=global_profile)
             )
         if platform in {"codex", "both"}:
             from hyperresearch.core.codex import install_codex
 
-            hook_actions.extend(
+            global_actions.extend(
                 install_codex(
                     home,
                     hpr_path=hpr_path,
@@ -160,7 +162,7 @@ def install(
                         "global": True,
                         "home": str(home),
                         "platform": platform,
-                        "hooks_installed": hook_actions,
+                        "hooks_installed": global_actions,
                     },
                     vault=None,
                 ),
@@ -169,8 +171,8 @@ def install(
             return
 
         console.print(f"[green]Global install ({platform}):[/] {home}")
-        if hook_actions:
-            for action in hook_actions:
+        if global_actions:
+            for action in global_actions:
                 console.print(f"  {action}")
         else:
             console.print("[dim]All skills and agents already installed.[/]")
