@@ -24,6 +24,8 @@ def fetch_batch(
     """Fetch multiple URLs and save each as a research note. Batched sync for speed."""
     from hyperresearch.core.enrich import enrich_note_file
     from hyperresearch.core.note import write_note
+    from hyperresearch.core.oa import oa_frontmatter, recover_full_text, recovery_notice
+    from hyperresearch.core.scholar import extract_doi
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.core.vault import Vault, VaultError
     from hyperresearch.web.base import get_provider
@@ -138,7 +140,7 @@ def fetch_batch(
             _fetch_one(visible_prov, url, "visible")
 
     # Phase 1: Write all note files to disk (no sync yet)
-    note_files = []  # (note_path, url, result, domain, content_hash)
+    note_files = []  # (note_path, url, result, domain, content_hash, oa_location)
     for result in results:
         url = result.url
 
@@ -151,8 +153,17 @@ def fetch_batch(
                 )
             continue
 
+        # Open-access recovery. This path writes its own notes rather than
+        # going through cli.fetch, so the DOI capture and the OA swap both have
+        # to be repeated here — and they matter more here, because the pipeline
+        # fetches in waves through this command.
+        detected_doi = extract_doi(url, result.raw_html, result.content)
+        original_domain = result.domain
+        original_chars = len(result.content or "")
+        result, oa_location = recover_full_text(vault, prov, url, detected_doi, result)
+
         title = result.title or urlparse(url).path.split("/")[-1] or "Untitled"
-        domain = result.domain
+        domain = original_domain
 
         extra_meta = {
             "source": url,
@@ -160,11 +171,20 @@ def fetch_batch(
             "fetched_at": result.fetched_at.isoformat(),
             "fetch_provider": prov.name,
         }
+        if detected_doi:
+            extra_meta["doi"] = detected_doi
+
+        body_content = result.content
+        if oa_location is not None:
+            extra_meta.update(oa_frontmatter(oa_location))
+            body_content = (
+                recovery_notice(oa_location, url, original_chars) + "\n" + body_content
+            )
 
         note_path = write_note(
             vault.notes_dir,
             title=title,
-            body=result.content,
+            body=body_content,
             tags=tags,
             status="draft",
             source=url,
@@ -176,10 +196,15 @@ def fetch_batch(
         enrich_note_file(note_path, conn, tags)
 
         content_hash = hashlib.sha256(result.content.encode("utf-8")).hexdigest()[:16]
-        note_files.append((note_path, url, result, domain, content_hash))
+        note_files.append((note_path, url, result, domain, content_hash, oa_location))
 
         if not json_output:
             console.print(f"  [green]+[/] {title}")
+            if oa_location is not None:
+                console.print(
+                    f"    [cyan]body from:[/] {oa_location.url} "
+                    f"({oa_location.version or 'version unknown'}, via {oa_location.resolver})"
+                )
 
     # Phase 2: ONE sync to index all notes
     plan = compute_sync_plan(vault)
@@ -188,7 +213,7 @@ def fetch_batch(
 
     # Phase 3: Bulk-insert source records
     created_notes = []
-    for note_path, url, result, domain, content_hash in note_files:
+    for note_path, url, result, domain, content_hash, oa_location in note_files:
         note_id = note_path.stem
         conn.execute(
             """INSERT OR IGNORE INTO sources (url, note_id, domain, fetched_at, provider, content_hash)
@@ -207,13 +232,21 @@ def fetch_batch(
                 image_timeout_s=vault.config.fetch.image_timeout_s,
             )
 
-        created_notes.append({
+        entry = {
             "note_id": note_id,
             "title": result.title or "Untitled",
             "url": url,
             "domain": domain,
             "word_count": len(result.content.split()),
-        })
+        }
+        if oa_location is not None:
+            entry["oa"] = {
+                "url": oa_location.url,
+                "resolver": oa_location.resolver,
+                "version": oa_location.version,
+                "license": oa_location.license,
+            }
+        created_notes.append(entry)
 
     conn.commit()
 
@@ -228,11 +261,13 @@ def fetch_batch(
             if plan.to_add or plan.to_update:
                 execute_sync(vault, plan)
 
+    oa_recovered = sum(1 for n in created_notes if "oa" in n)
     data = {
         "notes_created": created_notes,
         "total_fetched": len(created_notes),
         "skipped": len(all_urls) - len(new_urls),
         "failed_urls": failed_urls,
+        "oa_recovered": oa_recovered,
     }
 
     if json_output:
@@ -244,4 +279,9 @@ def fetch_batch(
         )
         if failed_urls:
             msg += f", [red]{len(failed_urls)} failed[/]"
+        if oa_recovered:
+            msg += (
+                f"\n[cyan]{oa_recovered} note(s) carry an open-access full text in place of a "
+                "paywalled page[/] — each one says so in its body banner and oa_* frontmatter."
+            )
         console.print(msg + ".")

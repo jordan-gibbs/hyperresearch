@@ -240,6 +240,19 @@ CREATE INDEX IF NOT EXISTS idx_escalations_tag ON escalations(vault_tag);
 """
 
 
+def _migrate_v11_oa_recovery(conn: sqlite3.Connection) -> None:
+    """Open-access recovery columns. Additive, idempotent.
+
+    Existing notes keep NULLs — nothing backfills them, because we cannot know
+    after the fact whether an old note's body came from its `source` URL. Only
+    fetches made after this migration record a substitution.
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(notes)")}
+    for name in ("oa_url", "oa_source", "oa_version", "oa_license"):
+        if name not in existing:
+            conn.execute(f"ALTER TABLE notes ADD COLUMN {name} TEXT")
+
+
 MIGRATIONS: dict[int, str | Callable[[sqlite3.Connection], None]] = {
     2: """
 CREATE TABLE IF NOT EXISTS tag_aliases (
@@ -286,6 +299,7 @@ CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
     8: _migrate_v8_source_analysis_note_type,
     9: _migrate_v9_source_ranking,
     10: _MIGRATE_V10_ESCALATIONS_SQL,
+    11: _migrate_v11_oa_recovery,
 }
 
 

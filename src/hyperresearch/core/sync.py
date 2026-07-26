@@ -239,8 +239,10 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
             (id, title, path, status, type, tier, content_type, source, parent,
              deprecated, reviewed, expires, word_count, summary,
              created, updated, file_mtime, content_hash, synced_at,
-             doi, utility_score, citation_count, venue, is_retracted)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             doi, utility_score, citation_count, venue, is_retracted,
+             oa_url, oa_source, oa_version, oa_license)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             title=excluded.title, path=excluded.path, status=excluded.status,
             type=excluded.type, tier=excluded.tier, content_type=excluded.content_type,
@@ -253,7 +255,9 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
             synced_at=excluded.synced_at,
             doi=excluded.doi, utility_score=excluded.utility_score,
             citation_count=excluded.citation_count, venue=excluded.venue,
-            is_retracted=excluded.is_retracted
+            is_retracted=excluded.is_retracted,
+            oa_url=excluded.oa_url, oa_source=excluded.oa_source,
+            oa_version=excluded.oa_version, oa_license=excluded.oa_license
         """,
         (
             meta.id, meta.title, note.path, meta.status, meta.type,
@@ -264,6 +268,7 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
             file_mtime, note.content_hash, synced_at,
             meta.doi, meta.utility_score, meta.citation_count, meta.venue,
             1 if meta.is_retracted else 0,
+            meta.oa_url, meta.oa_source, meta.oa_version, meta.oa_license,
         ),
     )
 

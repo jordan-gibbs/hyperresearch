@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Open-access full-text recovery (Unpaywall + Europe PMC)
+
+A paywalled paper used to enter the vault as an abstract. `extract_doi` stamped the DOI, the junk gate passed the landing page (an abstract is not junk), and depth investigators then reasoned over ~1,500 characters while the report cited the work as though the paper had been read.
+
+- **Thin DOI-bearing fetches now look for a legal open-access copy.** `core/oa.py` asks Unpaywall, then Europe PMC, and stores the recovered full text in the note body. Wired into both `hpr fetch` and `hpr fetch-batch` — the batch path writes its own notes and previously never even captured a DOI, so it now does that too.
+- **The substitution is disclosed in four places**, because a note whose body did not come from its `source:` is a trap otherwise: a banner at the top of the body, `oa_url` / `oa_source` / `oa_version` / `oa_license` frontmatter, an `oa` block in `note show -j` carrying `body_is_not_from_source: true`, and a line in the fetch output. The `oa` block sits outside the `<untrusted-source>` fence and is the authority.
+- **Version honesty.** Unpaywall returns accepted manuscripts and preprints when no published copy is open. The resolver prefers the version of record, records what it actually got, and the body banner tells the reader to check quotations against the published paper when it isn't one.
+- **Opt-in for Unpaywall, zero-config for Europe PMC.** `[scholar] contact_email` is empty by default, which skips Unpaywall entirely — their terms require a real address, and a shared placeholder shipped to every install would get that placeholder rate-limited for everyone. Europe PMC needs no key, so recovery over its open-access subset works out of the box. `oa_recovery = false` turns the whole thing off.
+- **Candidate fallback, not one shot.** Publishers 403 their own open-access PDFs often enough that a single attempt loses papers sitting in a repository two candidates down — verified against live DOIs. The resolver now yields an ordered candidate list (every Unpaywall PDF, then landing pages, then Europe PMC) and tries up to `oa_max_attempts` of them. Europe PMC resolves lazily, so the extra API call only happens when Unpaywall is exhausted.
+- **Europe PMC full text arrives as JATS, not PDF.** `/fullTextPDF` 404s; `/fullTextXML` is the documented route, and its structured markup parses better than pymupdf on a two-column PDF anyway. The converter keeps title, abstract, and body with section hierarchy, drops back matter, and preserves the tail text after dropped inline elements — losing an `<xref>`'s tail silently truncates a sentence after every citation marker.
+- **Failure is always soft, and quality can only go up.** A lookup that errors, a URL that fails the safety check, or a PDF that extracts badly leaves the original untouched. A candidate is accepted only if it is both longer than what we already had *and* long enough to clear `oa_min_full_text_chars` — the second bar stops a repository record page from passing for full text on the strength of being slightly longer than an abstract.
+- **Resolver-supplied URLs are treated as hostile input.** They arrive inside a third-party API response, so a poisoned DOI record could otherwise steer the fetcher at internal hosts. `check_oa_url` enforces http(s), no embedded credentials, and publicly-routable resolution. This duplicates the intent of `web/safe_http.check_url` (PR #53) and should collapse into it once that lands.
+- **Schema v11** adds the four `oa_*` columns, additive and idempotent. Existing notes keep NULLs — there is no way to know after the fact whether an old note's body came from its source URL.
+
 ## [0.9.1] - 2026-07-25
 
 ### Four silent-failure leaks closed (tags, FTS syntax, batch PDFs, cache-busting date)

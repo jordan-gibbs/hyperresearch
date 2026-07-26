@@ -352,9 +352,25 @@ def fetch(
             console.print(f"[yellow]Skipped:[/] {msg}")
         raise typer.Exit(1)
 
+    # Source-ranking capture: DOI/arXiv id + the orchestrator's utility score
+    from hyperresearch.core.scholar import extract_doi
+
+    detected_doi = extract_doi(url, result.raw_html, result.content)
+
+    # Open-access recovery: a paywalled paper arrives as an abstract, so when a
+    # thin result carries a DOI we swap in a legal full-text copy. `source` and
+    # `source_domain` deliberately keep pointing at the URL that was asked for
+    # — the note is about the paper, and the substitution is disclosed in the
+    # body banner and the oa_* frontmatter below.
+    original_domain = result.domain
+    original_chars = len(result.content or "")
+    from hyperresearch.core.oa import oa_frontmatter, recover_full_text, recovery_notice
+
+    result, oa_location = recover_full_text(vault, prov, url, detected_doi, result)
+
     # Write note
     note_title = title or result.title or urlparse(url).path.split("/")[-1] or "Untitled"
-    domain = result.domain
+    domain = original_domain
 
     detected_content_type = _detect_content_type(url, result.raw_content_type)
     detected_tier = _detect_tier(url, detected_content_type)
@@ -367,12 +383,10 @@ def fetch(
     if result.metadata.get("author"):
         extra_meta["author"] = result.metadata["author"]
 
-    # Source-ranking capture: DOI/arXiv id + the orchestrator's utility score
-    from hyperresearch.core.scholar import extract_doi
-
-    detected_doi = extract_doi(url, result.raw_html, result.content)
     if detected_doi:
         extra_meta["doi"] = detected_doi
+    if oa_location is not None:
+        extra_meta.update(oa_frontmatter(oa_location))
     if utility_score is not None:
         extra_meta["utility_score"] = utility_score
 
@@ -392,6 +406,12 @@ def fetch(
         if breadcrumb_lines:
             breadcrumb = "\n".join(breadcrumb_lines) + "\n\n"
             body_content = breadcrumb + body_content
+
+    # The recovery banner goes above everything else in the body — a reader
+    # must not have to scroll or check frontmatter to learn that these bytes
+    # came from somewhere other than `source:`.
+    if oa_location is not None:
+        body_content = recovery_notice(oa_location, url, original_chars) + "\n" + body_content
 
     note_path = write_note(
         vault.notes_dir,
@@ -518,6 +538,14 @@ def fetch(
         "assets": saved_assets,
         "raw_file": raw_file_path,
     }
+    if oa_location is not None:
+        data["oa"] = {
+            "url": oa_location.url,
+            "resolver": oa_location.resolver,
+            "version": oa_location.version,
+            "license": oa_location.license,
+            "replaced_chars": original_chars,
+        }
 
     if json_output:
         output(success(data, vault=str(vault.root)), json_mode=True)
@@ -525,6 +553,16 @@ def fetch(
         console.print(f"[green]Saved:[/] {note_title}")
         console.print(f"  ID: {note_id}")
         console.print(f"  Source: {url}")
+        if oa_location is not None:
+            console.print(
+                f"  [cyan]Body from:[/] {oa_location.url} "
+                f"([bold]{oa_location.version or 'version unknown'}[/], via {oa_location.resolver})"
+            )
+            if not oa_location.is_version_of_record:
+                console.print(
+                    "  [yellow]Note:[/] this is not the version of record — "
+                    "check quotations against the published paper."
+                )
         console.print(f"  Words: {data['word_count']}")
         if saved_assets:
             console.print(f"  Assets: {len(saved_assets)} saved to research/assets/{note_id}/")

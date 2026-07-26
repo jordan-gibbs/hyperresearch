@@ -216,10 +216,42 @@ After the academic sweep, run web searches for context, news, non-academic angle
 
 ---
 
+## Open-access full text: read this before you cite
+
+A paywalled paper otherwise enters the vault as an abstract, and the pipeline then reasons over ~1,500 characters while citing the work as though the paper had been read. To close that, when a fetch lands a thin page carrying a DOI, hyperresearch asks [Unpaywall](https://unpaywall.org/) and [Europe PMC](https://europepmc.org/) for a legal open-access copy and stores **that** text in the note body instead.
+
+**The note's `source:` still points at the URL you asked for. The body may have come from somewhere else.** That substitution is disclosed in four places, and you should know all of them:
+
+1. A banner at the top of the note body, naming the URL the text actually came from and which version it is.
+2. `oa_url` / `oa_source` / `oa_version` / `oa_license` in the note's frontmatter.
+3. An `oa` block in `hpr note show <id> --json`, carrying `body_is_not_from_source: true`.
+4. A line in the output of `hpr fetch` and `hpr fetch-batch`.
+
+**Versions are not interchangeable.** Unpaywall will happily hand back an accepted manuscript or a submitted preprint when no published copy is open. hyperresearch prefers the version of record and records what it got in `oa_version`, but if that says `acceptedVersion` or `submittedVersion`, check any direct quotation against the published paper before it reaches a report. The body banner says so too.
+
+Configure it under `[scholar]` in `.hyperresearch/config.toml`:
+
+```toml
+[scholar]
+oa_recovery = true              # set false to disable entirely
+contact_email = ""              # REQUIRED by Unpaywall's terms — empty means Unpaywall is skipped
+oa_min_full_text_chars = 6000   # bodies shorter than this trigger a lookup
+oa_prefer_published = true      # version of record over preprints
+oa_max_attempts = 3             # candidate copies to try before giving up
+```
+
+Out of the box `contact_email` is empty, so only Europe PMC runs and recovery is limited to papers in its **open-access subset**. Set it to a real address to enable Unpaywall — their terms require one, and shipping a shared placeholder would get that placeholder rate-limited for every hyperresearch user at once.
+
+Publishers block their own open-access PDFs often enough that one attempt isn't enough, so hyperresearch walks a candidate list: every PDF Unpaywall knows about, then the landing pages, then Europe PMC's structured full text (parsed from JATS, which beats pymupdf on a two-column PDF — real section boundaries, no header bleed, no column interleaving). Europe PMC is only queried once Unpaywall's copies are exhausted.
+
+**Recovery never fails a fetch and never lowers quality.** A candidate has to clear two bars to be accepted: more text than you already had, *and* enough text to clear `oa_min_full_text_chars`. That second bar is what stops a repository record page — title, authors, a 200-word summary — from passing for full text just by being marginally longer than the publisher's abstract. If no candidate clears both, you keep the abstract and no `oa` block appears.
+
+---
+
 ## What it doesn't do
 
 - It doesn't replace your judgment on which sources matter. The agent picks, you steer.
-- It can't fetch what's behind a paywall you haven't logged into.
+- It can't fetch what's behind a paywall you haven't logged into. Open-access recovery finds a legal free copy when one exists; when none does, you get the abstract and the note says so.
 - It runs on Anthropic models via the subagent roster (per-agent assignments come from the profile's model map). Usage scales with tier, gear, and corpus size. If anyone wants to port this to Codex, put up a PR! 
 - The lint gate catches **structural** failures (missing scaffold, broken provenance, unresolved CRITICALs). It cannot guarantee factual accuracy, that's still your call.
 

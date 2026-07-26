@@ -112,6 +112,13 @@ class NoteMeta(BaseModel):
     citation_count: int | None = None    # External citation count (OpenAlex/S2)
     venue: str | None = None             # Publication venue, when known
     is_retracted: bool | None = None     # None = unchecked; set by `hpr sources score`
+    # Open-access recovery (core/oa.py). When these are set, the note BODY came
+    # from `oa_url`, NOT from `source` — `source` stays the URL that was asked
+    # for, because the note is about the paper and the DOI is its identity.
+    oa_url: str | None = None            # Where the body's bytes actually came from
+    oa_source: str | None = None         # Resolver: unpaywall | europepmc
+    oa_version: str | None = None        # publishedVersion | acceptedVersion | submittedVersion
+    oa_license: str | None = None        # Licence reported by the resolver, when known
 
     @field_validator("tags", mode="before")
     @classmethod
