@@ -237,8 +237,11 @@ def repair(
     if update_docs:
         if not json_output:
             console.print("[bold]6/6 Updating agent docs...[/]")
-        from hyperresearch.core.agent_docs import inject_agent_docs
-        modified = inject_agent_docs(vault.root)
+        from hyperresearch.core.agent_docs import detect_agent_platform, inject_agent_docs
+        modified = inject_agent_docs(
+            vault.root,
+            platform=detect_agent_platform(vault.root),
+        )
         report["agent_docs"] = modified
         if not json_output:
             if modified:

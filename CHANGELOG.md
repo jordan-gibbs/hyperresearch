@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Codex compatibility
+
+- **Additive platform installer:** `hyperresearch install --platform codex|both`
+  now installs Codex project instructions and skills while preserving the
+  existing Claude Code default and behavior.
+- **Native Codex layout:** the router and pipeline steps install under
+  `.agents/skills/`, with specialist agent definitions packaged as reusable
+  role-prompt references for generic Codex subagents.
+- **Durable Codex guidance:** `AGENTS.md` is created or updated idempotently
+  without overwriting user-authored content. Profile changes, repair, and
+  agent-doc refreshes keep whichever integrations are present up to date.
+
 ## [0.9.1] - 2026-07-25
 
 ### Four silent-failure leaks closed (tags, FTS syntax, batch PDFs, cache-busting date)
