@@ -67,6 +67,12 @@ Platform selection is additive and never removes another integration:
 | `hyperresearch install --platform codex` | `AGENTS.md` | `.agents/skills/` |
 | `hyperresearch install --platform both` | both files | both skill trees |
 
+The research workflow and artifact contracts are shared across platforms.
+Enforcement differs at one boundary: Claude Code's registered agents can use
+per-agent tool allowlists, while Codex subagents inherit the parent sandbox.
+The Codex role prompts therefore preserve the patcher/polish tool boundaries as
+explicit instructions rather than claiming an equivalent mechanical allowlist.
+
 ---
 
 ## The 16-step research pipeline
