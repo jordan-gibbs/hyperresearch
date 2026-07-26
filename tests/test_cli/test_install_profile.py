@@ -146,3 +146,47 @@ def test_profile_use_preserves_user_overlays(tmp_vault, monkeypatch):
     p = resolve_profile("megareview", cfg_path)
     assert p.source_min == 250
     assert p.loci_max == 20
+
+
+def test_profile_use_rerenders_both_installed_platforms(tmp_vault, monkeypatch):
+    monkeypatch.chdir(tmp_vault.root)
+    installed = runner.invoke(
+        app,
+        ["install", str(tmp_vault.root), "--platform", "both", "--json"],
+    )
+    assert installed.exit_code == 0
+
+    switched = runner.invoke(app, ["profile", "use", "premier", "--json"])
+    assert switched.exit_code == 0
+    claude_skill = (
+        tmp_vault.root
+        / ".claude"
+        / "skills"
+        / "hyperresearch-2-width-sweep"
+        / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    codex_skill = (
+        tmp_vault.root
+        / ".agents"
+        / "skills"
+        / "hyperresearch-2-width-sweep"
+        / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert 'rendered from profile "premier"' in claude_skill
+    assert 'rendered from profile "premier"' in codex_skill
+
+
+def test_unrelated_agents_md_does_not_change_claude_profile_workflow(
+    tmp_vault,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_vault.root)
+    agents_md = tmp_vault.root / "AGENTS.md"
+    original = "# User rules\n\nDo not modify this file.\n"
+    agents_md.write_text(original, encoding="utf-8")
+
+    result = runner.invoke(app, ["profile", "use", "premier", "--json"])
+
+    assert result.exit_code == 0
+    assert agents_md.read_text(encoding="utf-8") == original
+    assert not (tmp_vault.root / ".agents").exists()

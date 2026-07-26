@@ -13,7 +13,7 @@
 
 ---
 
-**Hyperresearch turns Claude Code into a deep research agent: one that currently leads the DeepResearch-Bench RACE leaderboard (benchmarked internally).** A tier-adaptive 16-step pipeline takes one prompt and produces an adversarially-audited report with full source provenance. Every source it reads lands in a persistent, searchable vault, so each session starts smarter than the last.
+**Hyperresearch turns Claude Code or Codex into a deep research agent: one that currently leads the DeepResearch-Bench RACE leaderboard (benchmarked internally).** A tier-adaptive 16-step pipeline takes one prompt and produces an adversarially-audited report with full source provenance. Every source it reads lands in a persistent, searchable vault, so each session starts smarter than the last.
 
 <p align="center">
   <img src="assets/benchmark.png" alt="DeepResearch-Bench top-5 hyperresearch leads the chart ahead of Grep Deep Research, Cellcog Max, nvidia-aiq, Gemini Deep Research, and OpenAI Deep Research" width="780">
@@ -40,15 +40,44 @@ pip install hyperresearch && hyperresearch install
 
 Then `/hyperresearch <anything>` in Claude Code.
 
+For Codex, select the Codex adapter:
+
+```bash
+hyperresearch install --platform codex
+```
+
+This creates `AGENTS.md`, installs the router and step skills under
+`.agents/skills/`, and packages the specialist prompts as reusable references
+for Codex subagents. Use `--platform both` when the same vault should work in
+Claude Code and Codex. The default remains `claude` for backward compatibility.
+
 > Python 3.11–3.13. (3.14 not yet supported. Use `pyenv install 3.13`, `uv venv -p 3.13`, or `py -3.13 -m venv .venv`.)
 >
 > Power users: `hyperresearch install --global` makes `/hyperresearch` reachable from every Claude Code session anywhere, at the cost of ~15 lines in every session's system reminder. Per-project install (above) keeps unrelated CC sessions clean.
+>
+> Codex power users can run `hyperresearch install --global --platform codex`.
+> This installs only the global router and its role-prompt references; the vault
+> and step skills are created in each project on first use.
+
+Platform selection is additive and never removes another integration:
+
+| Command | Durable instructions | Skills |
+|---|---|---|
+| `hyperresearch install` | `CLAUDE.md` | `.claude/skills/` |
+| `hyperresearch install --platform codex` | `AGENTS.md` | `.agents/skills/` |
+| `hyperresearch install --platform both` | both files | both skill trees |
+
+The research workflow and artifact contracts are shared across platforms.
+Enforcement differs at one boundary: Claude Code's registered agents can use
+per-agent tool allowlists, while Codex subagents inherit the parent sandbox.
+The Codex role prompts therefore preserve the patcher/polish tool boundaries as
+explicit instructions rather than claiming an equivalent mechanical allowlist.
 
 ---
 
 ## The 16-step research pipeline
 
-The entry skill is a thin router. It pins down the canonical research query, then invokes one step skill per phase via Claude Code's `Skill` tool. Each step's procedure loads into context only when that step actually runs. That's what stops a long pipeline from quietly dropping steps as its context rots.
+The entry skill is a thin router. It pins down the canonical research query, then loads one step skill per phase. Claude Code invokes those skills with its `Skill` tool; Codex reads each installed `SKILL.md` before executing it. Each step's procedure loads into context only when that step actually runs. That's what stops a long pipeline from quietly dropping steps as its context rots.
 
 | # | Step | What it does | Tiers |
 |---|---|---|---|
