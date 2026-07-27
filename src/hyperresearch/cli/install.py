@@ -235,9 +235,15 @@ def _setup_crawl4ai(vault) -> str:
         vault.config.web_provider = "crawl4ai"
         vault.config.save(vault.config_path)
 
-    # Check if browser is already installed
+    # Check if the browser is already installed -- against the stack the
+    # provider will actually launch: patchright (stealth adapter) pins its
+    # own chromium build, so a passing plain-playwright check can mask a
+    # missing patchright browser.
     try:
-        from playwright.sync_api import sync_playwright
+        try:
+            from patchright.sync_api import sync_playwright
+        except ImportError:
+            from playwright.sync_api import sync_playwright
 
         pw = sync_playwright().start()
         browser = pw.chromium.launch(headless=True)
@@ -247,16 +253,27 @@ def _setup_crawl4ai(vault) -> str:
     except Exception:
         pass
 
-    # Try to install the browser
+    # Try to install the browser. The stealth (patchright) adapter pins its
+    # OWN chromium build with a separate registry -- `playwright install`
+    # does not provide it, and the provider then dies at launch with a
+    # missing-executable error. Install patchright's browser when patchright
+    # is present; plain playwright is the fallback for non-stealth setups.
+    import importlib.util
     import subprocess
     import sys
 
-    try:
-        subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium"],
-            check=True,
-            capture_output=True,
-        )
-        return "browser_installed"
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return "configured"  # best effort — user can install manually
+    installers = []
+    if importlib.util.find_spec("patchright") is not None:
+        installers.append("patchright")
+    installers.append("playwright")
+    for mod in installers:
+        try:
+            subprocess.run(
+                [sys.executable, "-m", mod, "install", "chromium"],
+                check=True,
+                capture_output=True,
+            )
+            return "browser_installed"
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            continue
+    return "configured"  # best effort — user can install manually

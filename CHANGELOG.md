@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+- **Browser setup installs (and pre-checks) patchright's chromium when
+  patchright is present.** The stealth adapter (`UndetectedAdapter`) launches
+  patchright's pinned chromium, which lives in a separate registry from plain
+  playwright's, so `playwright install chromium` alone produces a machine
+  where every preflight passes and every browser fetch dies at launch with a
+  missing-executable error, while the PDF lane keeps working. Both setup
+  surfaces (`hyperresearch setup` and `install`) now check against the stack
+  the provider actually launches and prefer `python -m patchright install
+  chromium`, falling back to plain playwright for non-stealth installs; the
+  manual-install hint names both commands.
+
 ## [0.9.1] - 2026-07-25
 
 ### Four silent-failure leaks closed (tags, FTS syntax, batch PDFs, cache-busting date)

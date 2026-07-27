@@ -284,9 +284,18 @@ def _check_crawl4ai() -> bool:
 
 
 def _ensure_browser() -> None:
-    """Check if Chromium is installed, install if needed."""
+    """Check if Chromium is installed, install if needed.
+
+    Checks against the stack the provider will actually launch: the stealth
+    adapter uses patchright, which pins its OWN chromium build in a separate
+    registry, so a passing plain-playwright check can mask a missing
+    patchright browser and every fetch then dies at launch.
+    """
     try:
-        from playwright.sync_api import sync_playwright
+        try:
+            from patchright.sync_api import sync_playwright
+        except ImportError:
+            from playwright.sync_api import sync_playwright
 
         pw = sync_playwright().start()
         browser = pw.chromium.launch(headless=True)
@@ -295,17 +304,27 @@ def _ensure_browser() -> None:
         console.print("  [dim]Browser ready[/]")
     except Exception:
         console.print("  [yellow]Installing Chromium browser...[/]")
+        import importlib.util
         import subprocess
 
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "playwright", "install", "chromium"],
-                check=True,
-                capture_output=True,
-            )
-            console.print("  [green]Chromium installed[/]")
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        installers = []
+        if importlib.util.find_spec("patchright") is not None:
+            installers.append("patchright")
+        installers.append("playwright")
+        for mod in installers:
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", mod, "install", "chromium"],
+                    check=True,
+                    capture_output=True,
+                )
+                console.print("  [green]Chromium installed[/]")
+                break
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                continue
+        else:
             console.print(
                 "  [red]Could not install browser automatically.[/]\n"
-                "  Run: playwright install chromium"
+                "  Run: playwright install chromium\n"
+                "  (stealth adapter setups need: python -m patchright install chromium)"
             )
