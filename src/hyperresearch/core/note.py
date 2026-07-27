@@ -51,6 +51,24 @@ def read_note(file_path: Path, vault_root: Path) -> Note:
     )
 
 
+def _collision_id(base: str, counter: int) -> str:
+    """Collision suffix that keeps the id a fixed point of slugify().
+
+    Appending "-<n>" to a slug that already sits on a slugify() length cap
+    makes an id the next frontmatter parse re-slugifies back UNDER the cap:
+    the suffix falls off, the note collapses into the base id, sync refuses
+    the duplicate id, and the sources insert dies on its foreign key,
+    leaving an orphan .md file (verbumetecclesia fetches, 2026-07-23).
+    Trim the base so base+suffix fits both the 80-char and 200-byte caps,
+    then slugify once so the disk id equals its own re-parse.
+    """
+    suffix = f"-{counter}"
+    trimmed = base[: 80 - len(suffix)]
+    while len(trimmed.encode("utf-8")) + len(suffix.encode("utf-8")) > 200:
+        trimmed = trimmed[:-1]
+    return slugify(f"{trimmed.rstrip('-')}{suffix}")
+
+
 def write_note(
     notes_dir: Path,
     title: str,
@@ -104,8 +122,9 @@ def write_note(
     file_path = target_dir / f"{nid}.md"
     counter = 2
     while file_path.exists():
-        file_path = target_dir / f"{nid}-{counter}.md"
-        meta.id = f"{nid}-{counter}"
+        candidate = _collision_id(nid, counter)
+        file_path = target_dir / f"{candidate}.md"
+        meta.id = candidate
         counter += 1
 
     content = render_note(meta, body)

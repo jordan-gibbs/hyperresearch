@@ -111,6 +111,36 @@ def test_write_avoids_collision(tmp_vault):
     assert p2.exists()
 
 
+# --- Collision ids must survive the frontmatter re-parse ---------------------
+# slugify() caps ids at 80 chars / 200 bytes. Appending "-2" to a capped slug
+# used to produce an over-cap id that the next parse chopped back to the base
+# id: sync refused the duplicate, the sources insert failed its foreign key,
+# and the .md file was left orphaned (verbumetecclesia fetches, 2026-07-23).
+
+
+def test_write_collision_id_survives_reslugify(tmp_vault):
+    long_title = "x" * 120  # slug hits the 80-char cap
+    p1 = write_note(tmp_vault.notes_dir, long_title)
+    p2 = write_note(tmp_vault.notes_dir, long_title)
+    n1 = read_note(p1, tmp_vault.root)
+    n2 = read_note(p2, tmp_vault.root)
+    assert p1.stem == n1.meta.id
+    assert p2.stem == n2.meta.id  # used to collapse back to the base id
+    assert n1.meta.id != n2.meta.id
+    assert slugify(n2.meta.id) == n2.meta.id
+    assert len(p2.stem) <= 80
+
+
+def test_write_collision_id_survives_reslugify_bytecap(tmp_vault):
+    long_cjk = "液" * 90  # 3 UTF-8 bytes per char: the 200-byte cap bites
+    write_note(tmp_vault.notes_dir, long_cjk)
+    p2 = write_note(tmp_vault.notes_dir, long_cjk)
+    n2 = read_note(p2, tmp_vault.root)
+    assert p2.stem == n2.meta.id
+    assert slugify(n2.meta.id) == n2.meta.id
+    assert len(p2.stem.encode("utf-8")) <= 200
+
+
 def test_write_with_parent(tmp_vault):
     """`parent:` is frontmatter metadata (DB-indexed), NOT a filesystem dir."""
     path = write_note(

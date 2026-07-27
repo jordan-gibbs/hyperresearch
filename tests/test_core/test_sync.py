@@ -307,3 +307,21 @@ def test_sync_cleans_up_stale_collided_row(tmp_vault):
     assert result.errors == []
     row = tmp_vault.db.execute("SELECT path FROM notes WHERE id = ?", ("foo",)).fetchone()
     assert row["path"] == "research/notes/foo.md"
+
+def test_sync_registers_capped_collision_notes_separately(tmp_vault):
+    """Two notes whose titles collide on the slug length cap must land as two
+    DB rows — the orphan-note bug collapsed the second into the first id and
+    sync then refused it, so the note existed on disk but never in the DB."""
+    from hyperresearch.core.note import write_note
+
+    long_title = "y" * 120
+    p1 = write_note(tmp_vault.notes_dir, long_title, body="Eerste.")
+    p2 = write_note(tmp_vault.notes_dir, long_title, body="Tweede.")
+
+    plan = compute_sync_plan(tmp_vault)
+    result = execute_sync(tmp_vault, plan)
+    assert result.errors == []
+
+    rows = tmp_vault.db.execute("SELECT id FROM notes ORDER BY id").fetchall()
+    ids = {r["id"] for r in rows}
+    assert ids == {p1.stem, p2.stem}
