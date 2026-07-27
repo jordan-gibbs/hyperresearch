@@ -46,11 +46,14 @@ def _run(coro):
 
 class _FakeCR:
     """Stand-in for a crawl4ai result; ``final_url`` simulates the browser
-    having been redirected away from the requested URL."""
+    having been redirected away from the requested URL. Mirrors real
+    crawl4ai semantics: ``url`` stays the REQUESTED url, the landing url is
+    ``redirected_url`` (hermetic-tier proven)."""
 
     def __init__(self, requested: str, final_url: str | None = None):
         self.success = True
-        self.url = final_url or requested
+        self.url = requested
+        self.redirected_url = final_url or requested
         self.markdown = f"browser text for {requested}"
         self.metadata = {"title": "T"}
         self.media = {}

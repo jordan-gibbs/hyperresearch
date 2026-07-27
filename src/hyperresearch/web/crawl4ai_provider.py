@@ -462,7 +462,12 @@ class Crawl4AIProvider:
     async def _fetch_async(self, url: str) -> WebResult:
         async with self._make_crawler() as crawler:
             result = await crawler.arun(url=url, config=self._run_config)
-            _check_final_url(url, result.url, self._settings)
+            # crawl4ai's result.url is the REQUESTED url even after the
+            # browser followed redirects; the landing url is redirected_url
+            # (hermetic-tier proven — rechecking result.url alone is blind).
+            _check_final_url(
+                url, getattr(result, "redirected_url", None) or result.url, self._settings
+            )
             metadata = result.metadata or {}
 
             # result.markdown is a MarkdownGenerationResult with .raw_markdown,
@@ -573,7 +578,9 @@ class Crawl4AIProvider:
                     if not cr.success:
                         continue
                     try:
-                        _check_final_url(url, cr.url, self._settings)
+                        _check_final_url(
+                            url, getattr(cr, "redirected_url", None) or cr.url, self._settings
+                        )
                     except SafeHTTPError as exc:
                         log.warning("dropping batch result for %s: %s", url, exc)
                         continue
