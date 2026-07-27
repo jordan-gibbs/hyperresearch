@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### SSRF gate + size caps for fetches (builtin, crawl4ai entry points, PDF and image downloads)
+
+- **The builtin provider, the crawl4ai entry points, and PDF and image downloads now go through an SSRF gate** (`web/safe_http.py`): http/https only; hostnames resolving to private, loopback, link-local, multicast, reserved, CGNAT (RFC 6598), or unspecified addresses are refused (cloud metadata, RFC1918, `[::1]`, `100.64.0.0/10`, …). Not covered: the fixed-host API calls in `core/embed.py` and `core/scholar.py`, which take no attacker-influenced URLs. On the `safe_get` paths (builtin provider, PDF and image downloads) redirects are followed manually and every hop is revalidated. The browser lanes (crawl4ai `fetch()`, `fetch_many()`, and the visible-window path) are gated at entry AND re-checked on the URL the browser actually landed on — the browser follows redirects internally, so the entry check alone cannot vouch for the destination. A post-hoc recheck cannot stop the request that already fired (blind SSRF survives it), but it keeps private-network content out of the vault; the same-host case skips the extra DNS lookup. Refused URLs in a batch are logged and skipped, not fatal. The hostname check is best-effort against DNS rebinding (httpx re-resolves at connect time); the residual window is documented in the module docstring.
+- **`[fetch] allow_private_hosts`** — escape hatch for self-hosted mirrors and intranet sources: hostnames (exact, case-insensitive) or CIDRs that may be fetched despite resolving to private space. Empty by default; consulted by `check_url` everywhere, including redirect hops and the final-URL recheck. A malformed CIDR entry errors loudly instead of being silently ignored.
+- **Response-size caps**, streamed and enforced mid-body so a lying or chunked server cannot exhaust memory. Configurable via new `[fetch]` settings `max_html_bytes` (10 MiB), `max_pdf_bytes` (25 MiB), `max_image_bytes` (2 MiB). A gate refusal on an image download is printed, not silently swallowed.
+- **No unverified-TLS retry.** A certificate failure on a PDF fetch is a refusal that names the existing `pdf_verify_tls = false` opt-out — never an automatic verify-off retry, which a MITM could force with a bad cert. The refusal is its own exception type (`CertVerificationError`), and a cert-refused PDF is never handed to the browser fallback lane: that lane runs with TLS errors ignored, so "falling back" there would be the automatic unverified retry by another name. In a batch it is a loud skip instead.
+
 ## [0.9.1] - 2026-07-25
 
 ### Four silent-failure leaks closed (tags, FTS syntax, batch PDFs, cache-busting date)

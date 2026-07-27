@@ -194,7 +194,7 @@ def get_provider(
     if name is None or name == "builtin":
         from hyperresearch.web.builtin import BuiltinProvider
 
-        return BuiltinProvider()
+        return BuiltinProvider(settings=settings)
 
     if name == "crawl4ai":
         try:

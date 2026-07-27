@@ -175,6 +175,7 @@ def fetch_and_save(
         saved_assets = _save_assets(
             conn, result, note_id, assets_dir,
             settings=vault.config.assets, image_timeout_s=vault.config.fetch.image_timeout_s,
+            max_image_bytes=vault.config.fetch.max_image_bytes,
         )
 
     return {
