@@ -167,6 +167,26 @@ class TestUserOverlay:
         assert p.source_target == (100, 150)
         assert p.depth_budget_brackets == ((35, 20), (0, 5))
 
+    def test_char_targets_no_word_boundary_overridable_for_non_cjk_scripts(
+        self, tmp_path: Path
+    ):
+        """The shipped char_targets_no_word_boundary values are calibrated
+        for CJK -- the only non-word-boundary script this project has real
+        usage data for. A deployment serving a different such script (Thai,
+        Lao, Khmer, ...) must be able to supply its own calibration through
+        the same profile-overlay mechanism as every other tunable, with no
+        code changes."""
+        cfg = self._write(
+            tmp_path,
+            "[profile.full]\n"
+            "char_targets_no_word_boundary = "
+            "{ argumentative = [30000, 45000] }\n",
+        )
+        p = resolve_profile("full", cfg)
+        assert p.char_targets_no_word_boundary == {"argumentative": (30000, 45000)}
+        # Unrelated keys are untouched by the override.
+        assert p.word_targets["argumentative"] == (5000, 10000)
+
     def test_listing_includes_user_profiles(self, tmp_path: Path):
         cfg = self._write(tmp_path, "[profile.dissertation]\nsource_min = 250\n")
         assert list_profiles(cfg) == ["light", "full", "premier", "dissertation"]

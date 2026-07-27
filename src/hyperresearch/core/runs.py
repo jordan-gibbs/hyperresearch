@@ -28,6 +28,21 @@ from pathlib import Path
 
 MANIFEST_VERSION = 1
 MANIFEST_NAME = "run.json"
+
+# Avg. chars per ASCII-whitespace token above which str.split() word counts
+# are no longer trustworthy (see _lacks_word_boundaries).
+_NO_WORD_BOUNDARY_AVG_TOKEN_CHARS = 15.0
+
+
+def _lacks_word_boundaries(text: str) -> bool:
+    """True if ASCII-whitespace doesn't meaningfully segment `text` into words."""
+    tokens = text.split()
+    if not tokens:
+        return False
+    avg_token_chars = sum(len(t) for t in tokens) / len(tokens)
+    return avg_token_chars >= _NO_WORD_BOUNDARY_AVG_TOKEN_CHARS
+
+
 EVENTS_NAME = "events.jsonl"
 
 RUN_STATUSES = ("running", "paused", "blocked", "done", "failed", "aborted")
@@ -386,13 +401,30 @@ def verify_run(vault, vault_tag: str) -> dict:
             )
 
         if response_format and response_format in profile.word_targets:
-            low, high = profile.word_targets[response_format]
-            wc = len(report_text.split())
-            check(
-                "length-in-range",
-                low * 0.8 <= wc <= high * 1.2,
-                f"{wc} words vs target {low}-{high} ({response_format}; ±20% tolerance)",
-            )
+            if _lacks_word_boundaries(report_text):
+                # char_targets_no_word_boundary is profile-configurable per
+                # response_format; falls back to word_target * 3 (a CJK-shaped
+                # guess) if a format has no explicit target.
+                char_targets = getattr(profile, "char_targets_no_word_boundary", None) or {}
+                if response_format in char_targets:
+                    low, high = char_targets[response_format]
+                else:
+                    low_w, high_w = profile.word_targets[response_format]
+                    low, high = low_w * 3, high_w * 3
+                count = len(report_text)
+                check(
+                    "length-in-range",
+                    low * 0.8 <= count <= high * 1.2,
+                    f"{count} chars vs target {low}-{high} ({response_format}; char-based; ±20% tolerance)",
+                )
+            else:
+                low, high = profile.word_targets[response_format]
+                wc = len(report_text.split())
+                check(
+                    "length-in-range",
+                    low * 0.8 <= wc <= high * 1.2,
+                    f"{wc} words vs target {low}-{high} ({response_format}; ±20% tolerance)",
+                )
 
         missing = [h for h in required_headings if h not in report_text]
         check(

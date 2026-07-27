@@ -137,6 +137,15 @@ class Profile(BaseModel):
     single_draft_reads: Range
     must_read: dict[str, Range]
     word_targets: dict[str, Range]
+    # Character-count targets for response_formats whose script doesn't
+    # delimit words with ASCII whitespace (see runs.py:_lacks_word_boundaries).
+    # An editorial constant per format, exactly like word_targets itself --
+    # not derived from any word-per-character formula. Shipped values are
+    # tuned for CJK, the only such script family this project has real usage
+    # data for; deployments serving a different one (Thai, Lao, Khmer, ...)
+    # override this per profile in .hyperresearch/config.toml, the same way
+    # they'd override word_targets or any other tunable.
+    char_targets_no_word_boundary: dict[str, Range] = Field(default_factory=dict)
     citation_density_min: float
     citation_totals: dict[str, Range]
 
@@ -226,6 +235,7 @@ _FULL: dict = {
     "single_draft_reads": (8, 15),
     "must_read": {"argumentative": (35, 50), "structured": (25, 40), "short": (20, 30)},
     "word_targets": {"short": (500, 2000), "structured": (2000, 5000), "argumentative": (5000, 10000)},
+    "char_targets_no_word_boundary": {"short": (1500, 6000), "structured": (6000, 15000), "argumentative": (20000, 25000)},
     "citation_density_min": 2.0,
     "citation_totals": {"argumentative": (80, 150), "structured": (40, 80), "short": (15, 30)},
     "critic_finding_caps": {"dialectic": 12, "depth": 12, "width": 10, "instruction": 15},

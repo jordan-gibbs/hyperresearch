@@ -239,6 +239,123 @@ class TestIndependence:
         assert any(c["kind"] == "url" for c in result["clusters"])
 
 
+class TestCJKLengthCheck:
+    """`str.split()` word counts collapse to near-zero for prose in scripts
+    that don't delimit words with ASCII whitespace (Chinese, Japanese,
+    Korean, Thai, ...), so a report that is squarely within its documented
+    character-count target must not fail length-in-range on a spurious
+    word count. The detector is a structural heuristic (average
+    whitespace-delimited token length), not a hardcoded script allowlist --
+    it must generalize to any such script without code changes."""
+
+    def test_lacks_word_boundaries(self):
+        from hyperresearch.core.runs import _lacks_word_boundaries
+
+        # Japanese (kana + kanji) and Chinese (hanzi) prose is written with
+        # no spaces between words at all.
+        assert _lacks_word_boundaries("この文章はほぼ全て日本語の文字で構成されています。")
+        assert _lacks_word_boundaries("这是一段中文测试文本内容和证据。")
+        # Structural-only proof of generality to a non-CJK, non-Latin
+        # script family (Thai) -- no claim about grammaticality, just that
+        # a long run of a spaceless script's characters trips the same
+        # heuristic without any script-specific code.
+        assert _lacks_word_boundaries("คำ" * 30)
+        # Korean is the counter-example that justifies a *structural*
+        # heuristic over a hardcoded script list: unlike Chinese/Japanese,
+        # modern Korean orthography IS space-delimited, so str.split()
+        # word counts are meaningful for it and it must NOT trip this
+        # branch. A script-identity allowlist would get this wrong.
+        assert not _lacks_word_boundaries(
+            "이것은 한국어 문장으로 구성된 테스트입니다 그리고 띄어쓰기를 사용합니다."
+        )
+        assert not _lacks_word_boundaries(
+            "This paragraph is entirely English prose with no CJK content at all."
+        )
+        # A handful of long wikilink citation keys inside a mostly-English
+        # report should not trip the branch -- many short real words still
+        # dominate the average token length.
+        assert not _lacks_word_boundaries(
+            "This is an English report with real citations. "
+            "[[dagitty-a-graphical-tool-for-analyzing-causal-diagrams-semantic-scholar]] " * 15
+        )
+
+    def test_verify_passes_cjk_report_within_char_target_despite_low_word_count(
+        self, tmp_vault
+    ):
+        init_run(tmp_vault, "cjk-01", profile="light")
+        run_dir = tmp_vault.run_dir("cjk-01")
+        (run_dir / "prompt-decomposition.json").write_text(json.dumps({
+            "response_format": "short",
+            "required_section_headings": ["## 結果"],
+        }), encoding="utf-8")
+        (run_dir / "polish-log.json").write_text('{"applied": []}', encoding="utf-8")
+        # light/short CJK char target is 1500-6000; this Japanese sentence
+        # has almost no ASCII whitespace, so str.split() would count only a
+        # handful of "words" despite being solidly in-range by characters.
+        sentence = "これは実質的な証拠を伴う文章である[[src-note]]。"
+        report = tmp_vault.root / "research" / "notes" / "final_report_cjk-01.md"
+        body = "## 結果\n\n" + (sentence * 90)
+        report.write_text(body, encoding="utf-8")
+
+        word_count = len(body.split())
+        assert word_count < 500  # would fail the English word-count target
+
+        result = verify_run(tmp_vault, "cjk-01")
+        by_name = {c["name"]: c for c in result["checks"]}
+        assert by_name["length-in-range"]["ok"] is True
+        assert "chars" in by_name["length-in-range"]["detail"]
+        assert result["passed"] is True
+
+    def test_verify_still_fails_cjk_report_far_outside_char_target(self, tmp_vault):
+        init_run(tmp_vault, "cjk-02", profile="light")
+        run_dir = tmp_vault.run_dir("cjk-02")
+        (run_dir / "prompt-decomposition.json").write_text(json.dumps({
+            "response_format": "short",
+            "required_section_headings": ["## 結果"],
+        }), encoding="utf-8")
+        # Well under the 1500-char floor (even with the 20% tolerance) --
+        # the CJK branch must still be a real length check, not a bypass.
+        report = tmp_vault.root / "research" / "notes" / "final_report_cjk-02.md"
+        report.write_text("## 結果\n\n短い。", encoding="utf-8")
+
+        result = verify_run(tmp_vault, "cjk-02")
+        by_name = {c["name"]: c for c in result["checks"]}
+        assert by_name["length-in-range"]["ok"] is False
+        assert result["passed"] is False
+
+    def test_verify_respects_profile_override_for_non_cjk_script(self, tmp_vault):
+        """End-to-end proof that a deployment serving a non-CJK,
+        non-word-boundary script (simulated here with a spaceless Thai-script
+        blob) is not stuck with CJK-calibrated numbers: it configures its own
+        char_targets_no_word_boundary via the standard profile-overlay
+        mechanism, and verify_run honors it -- no code change needed to
+        support a script this project has no real usage data for."""
+        cfg_dir = tmp_vault.root / ".hyperresearch"
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        (cfg_dir / "config.toml").write_text(
+            "[profile.light]\n"
+            "char_targets_no_word_boundary = { short = [300, 900] }\n",
+            encoding="utf-8",
+        )
+        init_run(tmp_vault, "th-01", profile="light")
+        run_dir = tmp_vault.run_dir("th-01")
+        (run_dir / "prompt-decomposition.json").write_text(json.dumps({
+            "response_format": "short",
+            "required_section_headings": ["## Results"],
+        }), encoding="utf-8")
+        (run_dir / "polish-log.json").write_text('{"applied": []}', encoding="utf-8")
+        # A spaceless Thai-script blob: within the overridden 300-900 char
+        # target, but far below the shipped CJK default's 1500-char floor --
+        # this only passes if the override is actually being read.
+        report = tmp_vault.root / "research" / "notes" / "final_report_th-01.md"
+        report.write_text("## Results\n\n" + ("คำ" * 250), encoding="utf-8")
+
+        result = verify_run(tmp_vault, "th-01")
+        by_name = {c["name"]: c for c in result["checks"]}
+        assert by_name["length-in-range"]["ok"] is True
+        assert "300-900" in by_name["length-in-range"]["detail"]
+
+
 class TestTelemetryAndVerify:
     def test_run_report_rollup(self, tmp_vault):
         init_run(tmp_vault, "tel-01", profile="light")
