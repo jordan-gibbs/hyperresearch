@@ -506,6 +506,7 @@ def fetch(
             conn, result, note_id, assets_dir,
             settings=vault.config.assets, image_timeout_s=vault.config.fetch.image_timeout_s,
             max_image_bytes=vault.config.fetch.max_image_bytes,
+            allow_private_hosts=vault.config.fetch.allow_private_hosts,
         )
 
     data = {
@@ -560,12 +561,17 @@ def _save_assets(
     settings: AssetSettings | None = None,
     image_timeout_s: int | None = None,
     max_image_bytes: int | None = None,
+    allow_private_hosts: tuple[str, ...] | None = None,
 ) -> list[dict]:
     """Save screenshot and images to assets dir, record in DB. Returns list of saved asset info."""
     settings = settings or AssetSettings()
     fetch_defaults = FetchSettings()
     timeout_s = image_timeout_s if image_timeout_s is not None else fetch_defaults.image_timeout_s
     image_cap = max_image_bytes if max_image_bytes is not None else fetch_defaults.max_image_bytes
+    allow_private = (
+        allow_private_hosts if allow_private_hosts is not None
+        else fetch_defaults.allow_private_hosts
+    )
     saved: list[dict] = []
     now = datetime.now(UTC).isoformat()
 
@@ -609,7 +615,7 @@ def _save_assets(
             asset_info = _download_image(
                 conn, note_id, img_url, alt, assets_dir, now,
                 min_image_bytes=settings.min_image_bytes, timeout_s=timeout_s,
-                max_image_bytes=image_cap,
+                max_image_bytes=image_cap, allow_private_hosts=allow_private,
             )
             if asset_info:
                 saved.append(asset_info)
@@ -624,6 +630,7 @@ def _download_image(
     conn, note_id: str, img_url: str, alt: str, assets_dir: Path, now: str,
     min_image_bytes: int = 50_000, timeout_s: int = 15,
     max_image_bytes: int | None = None,
+    allow_private_hosts: tuple[str, ...] = (),
 ) -> dict | None:
     """Download a single image. Returns asset info dict or None if skipped."""
     # Generate filename from URL
@@ -654,6 +661,7 @@ def _download_image(
             img_url,
             max_bytes=max_image_bytes if max_image_bytes is not None else MAX_BYTES_IMAGE,
             timeout=timeout_s,
+            allow_private_hosts=allow_private_hosts,
         )
         data = resp.content
         content_type = resp.headers.get("content-type", "")

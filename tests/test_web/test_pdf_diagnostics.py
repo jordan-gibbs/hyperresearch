@@ -176,7 +176,8 @@ def test_cert_error_refuses_with_no_unverified_retry(monkeypatch):
 
     calls: list[bool] = []
 
-    def fake_safe_get(url, *, max_bytes, timeout=None, headers=None, verify=True):
+    def fake_safe_get(url, *, max_bytes, timeout=None, headers=None, verify=True,
+                      allow_private_hosts=()):
         calls.append(verify)
         raise _cert_error()
 
@@ -197,7 +198,8 @@ def test_non_cert_error_propagates_untranslated(monkeypatch):
 
     calls: list[bool] = []
 
-    def fake_safe_get(url, *, max_bytes, timeout=None, headers=None, verify=True):
+    def fake_safe_get(url, *, max_bytes, timeout=None, headers=None, verify=True,
+                      allow_private_hosts=()):
         calls.append(verify)
         raise httpx.ConnectError("connection refused")
 
@@ -214,7 +216,8 @@ def test_pdf_verify_tls_false_fetches_unverified(monkeypatch):
     fetch unverified directly. SSRF/size gates still apply (same safe_get)."""
     calls: list[bool] = []
 
-    def fake_safe_get(url, *, max_bytes, timeout=None, headers=None, verify=True):
+    def fake_safe_get(url, *, max_bytes, timeout=None, headers=None, verify=True,
+                      allow_private_hosts=()):
         calls.append(verify)
         return _Resp(b"%PDF- direct")
 

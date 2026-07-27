@@ -112,3 +112,19 @@ class TestByteCapThreading:
         with patch("hyperresearch.web.safe_http.safe_get", spy):
             crawl4ai_provider._safe_get_pdf("http://8.8.8.8/paper.pdf", FetchSettings(max_pdf_bytes=777))
         assert seen["max_bytes"] == 777
+
+
+class TestAllowPrivateHostsConfig:
+    def test_default_is_empty(self):
+        """Fresh installs get the full gate; admitting a private host is an
+        explicit config act."""
+        assert FetchSettings().allow_private_hosts == ()
+
+    def test_toml_list_parses_to_tuple(self):
+        from hyperresearch.core.config import _build_section
+
+        s = _build_section(
+            FetchSettings,
+            {"allow_private_hosts": ["10.8.0.0/16", "mirror.internal"]},
+        )
+        assert s.allow_private_hosts == ("10.8.0.0/16", "mirror.internal")

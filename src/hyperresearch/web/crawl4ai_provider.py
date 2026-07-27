@@ -157,17 +157,21 @@ def _safe_get_pdf(url: str, settings: FetchSettings):
     certificates are handled by the explicit, user-declared
     ``pdf_verify_tls = false`` opt-out.
     """
-    from hyperresearch.web.safe_http import SafeHTTPError, safe_get
+    from hyperresearch.web.safe_http import CertVerificationError, safe_get
 
     try:
         return safe_get(url, max_bytes=settings.max_pdf_bytes,
                         timeout=settings.pdf_timeout_s,
                         headers=_PDF_FETCH_HEADERS,
-                        verify=settings.pdf_verify_tls)
+                        verify=settings.pdf_verify_tls,
+                        allow_private_hosts=settings.allow_private_hosts)
     except Exception as exc:
         if settings.pdf_verify_tls and _is_cert_error(exc):
             # Refuse, but say how to opt out for a trusted cert-broken mirror.
-            raise SafeHTTPError(
+            # Raised as its own type: the browser lane runs with TLS errors
+            # ignored, so treating this like any failed PDF would hand the
+            # URL to a lane that amounts to an automatic unverified retry.
+            raise CertVerificationError(
                 f"certificate verification failed for {url!r}: {exc}. "
                 "If this host is a known cert-broken mirror you trust, set "
                 "pdf_verify_tls = false under [fetch] in config.toml."
@@ -188,7 +192,7 @@ def _fetch_pdf(url: str, settings: FetchSettings | None = None) -> WebResult | N
 
     settings = settings or FetchSettings()
 
-    from hyperresearch.web.safe_http import SafeHTTPError
+    from hyperresearch.web.safe_http import CertVerificationError, SafeHTTPError
 
     try:
         # Convert arXiv abs links to PDF links
@@ -199,6 +203,11 @@ def _fetch_pdf(url: str, settings: FetchSettings | None = None) -> WebResult | N
 
         try:
             resp = _safe_get_pdf(url, settings)
+        except CertVerificationError:
+            # Propagates: callers must not fold a cert refusal into the
+            # generic PDF-failed None, whose fallback is the TLS-ignoring
+            # browser lane.
+            raise
         except SafeHTTPError as exc:
             _pdf_log().warning("refused PDF fetch for %s: %s", url, exc)
             return None
@@ -263,9 +272,41 @@ def _fetch_pdf(url: str, settings: FetchSettings | None = None) -> WebResult | N
             raw_content_type="application/pdf",
         )
 
+    except CertVerificationError:
+        # Second guard: the catch-all below must not convert a cert refusal
+        # into the generic None either.
+        raise
     except Exception as e:
         _pdf_log().warning("PDF extraction failed for %s: %s", url, e)
         return None
+
+
+def _check_final_url(entry_url: str, final_url: str | None, settings: FetchSettings) -> None:
+    """Re-validate the URL the browser actually ended up on.
+
+    The browser follows redirects internally, so the entry-point gate only
+    vouches for where navigation STARTED. Refusing after the fact cannot
+    stop a request that already fired (blind SSRF survives), but it keeps
+    private-network content out of the vault. Skipped when the final host
+    equals the entry host — the entry gate already vouched for it, and the
+    extra ``getaddrinfo`` would be pure cost on the no-redirect common case.
+    """
+    from urllib.parse import urlparse
+
+    from hyperresearch.web.safe_http import SafeHTTPError, check_url
+
+    if not final_url or final_url == entry_url:
+        return
+    entry_host = urlparse(entry_url).hostname
+    parsed_final = urlparse(final_url)
+    if parsed_final.hostname == entry_host and parsed_final.scheme.lower() in ("http", "https"):
+        return
+    try:
+        check_url(final_url, settings.allow_private_hosts)
+    except SafeHTTPError as exc:
+        raise SafeHTTPError(
+            f"browser navigation for {entry_url!r} ended at refused URL: {exc}"
+        ) from exc
 
 
 class Crawl4AIProvider:
@@ -335,12 +376,13 @@ class Crawl4AIProvider:
 
     def fetch(self, url: str) -> WebResult:
         # SSRF gate: reject private/loopback/etc. before any browser or http
-        # call. Re-checked on PDF redirects via safe_get; browser hops are
-        # not re-checked (Playwright drives navigation internally), so this
-        # entry-point check is the primary protection for the browser path.
+        # call. PDF redirects are re-checked hop by hop via safe_get; the
+        # browser lanes drive their own navigation, so they get the
+        # entry-point check here plus a final-URL recheck after the fact
+        # (_check_final_url).
         from hyperresearch.web.safe_http import check_url
 
-        check_url(url)
+        check_url(url, self._settings.allow_private_hosts)
 
         # PDF detection: fetch directly with httpx, extract text with pymupdf
         if _is_pdf_url(url):
@@ -392,6 +434,10 @@ class Crawl4AIProvider:
 
             await context.close()
 
+        # This lane runs with ignore_https_errors and follows redirects on
+        # its own, so where it LANDED needs the same gate as where it started.
+        _check_final_url(url, final_url, self._settings)
+
         # Convert HTML to markdown using crawl4ai's markdown generator
         # Prefer fit_markdown (main content, no nav/footer chrome) over raw_markdown.
         md_result = self._md_generator.generate_markdown(html, base_url=final_url)
@@ -416,6 +462,7 @@ class Crawl4AIProvider:
     async def _fetch_async(self, url: str) -> WebResult:
         async with self._make_crawler() as crawler:
             result = await crawler.arun(url=url, config=self._run_config)
+            _check_final_url(url, result.url, self._settings)
             metadata = result.metadata or {}
 
             # result.markdown is a MarkdownGenerationResult with .raw_markdown,
@@ -474,17 +521,16 @@ class Crawl4AIProvider:
         # SSRF gate: same entry-point check as fetch(). Refused URLs are
         # skipped (logged), not fatal — one hostile URL must not kill the
         # whole batch.
-        from hyperresearch.web.safe_http import SafeHTTPError, check_url
+        from hyperresearch.web.safe_http import CertVerificationError, SafeHTTPError, check_url
 
+        log = logging.getLogger("hyperresearch.web")
         allowed_urls = []
         for url in urls:
             try:
-                check_url(url)
+                check_url(url, self._settings.allow_private_hosts)
                 allowed_urls.append(url)
             except SafeHTTPError as exc:
-                logging.getLogger("hyperresearch.web").warning(
-                    "refused batch fetch for %s: %s", url, exc
-                )
+                log.warning("refused batch fetch for %s: %s", url, exc)
 
         # Split: PDFs go direct, rest go through browser
         pdf_urls = [u for u in allowed_urls if _is_pdf_url(u)]
@@ -496,10 +542,22 @@ class Crawl4AIProvider:
         # None (parser failure, non-PDF body served at a .pdf URL) we fall
         # back to the browser path — mirrors the single-fetch behaviour in
         # fetch() so batch callers don't silently lose academic PDFs that
-        # need JS-rendered landing pages.
+        # need JS-rendered landing pages. Cert refusals are the exception:
+        # the browser lane ignores TLS errors, so falling back would be an
+        # automatic unverified retry. A batch has no per-URL failure
+        # channel, so the skip is logged loudly instead.
         failed_pdf_urls = []
         for url in pdf_urls:
-            pdf_result = _fetch_pdf(url, self._settings)
+            try:
+                pdf_result = _fetch_pdf(url, self._settings)
+            except CertVerificationError as exc:
+                log.warning(
+                    "SKIPPED (TLS certificate invalid): %s -- a potentially "
+                    "valuable source was not fetched. To include it, set "
+                    "pdf_verify_tls = false under [fetch] in config.toml. (%s)",
+                    url, exc,
+                )
+                continue
             if pdf_result is not None:
                 web_results.append(pdf_result)
             else:
@@ -514,6 +572,11 @@ class Crawl4AIProvider:
                 for cr, url in zip(results, browser_urls, strict=False):
                     if not cr.success:
                         continue
+                    try:
+                        _check_final_url(url, cr.url, self._settings)
+                    except SafeHTTPError as exc:
+                        log.warning("dropping batch result for %s: %s", url, exc)
+                        continue
                     metadata = cr.metadata or {}
                     md = cr.markdown
                     if md and hasattr(md, "fit_markdown"):
@@ -527,7 +590,13 @@ class Crawl4AIProvider:
 
                     # Post-fetch binary check — browser may have fetched a PDF inline
                     if content and _looks_like_binary(content, self._gates):
-                        pdf_result = _fetch_pdf(url, self._settings)
+                        try:
+                            pdf_result = _fetch_pdf(url, self._settings)
+                        except CertVerificationError as exc:
+                            # Keep the batch alive, but don't store the binary
+                            # garbage the browser got either.
+                            log.warning("SKIPPED (TLS certificate invalid): %s (%s)", url, exc)
+                            continue
                         if pdf_result is not None:
                             web_results.append(pdf_result)
                             continue

@@ -79,7 +79,11 @@ class BuiltinProvider:
         SSRF gate in :mod:`hyperresearch.web.safe_http`."""
         from hyperresearch.web.safe_http import safe_get
 
-        resp = safe_get(url, max_bytes=self._settings.max_html_bytes)
+        resp = safe_get(
+            url,
+            max_bytes=self._settings.max_html_bytes,
+            allow_private_hosts=self._settings.allow_private_hosts,
+        )
         if resp.status_code >= 400:
             raise RuntimeError(f"HTTP {resp.status_code} fetching {url}")
         return resp.text, resp.url

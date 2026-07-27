@@ -53,6 +53,16 @@ class SafeHTTPError(Exception):
     """The SSRF gate refused this request, or the response exceeded a limit."""
 
 
+class CertVerificationError(SafeHTTPError):
+    """TLS certificate verification failed and verification is required.
+
+    Raised distinctly so callers can surface the refusal (and its
+    ``pdf_verify_tls = false`` opt-out) instead of treating it like any
+    other failed fetch — in particular, a cert-refused URL must never be
+    retried through a lane that ignores TLS errors.
+    """
+
+
 @dataclass
 class SafeResponse:
     """Minimal response wrapper. Avoids leaking httpx types to callers."""
@@ -74,6 +84,11 @@ class SafeResponse:
             return self.content.decode("utf-8", errors="replace")
 
 
+# Carrier-grade NAT (RFC 6598). Not covered by any ipaddress is_* property
+# (checked through 3.11.9), yet never a public destination.
+_CGNAT_NET = ipaddress.ip_network("100.64.0.0/10")
+
+
 def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     return (
         ip.is_private
@@ -82,6 +97,7 @@ def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
         or ip.is_multicast
         or ip.is_reserved
         or ip.is_unspecified
+        or (ip.version == 4 and ip in _CGNAT_NET)
     )
 
 
@@ -103,8 +119,41 @@ def _resolve(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
     return addrs
 
 
-def check_url(url: str) -> None:
+def _parse_allowlist(
+    entries: tuple[str, ...] | list[str],
+) -> tuple[frozenset[str], list[ipaddress.IPv4Network | ipaddress.IPv6Network]]:
+    """Split ``allow_private_hosts`` entries into hostnames and networks.
+
+    An entry that parses as an IP network (a bare address counts as a
+    /32 or /128) matches by resolved address; anything else matches the
+    URL hostname exactly, case-insensitively. A malformed entry raises
+    :class:`SafeHTTPError` naming it — silently ignoring one would turn
+    a typo into a lockout that looks like an SSRF refusal.
+    """
+    hostnames: set[str] = set()
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for entry in entries:
+        entry = entry.strip()
+        if not entry:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError:
+            if "/" in entry:  # meant as a CIDR, but malformed
+                raise SafeHTTPError(
+                    f"invalid allow_private_hosts entry {entry!r}: not a valid CIDR"
+                ) from None
+            hostnames.add(entry.lower())
+    return frozenset(hostnames), networks
+
+
+def check_url(url: str, allow_private_hosts: tuple[str, ...] = ()) -> None:
     """Validate the URL is safe to fetch. Raises :class:`SafeHTTPError`.
+
+    ``allow_private_hosts`` (the ``[fetch]`` config field of the same name)
+    lists hostnames or CIDRs that are fetchable despite resolving to
+    private/reserved addresses — self-hosted mirrors, intranet wikis.
+    Scheme and DNS checks still apply to allowlisted hosts.
 
     Best-effort: validation resolves the hostname here, but the connection
     made afterwards re-resolves it (see the module docstring on DNS
@@ -117,11 +166,16 @@ def check_url(url: str) -> None:
         )
     if not parsed.hostname:
         raise SafeHTTPError(f"refusing URL with no hostname: {url!r}")
+    allowed_hosts, allowed_nets = _parse_allowlist(allow_private_hosts)
+    if parsed.hostname.lower() in allowed_hosts:
+        return
     addrs = _resolve(parsed.hostname)
     if not addrs:
         raise SafeHTTPError(f"refusing URL {url!r}: hostname did not resolve")
     for addr in addrs:
-        if _is_blocked_ip(addr):
+        if _is_blocked_ip(addr) and not any(
+            addr.version == net.version and addr in net for net in allowed_nets
+        ):
             raise SafeHTTPError(
                 f"refusing URL {url!r}: hostname {parsed.hostname} resolves to "
                 f"non-public address {addr}"
@@ -136,6 +190,7 @@ def safe_get(
     max_redirects: int = DEFAULT_MAX_REDIRECTS,
     headers: dict[str, str] | None = None,
     verify: bool | str = True,
+    allow_private_hosts: tuple[str, ...] = (),
     transport: httpx.BaseTransport | None = None,
 ) -> SafeResponse:
     """GET ``url`` with SSRF + size protection.
@@ -143,6 +198,10 @@ def safe_get(
     ``max_bytes`` is required so callers consciously pick a cap. Pass the
     matching ``FetchSettings`` field when one is in scope, or a
     ``MAX_BYTES_*`` constant otherwise.
+
+    ``allow_private_hosts`` is threaded into the per-hop URL checks, so a
+    redirect landing on an allowlisted private host is honored the same
+    way a direct fetch of it would be.
 
     ``transport`` is a test seam: it lets the suite exercise the redirect
     revalidation and size-cap logic against ``httpx.MockTransport``
@@ -160,7 +219,7 @@ def safe_get(
         follow_redirects=False, timeout=timeout, verify=verify, transport=transport
     ) as client:
         for _ in range(max_redirects + 1):
-            check_url(current_url)
+            check_url(current_url, allow_private_hosts)
             declared = None
             with client.stream("GET", current_url, headers=request_headers) as resp:
                 if resp.is_redirect:

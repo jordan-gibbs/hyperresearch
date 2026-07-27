@@ -2,8 +2,10 @@
 
 It is the main fetch path (every wave-1 fetcher batch goes through it), so a
 gate that only covered fetch() would leave the bulk of outbound traffic
-unprotected. Offline: only .pdf URLs are used so the browser lane is never
-touched, and _fetch_pdf is stubbed.
+unprotected. Offline: only .pdf URLs are used and _fetch_pdf is stubbed to
+SUCCEED, so the browser lane is never touched — since v0.9.1 a *failed* PDF
+falls back to the browser (that path is covered in test_fetch_many_fallback
+and test_final_url_recheck).
 """
 
 from __future__ import annotations
@@ -12,6 +14,7 @@ import asyncio
 import logging
 
 import hyperresearch.web.crawl4ai_provider as provider
+from hyperresearch.web.base import WebResult
 
 
 def _run(coro):
@@ -48,7 +51,7 @@ def test_fetch_many_skips_refused_urls_and_fetches_the_rest(monkeypatch, caplog)
 
     def fake_fetch_pdf(url, settings=None):
         fetched.append(url)
-        return None
+        return WebResult(url=url, title="ok", content="pdf text")
 
     monkeypatch.setattr(provider, "_fetch_pdf", fake_fetch_pdf)
 
@@ -63,7 +66,7 @@ def test_fetch_many_skips_refused_urls_and_fetches_the_rest(monkeypatch, caplog)
     with caplog.at_level(logging.WARNING, logger="hyperresearch.web"):
         results = _run(inst._fetch_many_async(urls))
 
-    assert results == []
+    assert [r.url for r in results] == ["http://8.8.8.8/paper.pdf"]
     assert fetched == ["http://8.8.8.8/paper.pdf"], (
         "refused URLs must be skipped, allowed ones still fetched"
     )

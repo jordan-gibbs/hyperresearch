@@ -265,3 +265,92 @@ def test_body_at_cap_passes():
     })
     resp = safe_get("http://8.8.8.8/fits", max_bytes=1024, transport=transport)
     assert resp.content == b"x" * 1024
+
+
+# ---------------------------------------------------------------------------
+# CGNAT (RFC 6598) — 100.64.0.0/10 is not covered by any ipaddress is_*
+# property, so only the explicit network check refuses it
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("url", ["http://100.64.0.1/", "http://100.127.255.254/"])
+def test_check_url_rejects_cgnat_range(url):
+    """Shared address space is never a public destination, yet it passes
+    every ipaddress ``is_*`` property (checked through 3.11.9)."""
+    with pytest.raises(SafeHTTPError, match="non-public address"):
+        check_url(url)
+
+
+@pytest.mark.parametrize("url", ["http://100.63.255.255/", "http://100.128.0.1/"])
+def test_check_url_allows_cgnat_neighbors(url):
+    """The block is exactly /10 — addresses either side stay fetchable."""
+    check_url(url)
+
+
+# ---------------------------------------------------------------------------
+# allow_private_hosts — the [fetch] escape hatch for intranet mirrors
+# ---------------------------------------------------------------------------
+
+
+def test_allowlist_cidr_admits_private_address():
+    with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
+        gai.return_value = [(socket.AF_INET, None, None, "", ("10.0.0.5", 0))]
+        check_url("http://mirror.example/x", allow_private_hosts=("10.0.0.0/8",))
+
+
+def test_allowlist_cidr_is_not_a_blanket_waiver():
+    """Allowlisting one private network must not admit OTHER private space."""
+    with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
+        gai.return_value = [(socket.AF_INET, None, None, "", ("192.168.1.5", 0))]
+        with pytest.raises(SafeHTTPError, match="non-public address"):
+            check_url("http://mirror.example/x", allow_private_hosts=("10.0.0.0/8",))
+
+
+def test_allowlist_bare_ip_entry_admits_exactly_one_host():
+    check_url("http://192.168.1.20/wiki", allow_private_hosts=("192.168.1.20",))
+    with pytest.raises(SafeHTTPError, match="non-public address"):
+        check_url("http://192.168.1.21/wiki", allow_private_hosts=("192.168.1.20",))
+
+
+def test_allowlist_hostname_admits_by_name_case_insensitively():
+    with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
+        gai.return_value = [(socket.AF_INET, None, None, "", ("10.0.0.5", 0))]
+        check_url("http://Papers.INTERNAL/x", allow_private_hosts=("papers.internal",))
+
+
+def test_allowlist_hostname_is_exact_not_a_suffix_match():
+    """``papers.internal`` must not admit ``evil-papers.internal``."""
+    with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
+        gai.return_value = [(socket.AF_INET, None, None, "", ("10.0.0.5", 0))]
+        with pytest.raises(SafeHTTPError, match="non-public address"):
+            check_url(
+                "http://evil-papers.internal/x",
+                allow_private_hosts=("papers.internal",),
+            )
+
+
+def test_allowlist_does_not_bypass_the_scheme_gate():
+    with pytest.raises(SafeHTTPError, match="scheme"):
+        check_url("ftp://papers.internal/x", allow_private_hosts=("papers.internal",))
+
+
+def test_allowlist_malformed_cidr_is_a_loud_error():
+    """A typo'd CIDR must not silently degrade into "entry ignored" — that
+    failure mode looks exactly like an SSRF refusal of the mirror it was
+    supposed to admit."""
+    with pytest.raises(SafeHTTPError, match="invalid allow_private_hosts"):
+        check_url("http://8.8.8.8/", allow_private_hosts=("10.0.0.0/33",))
+
+
+def test_safe_get_redirect_to_allowlisted_private_host_is_followed():
+    """The allowlist is threaded into per-hop revalidation: a public host
+    redirecting onto an allowlisted mirror is followed, not refused."""
+    transport = _transport({
+        "/start": httpx.Response(302, headers={"location": "http://192.168.1.20/paper"}),
+        "/paper": httpx.Response(200, content=b"mirror content"),
+    })
+    resp = safe_get(
+        "http://8.8.8.8/start", max_bytes=1024, transport=transport,
+        allow_private_hosts=("192.168.1.20",),
+    )
+    assert resp.content == b"mirror content"
