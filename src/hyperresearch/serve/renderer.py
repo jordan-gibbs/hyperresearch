@@ -5,6 +5,43 @@ from __future__ import annotations
 import html
 import re
 
+# Schemes a note body is allowed to link out to. Note bodies are fetched page
+# content, so a URL in one is attacker-influenced: `javascript:` and `data:`
+# both turn a rendered link into script execution in the viewer's origin.
+# Relative and anchor targets carry no scheme and are always fine.
+SAFE_URL_SCHEMES = frozenset({"http", "https", "mailto", "ftp"})
+
+_SCHEME_RE = re.compile(r"^\s*([a-zA-Z][a-zA-Z0-9+.\-]*)\s*:")
+
+
+def _is_safe_url(url: str) -> bool:
+    """True unless `url` carries a scheme outside the allowlist.
+
+    HTML entity decoding matters here: the URL has already been through
+    `html.escape`, and a browser resolves `&#106;avascript:` back to
+    `javascript:` when it parses the attribute.
+    """
+    probe = html.unescape(url).replace("\x00", "")
+    # Browsers ignore control characters embedded in a scheme (`java\nscript:`).
+    probe = "".join(c for c in probe if ord(c) > 0x20 or c == " ")
+    m = _SCHEME_RE.match(probe)
+    if m is None:
+        return True  # relative path, anchor, or protocol-relative URL
+    return m.group(1).lower() in SAFE_URL_SCHEMES
+
+
+def _link(url: str, text: str) -> str:
+    if not _is_safe_url(url):
+        return text  # keep the label, drop the link
+    return f'<a href="{url}">{text}</a>'
+
+
+def _image(url: str, alt: str) -> str:
+    if not _is_safe_url(url):
+        return alt
+    return f'<img src="{url}" alt="{alt}">'
+
+
 # Simple markdown patterns
 MD_PATTERNS = [
     # Headers
@@ -21,9 +58,9 @@ MD_PATTERNS = [
     # Code
     (re.compile(r"`([^`]+)`"), r"<code>\1</code>"),
     # Links
-    (re.compile(r"\[([^\]]+)\]\(([^)]+)\)"), r'<a href="\2">\1</a>'),
+    (re.compile(r"\[([^\]]+)\]\(([^)]+)\)"), lambda m: _link(m.group(2), m.group(1))),
     # Images
-    (re.compile(r"!\[([^\]]*)\]\(([^)]+)\)"), r'<img src="\2" alt="\1">'),
+    (re.compile(r"!\[([^\]]*)\]\(([^)]+)\)"), lambda m: _image(m.group(2), m.group(1))),
     # Horizontal rule
     (re.compile(r"^---+$", re.MULTILINE), r"<hr>"),
     # Blockquotes

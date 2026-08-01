@@ -41,6 +41,9 @@ _HOST_DELAY = {
     "api.openalex.org": 0.15,
     "api.semanticscholar.org": 1.1,
     "api.crossref.org": 0.15,
+    # Open-access resolution (core/oa.py) shares this cache and rate limiter.
+    "api.unpaywall.org": 0.15,
+    "www.ebi.ac.uk": 0.2,
 }
 _last_call: dict[str, float] = {}
 

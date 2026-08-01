@@ -143,6 +143,36 @@ class LintSettings:
     stale_review_days: int = 90
 
 
+@dataclass(frozen=True)
+class ScholarSettings:
+    """Open-access full-text recovery ([scholar] section).
+
+    When a fetch lands a thin page that carries a DOI — a publisher abstract or
+    paywall interstitial — `core/oa.py` asks Unpaywall and Europe PMC for a
+    legal open-access copy and stores THAT text in the note body instead. The
+    swap is always disclosed: a banner at the top of the body, four `oa_*`
+    frontmatter fields, and a line in the fetch output.
+
+    `contact_email` is required by Unpaywall's terms of use. Leave it empty and
+    Unpaywall is skipped entirely; Europe PMC needs no key, so biomedical
+    recovery still works out of the box.
+    """
+
+    oa_recovery: bool = True
+    contact_email: str = ""
+    # A real paper body runs 20-80k chars; an abstract landing page runs 1-3k.
+    oa_min_full_text_chars: int = 6000
+    # Prefer the version of record over accepted manuscripts and preprints.
+    oa_prefer_published: bool = True
+    # Publishers 403 their own open-access PDFs often enough that one attempt
+    # loses papers sitting in a repository two candidates down.
+    oa_max_attempts: int = 3
+    # Also try when the source cannot be read AT ALL (403, login wall, bot
+    # wall). Separately switchable because such a note is made entirely of the
+    # open-access copy — nothing in it came from the URL that was asked for.
+    oa_rescue_blocked: bool = True
+
+
 def _build_section(section_cls, data: dict):
     """Build a frozen settings dataclass from a TOML section dict.
 
@@ -209,6 +239,7 @@ class VaultConfig:
     ranking: RankingSettings = field(default_factory=RankingSettings)
     embeddings: EmbeddingSettings = field(default_factory=EmbeddingSettings)
     chrome: ChromeSettings = field(default_factory=ChromeSettings)
+    scholar: ScholarSettings = field(default_factory=ScholarSettings)
 
     # Index
     auto_build_index: bool = True
@@ -257,6 +288,7 @@ class VaultConfig:
             ranking=_build_section(RankingSettings, data.get("ranking", {})),
             embeddings=_build_section(EmbeddingSettings, data.get("embeddings", {})),
             chrome=_build_section(ChromeSettings, data.get("chrome", {})),
+            scholar=_build_section(ScholarSettings, data.get("scholar", {})),
             auto_sync=sync.get("auto_sync", cls.auto_sync),
             exclude_patterns=sync.get("exclude_patterns", cls().exclude_patterns),
             auto_build_index=index.get("auto_build", cls.auto_build_index),
@@ -281,8 +313,9 @@ class VaultConfig:
             return f'"{value}"'
         return str(value)
 
-    def _section_lines(self, header: str, section) -> list[str]:
-        lines = [f"[{header}]"]
+    def _section_lines(self, header: str, section, preamble: tuple[str, ...] = ()) -> list[str]:
+        lines = [f"# {line}" if line else "#" for line in preamble]
+        lines.append(f"[{header}]")
         for f in fields(section):
             lines.append(f"{f.name} = {self._toml_value(getattr(section, f.name))}")
         lines.append("")
@@ -324,6 +357,35 @@ class VaultConfig:
         lines += self._section_lines("ranking", self.ranking)
         lines += self._section_lines("embeddings", self.embeddings)
         lines += self._section_lines("chrome", self.chrome)
+        lines += self._section_lines(
+            "scholar",
+            self.scholar,
+            preamble=(
+                "Open-access full-text recovery.",
+                "",
+                "When a fetch lands a thin page carrying a DOI (a publisher abstract or",
+                "paywall interstitial), hyperresearch asks Unpaywall and Europe PMC for a",
+                "legal open-access copy and stores THAT text in the note body instead.",
+                "",
+                "The note's `source:` still points at the URL you asked for. The body may",
+                "come from somewhere else. Every such note says so in a banner at the top",
+                "of its body and in `oa_url` / `oa_source` / `oa_version` frontmatter.",
+                "",
+                "contact_email: REQUIRED by Unpaywall's terms of use. Leave it empty and",
+                "Unpaywall is skipped; Europe PMC needs no key, so recovery over its",
+                "open-access subset still works. oa_recovery = false disables everything.",
+                "",
+                "A recovered copy is only accepted if it is both longer than the page we",
+                "already had and long enough to clear oa_min_full_text_chars, so a",
+                "repository record page cannot pass for full text.",
+                "",
+                "oa_rescue_blocked also runs this when the source cannot be read at all —",
+                "a 403, a login wall, a bot wall. Those notes are made ENTIRELY of the",
+                "open-access copy: the title and authors did not come from the source URL",
+                "either. They are marked `oa_recovery_kind: rescued`. Set this to false if",
+                "you would rather have no note than a note built from a substitute.",
+            ),
+        )
         lines += [
             "[sync]",
             f"auto_sync = {'true' if self.auto_sync else 'false'}",
@@ -339,4 +401,8 @@ class VaultConfig:
             lines += ["", f"[profile.{overlay_name}]"]
             lines += [f"{k} = {self._toml_value(v)}" for k, v in table.items()]
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_path.write_text("\n".join(lines) + "\n")
+        # Explicit UTF-8. TOML is UTF-8 by spec and `load` reads it as such, so
+        # taking the platform default here (cp1252 on Windows) writes a file
+        # this same class cannot read back the moment any value or comment
+        # carries a non-ASCII character.
+        config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

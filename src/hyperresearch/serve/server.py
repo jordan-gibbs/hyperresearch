@@ -517,7 +517,17 @@ class HyperresearchHandler(BaseHTTPRequestHandler):
             return
         body += f"<p>{len(results)} results</p>\n<div class='results'>\n"
         for r in results:
-            snippet = r["snippet"].replace(">>>", "<mark>").replace("<<<", "</mark>")
+            # Escape BEFORE substituting the markers, so the <mark> tags are the
+            # only markup that survives. The snippet is note body text, which for
+            # a fetched note is remote page content, and strip_markdown() does not
+            # neutralize it: its tag regex needs a closing ">", so an unterminated
+            # "<img src=x onerror=..." passes through whole and the ">" of the
+            # </mark> we inject here would finish the tag for it.
+            snippet = (
+                html_mod.escape(r["snippet"])
+                .replace("&gt;&gt;&gt;", "<mark>")
+                .replace("&lt;&lt;&lt;", "</mark>")
+            )
             body += (
                 f'<div class="result"><div class="title">'
                 f'<a href="/note/{html_mod.escape(r["id"])}">{html_mod.escape(r["title"])}</a></div>'
