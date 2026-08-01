@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Two safety fixes in the viewer and the installer
+
+- **Stored XSS in `hpr serve` (#72, reported by @letospace).** `_serve_search` escaped every interpolated value except the FTS snippet, and the snippet is note body text — remote page content, for a fetched note. `strip_markdown` was not a defense: its tag regex needs a closing `>`, so an unterminated `<img src=x onerror=...` passed into `body_plain` intact, and the `>` of the `</mark>` the search page injects finished the tag. The snippet is escaped before the markers are substituted now, so the `<mark>` tags are the only markup that survives. Bounded by the server binding `127.0.0.1` and being read-only, but the script ran same-origin with the wiki and could read every note the viewer could reach. Link and image URLs in the renderer also got a scheme allowlist, so a note body can no longer render a `javascript:` or `data:` link.
+- **`install --global` deleted `~/.claude/skills/research/` on a name match alone (#73, reported by @letospace).** `research` is an ordinary word and an obvious name for a hand-written personal skill, and `--global` puts the prune in a user-level directory shared across every project, so anyone with one lost it silently on their first upgrade. A marker file cannot fix this — the directories being pruned predate any marker we could have written — so the check is on the content we shipped into them: every `SKILL.md` this project has ever installed names the project. Anything else is left alone and reported in the install output, which previously listed what it installed but never what it deleted.
+
 ### Open-access full-text recovery (Unpaywall + Europe PMC)
 
 A paywalled paper used to enter the vault as an abstract. `extract_doi` stamped the DOI, the junk gate passed the landing page (an abstract is not junk), and depth investigators then reasoned over ~1,500 characters while the report cited the work as though the paper had been read.
