@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hyperresearch"
-version = "0.9.1"
+version = "0.10.0"
 description = "Claude Code harness for disciplined, adversarially-audited deep research with full provenance."
 readme = "README.md"
 license = "MIT"
@@ -35,7 +35,11 @@ dependencies = [
 
 [project.optional-dependencies]
 crawl4ai = ["Crawl4AI>=0.7.3"]
-mcp = ["mcp>=1.6"]
+# Upper-bounded on purpose: mcp 2.0 removed `mcp.server.fastmcp`, which
+# `hyperresearch/mcp/server.py` builds every tool on. Without the bound a
+# fresh `pip install hyperresearch[mcp]` resolves 2.x and `hyperresearch mcp`
+# dies on import, reporting the extra as missing when it is in fact installed.
+mcp = ["mcp>=1.6,<2"]
 exa = ["exa-py>=2.0.0"]
 tavily = ["tavily-python>=0.3"]
 watch = ["watchdog>=4.0"]
@@ -46,7 +50,7 @@ dev = [
     "ruff>=0.3",
     "mypy>=1.8",
     "exa-py>=2.0.0",
-    "mcp>=1.6",
+    "mcp>=1.6,<2",
     "types-PyYAML>=6.0.12",
     "watchdog>=4.0",
 ]

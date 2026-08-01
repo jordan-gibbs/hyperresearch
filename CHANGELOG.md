@@ -2,31 +2,7 @@
 
 ## [Unreleased]
 
-- **Browser setup installs (and pre-checks) patchright's chromium when
-  patchright is present.** The stealth adapter (`UndetectedAdapter`) launches
-  patchright's pinned chromium, which lives in a separate registry from plain
-  playwright's, so `playwright install chromium` alone produces a machine
-  where every preflight passes and every browser fetch dies at launch with a
-  missing-executable error, while the PDF lane keeps working. Both setup
-  surfaces (`hyperresearch setup` and `install`) now check against the stack
-  the provider actually launches and prefer `python -m patchright install
-  chromium`, falling back to plain playwright for non-stealth installs; the
-  manual-install hint names both commands.
-- **Collision note ids survive the frontmatter re-parse** (an orphan-note
-  foreign-key crash). `write_note()` appended `-2` to a slug already sitting on
-  `slugify()`'s 80-char cap, producing an 82-char id whose next parse
-  re-slugified it back under the cap: the suffix fell off, the second note
-  collapsed into the base id, sync refused the duplicate, and the `sources`
-  insert died with `IntegrityError: FOREIGN KEY constraint failed`, leaving the
-  `.md` file on disk but permanently unregistered. Collision ids are now built
-  by trimming the base so base+suffix fits both the 80-char and 200-byte caps,
-  then normalized once, so the disk id equals its own re-parse; short-title
-  collisions keep their existing `-2` ids, so existing vaults do not shift.
-
-### Two safety fixes in the viewer and the installer
-
-- **Stored XSS in `hpr serve` (#72, reported by @letospace).** `_serve_search` escaped every interpolated value except the FTS snippet, and the snippet is note body text — remote page content, for a fetched note. `strip_markdown` was not a defense: its tag regex needs a closing `>`, so an unterminated `<img src=x onerror=...` passed into `body_plain` intact, and the `>` of the `</mark>` the search page injects finished the tag. The snippet is escaped before the markers are substituted now, so the `<mark>` tags are the only markup that survives. Bounded by the server binding `127.0.0.1` and being read-only, but the script ran same-origin with the wiki and could read every note the viewer could reach. Link and image URLs in the renderer also got a scheme allowlist, so a note body can no longer render a `javascript:` or `data:` link.
-- **`install --global` deleted `~/.claude/skills/research/` on a name match alone (#73, reported by @letospace).** `research` is an ordinary word and an obvious name for a hand-written personal skill, and `--global` puts the prune in a user-level directory shared across every project, so anyone with one lost it silently on their first upgrade. A marker file cannot fix this — the directories being pruned predate any marker we could have written — so the check is on the content we shipped into them: every `SKILL.md` this project has ever installed names the project. Anything else is left alone and reported in the install output, which previously listed what it installed but never what it deleted.
+## [0.10.0] - 2026-08-01
 
 ### Open-access full-text recovery (Unpaywall + Europe PMC)
 
@@ -45,6 +21,37 @@ A paywalled paper used to enter the vault as an abstract. `extract_doi` stamped 
 - **Rescue needs a DOI and there is no page to read one out of**, so it fires only when the DOI is in the URL (a `doi.org` link) or in a wall page's `citation_doi` meta tag. A wall page's body text is never trusted for a DOI. This limit is documented rather than papered over.
 - **Schema v11** adds the four `oa_*` columns and **v12** adds `oa_recovery_kind`, both additive and idempotent. Two versions rather than one: v11 is idempotent by column name, so a database already stamped v11 would have skipped a late-added fifth column forever. Existing notes keep NULLs — there is no way to know after the fact whether an old note's body came from its source URL.
 - **Config files are now written as UTF-8 explicitly.** `VaultConfig.save` took the platform default, so on Windows a single non-ASCII character in any comment or value produced a `config.toml` that `VaultConfig.load` — which reads it as UTF-8, per the TOML spec — could not parse. Latent until this branch's comments happened to be the first non-ASCII bytes in the file.
+
+### Two safety fixes in the viewer and the installer
+
+- **Stored XSS in `hpr serve` (#72, reported by @letospace).** `_serve_search` escaped every interpolated value except the FTS snippet, and the snippet is note body text — remote page content, for a fetched note. `strip_markdown` was not a defense: its tag regex needs a closing `>`, so an unterminated `<img src=x onerror=...` passed into `body_plain` intact, and the `>` of the `</mark>` the search page injects finished the tag. The snippet is escaped before the markers are substituted now, so the `<mark>` tags are the only markup that survives. Bounded by the server binding `127.0.0.1` and being read-only, but the script ran same-origin with the wiki and could read every note the viewer could reach. Link and image URLs in the renderer also got a scheme allowlist, so a note body can no longer render a `javascript:` or `data:` link.
+- **`install --global` deleted `~/.claude/skills/research/` on a name match alone (#73, reported by @letospace).** `research` is an ordinary word and an obvious name for a hand-written personal skill, and `--global` puts the prune in a user-level directory shared across every project, so anyone with one lost it silently on their first upgrade. A marker file cannot fix this — the directories being pruned predate any marker we could have written — so the check is on the content we shipped into them: every `SKILL.md` this project has ever installed names the project. Anything else is left alone and reported in the install output, which previously listed what it installed but never what it deleted.
+
+### Contributed fixes
+
+- **Browser setup installs (and pre-checks) patchright's chromium when
+  patchright is present.** The stealth adapter (`UndetectedAdapter`) launches
+  patchright's pinned chromium, which lives in a separate registry from plain
+  playwright's, so `playwright install chromium` alone produces a machine
+  where every preflight passes and every browser fetch dies at launch with a
+  missing-executable error, while the PDF lane keeps working. Both setup
+  surfaces (`hyperresearch setup` and `install`) now check against the stack
+  the provider actually launches and prefer `python -m patchright install
+  chromium`, falling back to plain playwright for non-stealth installs; the
+  manual-install hint names both commands. Thanks @fduple (#67).
+- **Collision note ids survive the frontmatter re-parse** (an orphan-note
+  foreign-key crash). `write_note()` appended `-2` to a slug already sitting on
+  `slugify()`'s 80-char cap, producing an 82-char id whose next parse
+  re-slugified it back under the cap: the suffix fell off, the second note
+  collapsed into the base id, sync refused the duplicate, and the `sources`
+  insert died with `IntegrityError: FOREIGN KEY constraint failed`, leaving the
+  `.md` file on disk but permanently unregistered. Collision ids are now built
+  by trimming the base so base+suffix fits both the 80-char and 200-byte caps,
+  then normalized once, so the disk id equals its own re-parse; short-title
+  collisions keep their existing `-2` ids, so existing vaults do not shift.
+  Thanks @fduple (#66).
+- **The `mcp` extra is upper-bounded to `<2`.** mcp 2.0 removed `mcp.server.fastmcp`, which every tool in `hyperresearch/mcp/server.py` is built on, so an unbounded `pip install hyperresearch[mcp]` resolved 2.x and `hyperresearch mcp` died on import while reporting the extra as missing. All 13 tools verified against 1.29.0.
+- **Test isolation for the process-global render context.** `install_hooks()` sets a module-level profile context that direct `_install_*` calls reuse, so a test installing with a profile overlay leaked its numbers into every later install in the same process. Confirmed outside the suite too: a clean vault rendered another vault's `source_min`. Thanks @fduple (#65).
 
 ## [0.9.1] - 2026-07-25
 
