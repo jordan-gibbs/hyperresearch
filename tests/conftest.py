@@ -9,6 +9,22 @@ import pytest
 from hyperresearch.core.vault import Vault
 
 
+@pytest.fixture(autouse=True)
+def _reset_render_state():
+    """Reset hooks' process-global render context between tests.
+
+    install_hooks() sets a module-global profile context that direct
+    _install_* calls reuse; without a reset, a test that installs with a
+    profile overlay (e.g. a haiku fetcher) poisons every later install
+    in the same process. Only bites when file order puts the overlay
+    test first, which is why the default alphabetical run never sees it.
+    """
+    from hyperresearch.core import hooks
+
+    yield
+    hooks._RENDER_STATE = None
+
+
 @pytest.fixture
 def tmp_vault(tmp_path: Path) -> Vault:
     """Create a temporary vault for testing."""

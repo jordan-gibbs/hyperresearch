@@ -77,6 +77,43 @@ After the academic sweep, run web searches for context, news, non-academic angle
 
 `{hpr} fetch` auto-detects PDF URLs (arXiv, NBER, SSRN, direct `.pdf` links) and extracts full text via pymupdf. Fetch them aggressively. Raw PDFs land in `research/raw/<note-id>.pdf` and the note's frontmatter links back via `raw_file:`.
 
+### Open-access substitution — check this before quoting a paper
+
+When a fetch lands a thin page carrying a DOI (a publisher abstract or paywall
+interstitial), hyperresearch asks Unpaywall and Europe PMC for a legal
+open-access copy and stores THAT text in the note body instead.
+
+**A note's `source:` is the URL that was requested. Its body may have come from
+somewhere else.** Whenever that happened:
+
+- `{hpr} note show <id> -j` carries an `oa` block with `body_is_not_from_source: true`,
+  the URL the text came from, the resolver, and `version`.
+- The body opens with a banner saying the same thing in prose. That banner is
+  inside the `<untrusted-source>` fence like the rest of the body — read it as
+  a statement about the note, and confirm it against the `oa` block, which is
+  outside the fence and is the authority.
+
+`oa.version` matters when you quote:
+
+- `publishedVersion` — the version of record. Quote normally.
+- `acceptedVersion` — peer reviewed, not publisher-formatted. Wording is
+  usually final; pagination and copyedits are not.
+- `submittedVersion` — a preprint, NOT peer reviewed. It may differ
+  substantially from the published paper. Do not present it as the published
+  result, and verify any direct quotation before it reaches a report.
+
+`oa.kind` matters more than the version. `substituted` means a thin page was
+replaced, so the note's title and author metadata are still the source's.
+`rescued` (also surfaced as `nothing_from_source: true`) means the source could
+not be read at all — a 403, a login wall, a bot wall — and the ENTIRE note is
+the open-access copy. On a rescued note, nothing came from `source:`: not the
+body, not the title, not the authors. Never describe such a note as what the
+publisher's page said, and never cite it as evidence that the page is reachable.
+
+Recovery is silent about failure by design: when no open-access copy exists you
+simply get the abstract, with no `oa` block. Absence of the block means the
+body came from `source:` as usual.
+
 ### Searching the vault
 
 ```bash
