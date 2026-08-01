@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
@@ -57,7 +57,10 @@ CREATE TABLE IF NOT EXISTS notes (
     oa_url           TEXT,
     oa_source        TEXT,
     oa_version       TEXT,
-    oa_license       TEXT
+    oa_license       TEXT,
+    -- v12. substituted = a thin page was replaced; rescued = the source was
+    -- never read at all and the whole note is the open-access copy.
+    oa_recovery_kind TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_notes_status ON notes(status);

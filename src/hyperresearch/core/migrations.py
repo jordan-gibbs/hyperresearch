@@ -253,6 +253,22 @@ def _migrate_v11_oa_recovery(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE notes ADD COLUMN {name} TEXT")
 
 
+def _migrate_v12_oa_recovery_kind(conn: sqlite3.Connection) -> None:
+    """Distinguish a substitution from a rescue. Additive, idempotent.
+
+    A separate version rather than a fifth column folded into v11: the v11
+    migration is idempotent by column name, so a database already stamped v11
+    would skip the new column entirely and never gain it.
+
+    Notes written by v11 keep NULL. They are all substitutions — rescue did not
+    exist yet — but they are left unstamped rather than backfilled, because the
+    frontmatter on disk is the record and a migration cannot rewrite that.
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(notes)")}
+    if "oa_recovery_kind" not in existing:
+        conn.execute("ALTER TABLE notes ADD COLUMN oa_recovery_kind TEXT")
+
+
 MIGRATIONS: dict[int, str | Callable[[sqlite3.Connection], None]] = {
     2: """
 CREATE TABLE IF NOT EXISTS tag_aliases (
@@ -300,6 +316,7 @@ CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
     9: _migrate_v9_source_ranking,
     10: _MIGRATE_V10_ESCALATIONS_SQL,
     11: _migrate_v11_oa_recovery,
+    12: _migrate_v12_oa_recovery_kind,
 }
 
 

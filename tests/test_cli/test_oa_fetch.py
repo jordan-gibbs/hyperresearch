@@ -45,6 +45,32 @@ class _AbstractOnlyProvider:
         return [self.fetch(u) for u in urls]
 
 
+class _BlockedProvider:
+    """The publisher refuses outright — no page, no abstract, nothing."""
+
+    name = "fake-blocked"
+
+    def fetch(self, url):
+        raise RuntimeError("Client error '403 Forbidden'")
+
+    def fetch_many(self, urls):
+        raise RuntimeError("Client error '403 Forbidden'")
+
+
+class _LoginWallProvider:
+    name = "fake-wall"
+
+    def fetch(self, url):
+        return WebResult(
+            url=url,
+            title="Sign in to continue",
+            content="Please sign in to your institution to continue.",
+        )
+
+    def fetch_many(self, urls):
+        return [self.fetch(u) for u in urls]
+
+
 @pytest.fixture
 def vault_dir(tmp_path: Path, monkeypatch) -> Path:
     result = runner.invoke(app, ["init", str(tmp_path / "kb"), "--name", "OA Test"])
@@ -157,6 +183,105 @@ def test_plain_note_has_no_oa_block(vault_dir: Path, monkeypatch):
         runner.invoke(app, ["note", "show", fetched["note_id"], "--json"]).output
     )["data"]
     assert "oa" not in shown
+
+
+def test_blocked_fetch_is_rescued(vault_dir: Path, monkeypatch):
+    """A 403 used to lose the paper entirely — the fetch aborted long before
+    recovery ran. The DOI is in the URL and a legal copy exists, so it should
+    produce a note instead."""
+    os.chdir(vault_dir)
+    monkeypatch.setattr("hyperresearch.web.base.get_provider", lambda *a, **k: _BlockedProvider())
+
+    result = runner.invoke(app, ["fetch", PAPER_URL, "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)["data"]
+
+    assert data["oa"]["kind"] == "rescued"
+    assert data["oa"]["nothing_from_source"] is True
+    assert "403" in data["oa"]["blocked_reason"]
+
+    meta, body = _read_note(vault_dir, data["note_id"])
+    assert meta.source == PAPER_URL          # still what was asked for
+    assert meta.doi == "10.1234/abc"         # taken from the URL, not the body
+    assert meta.oa_recovery_kind == "rescued"
+    assert meta.source_domain == "doi.org"   # not the substitute's host
+    assert body.startswith("> [!] **Recovered from an open-access copy.")
+    assert "NOTHING in this note came from the source URL" in body
+
+    shown = json.loads(
+        runner.invoke(app, ["note", "show", data["note_id"], "--json"]).output
+    )["data"]
+    assert shown["oa"]["kind"] == "rescued"
+    assert shown["oa"]["nothing_from_source"] is True
+
+
+def test_login_wall_is_rescued_instead_of_escalated(vault_dir: Path, monkeypatch):
+    os.chdir(vault_dir)
+    monkeypatch.setattr("hyperresearch.web.base.get_provider", lambda *a, **k: _LoginWallProvider())
+
+    result = runner.invoke(app, ["fetch", PAPER_URL, "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)["data"]
+    assert data["oa"]["kind"] == "rescued"
+    assert "login wall" in data["oa"]["blocked_reason"]
+
+    # Nothing queued for the human — we already have the paper.
+    queued = json.loads(
+        runner.invoke(app, ["escalation", "list", "--status", "queued", "--json"]).output
+    )["data"]
+    assert not queued["items"]
+
+
+def test_blocked_fetch_without_a_copy_still_fails(vault_dir: Path, monkeypatch):
+    """The invariant holds: rescue only ever turns a failure into a note. When
+    no copy exists the command fails exactly as it always did."""
+    os.chdir(vault_dir)
+    from hyperresearch.core import scholar
+
+    monkeypatch.setattr("hyperresearch.web.base.get_provider", lambda *a, **k: _BlockedProvider())
+    monkeypatch.setattr(scholar, "_http_get_json", lambda url: None)
+
+    result = runner.invoke(app, ["fetch", PAPER_URL, "--json"])
+    assert result.exit_code == 1
+    assert json.loads(result.output)["error_code"] == "FETCH_ERROR"
+
+
+def test_batch_rescues_blocked_urls_and_clears_them_from_failures(
+    vault_dir: Path, monkeypatch
+):
+    """Batch is where this matters most — the pipeline fetches in waves, so one
+    bot-walled publisher drops a whole cluster at once."""
+    os.chdir(vault_dir)
+    monkeypatch.setattr("hyperresearch.web.base.get_provider", lambda *a, **k: _BlockedProvider())
+
+    result = runner.invoke(app, ["fetch-batch", PAPER_URL, "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)["data"]
+
+    assert data["oa_rescued"] == 1
+    assert data["failed_urls"] == []  # rescued, therefore no longer lost
+    note = data["notes_created"][0]
+    assert note["oa"]["kind"] == "rescued"
+
+    meta, body = _read_note(vault_dir, note["note_id"])
+    assert meta.source == PAPER_URL
+    assert meta.oa_recovery_kind == "rescued"
+    assert "NOTHING in this note came from the source URL" in body
+
+
+def test_rescue_can_be_switched_off(vault_dir: Path, monkeypatch):
+    os.chdir(vault_dir)
+    cfg = vault_dir / ".hyperresearch" / "config.toml"
+    cfg.write_text(
+        cfg.read_text(encoding="utf-8").replace(
+            "oa_rescue_blocked = true", "oa_rescue_blocked = false"
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("hyperresearch.web.base.get_provider", lambda *a, **k: _BlockedProvider())
+
+    result = runner.invoke(app, ["fetch", PAPER_URL, "--json"])
+    assert result.exit_code == 1
 
 
 def test_recovery_is_off_without_an_email(tmp_path: Path, monkeypatch):

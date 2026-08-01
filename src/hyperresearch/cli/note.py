@@ -197,12 +197,22 @@ def note_show(
         # is still the URL that was requested; `oa_url` is where the body came
         # from. See core/oa.py.
         if "oa_url" in row.keys() and row["oa_url"]:  # noqa: SIM118
+            kind = (
+                row["oa_recovery_kind"]
+                if "oa_recovery_kind" in row.keys()  # noqa: SIM118
+                else None
+            )
             data["oa"] = {
                 "url": row["oa_url"],
                 "resolver": row["oa_source"],
                 "version": row["oa_version"],
                 "license": row["oa_license"],
                 "body_is_not_from_source": True,
+                # "rescued" is the stronger claim: the source URL was never
+                # read, so the title and authors are the open-access copy's
+                # too. "substituted" means only the body was replaced.
+                "kind": kind,
+                "nothing_from_source": kind == "rescued",
             }
         if not meta:
             body = row["body"]

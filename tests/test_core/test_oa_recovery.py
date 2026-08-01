@@ -238,7 +238,44 @@ class TestDisclosure:
 
     def test_frontmatter_omits_unknown_fields(self):
         loc = oa.OALocation(url="https://a/p.pdf", resolver="europepmc", kind="pdf")
-        assert oa.oa_frontmatter(loc) == {"oa_url": "https://a/p.pdf", "oa_source": "europepmc"}
+        assert oa.oa_frontmatter(loc) == {
+            "oa_url": "https://a/p.pdf",
+            "oa_source": "europepmc",
+            "oa_recovery_kind": "substituted",
+        }
+
+    def test_rescue_notice_says_nothing_came_from_the_source(self):
+        """The rescue banner makes the stronger claim, because it is true: the
+        source was never read, so the title and authors are the copy's too."""
+        loc = oa.OALocation(
+            url="https://repo.example.org/p.xml", resolver="europepmc", kind="jats",
+            version="publishedVersion",
+        )
+        text = oa.recovery_notice(
+            loc, "https://publisher.example.com/x", 0, blocked_reason="fetch failed: 403"
+        )
+        assert "never read" in text
+        assert "NOTHING in this note came from the source URL" in text
+        assert "fetch failed: 403" in text
+        # The substitution wording, which would understate this, must be absent.
+        assert "which returned only" not in text
+
+    def test_rescue_notice_stays_inside_the_blockquote(self):
+        """A multi-line reason would drop the rest of the banner out of the
+        blockquote and render it as body text. httpx errors are multi-line."""
+        loc = oa.OALocation(url="https://a/p.pdf", resolver="unpaywall", kind="pdf")
+        text = oa.recovery_notice(
+            loc,
+            "https://p/x",
+            0,
+            blocked_reason="Client error '403 Forbidden'\nFor more information check: "
+            "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/403",
+        )
+        assert all(line.startswith(">") for line in text.strip().splitlines())
+
+    def test_rescue_frontmatter_is_distinguishable(self):
+        loc = oa.OALocation(url="https://a/p.pdf", resolver="unpaywall", kind="pdf")
+        assert oa.oa_frontmatter(loc, kind="rescued")["oa_recovery_kind"] == "rescued"
 
 
 class TestRecoverFullText:
@@ -473,6 +510,67 @@ class TestEpmcRecovery:
         assert out is original and loc is None
 
 
+class TestRescueFullText:
+    """The blocked-source path: no result at all, so there is nothing to beat
+    and no original to fall back to."""
+
+    @pytest.fixture
+    def vault(self, tmp_vault):
+        tmp_vault.config.scholar = ScholarSettings(contact_email="a@b.co")
+        return tmp_vault
+
+    def _stub_pdf(self, monkeypatch, returned):
+        from hyperresearch.web import crawl4ai_provider
+
+        monkeypatch.setattr(crawl4ai_provider, "_fetch_pdf", lambda url, settings: returned)
+
+    def test_recovers_with_no_original_to_beat(self, vault, monkeypatch, public_dns):
+        _stub_http(monkeypatch, {"unpaywall": UNPAYWALL_PDF})
+        self._stub_pdf(monkeypatch, _result(FULL_TEXT))
+        out, loc = oa.rescue_full_text(vault, None, "https://p.example.com/x", "10.1/x")
+        assert loc is not None and loc.resolver == "unpaywall"
+        assert out.content == FULL_TEXT
+
+    def test_still_requires_real_full_text(self, vault, monkeypatch, public_dns):
+        """With no original to beat, the length floor is the only thing standing
+        between a record page and the vault. It has to hold."""
+        _stub_http(monkeypatch, {"unpaywall": UNPAYWALL_PDF})
+        self._stub_pdf(monkeypatch, _result("Title, authors, and a summary. " * 60))  # ~1.8k
+        out, loc = oa.rescue_full_text(vault, None, "https://p/x", "10.1/x")
+        assert out is None and loc is None
+
+    def test_no_doi_is_a_no_op(self, vault, monkeypatch):
+        calls = _stub_http(monkeypatch, {"unpaywall": UNPAYWALL_PDF})
+        assert oa.rescue_full_text(vault, None, "https://p/x", None) == (None, None)
+        assert calls == []
+
+    def test_switchable_independently_of_recovery(self, tmp_vault, monkeypatch):
+        tmp_vault.config.scholar = ScholarSettings(
+            contact_email="a@b.co", oa_rescue_blocked=False
+        )
+        calls = _stub_http(monkeypatch, {"unpaywall": UNPAYWALL_PDF})
+        assert oa.rescue_full_text(tmp_vault, None, "https://p/x", "10.1/x") == (None, None)
+        assert calls == []
+
+    def test_disabling_recovery_disables_rescue_too(self, tmp_vault, monkeypatch):
+        tmp_vault.config.scholar = ScholarSettings(oa_recovery=False, contact_email="a@b.co")
+        calls = _stub_http(monkeypatch, {"unpaywall": UNPAYWALL_PDF})
+        assert oa.rescue_full_text(tmp_vault, None, "https://p/x", "10.1/x") == (None, None)
+        assert calls == []
+
+    def test_unsafe_url_is_refused(self, vault, monkeypatch):
+        payload = {
+            "is_oa": True,
+            "best_oa_location": {"url_for_pdf": "http://169.254.169.254/latest/meta-data"},
+        }
+        _stub_http(monkeypatch, {"unpaywall": payload})
+        monkeypatch.setattr(
+            oa.socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("169.254.169.254", 0))]
+        )
+        self._stub_pdf(monkeypatch, _result(FULL_TEXT))
+        assert oa.rescue_full_text(vault, None, "https://p/x", "10.1/x") == (None, None)
+
+
 class TestMigration:
     def test_adds_columns_and_is_idempotent(self):
         import sqlite3
@@ -492,6 +590,25 @@ class TestMigration:
         # an old note's body came from its source URL.
         assert conn.execute("SELECT oa_url FROM notes WHERE id='old-note'").fetchone()[0] is None
 
+    def test_v12_adds_the_kind_column_separately(self):
+        """v12 rather than a fifth column in v11: v11 is idempotent by column
+        name, so a database already stamped v11 would never gain it."""
+        import sqlite3
+
+        from hyperresearch.core.migrations import (
+            _migrate_v11_oa_recovery,
+            _migrate_v12_oa_recovery_kind,
+        )
+
+        conn = sqlite3.connect(":memory:")
+        conn.execute("CREATE TABLE notes (id TEXT PRIMARY KEY, title TEXT)")
+        _migrate_v11_oa_recovery(conn)
+        _migrate_v12_oa_recovery_kind(conn)
+        _migrate_v12_oa_recovery_kind(conn)  # re-running must not raise
+
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(notes)")}
+        assert "oa_recovery_kind" in cols
+
 
 class TestConfigSection:
     def test_defaults(self, tmp_path):
@@ -502,6 +619,7 @@ class TestConfigSection:
         assert cfg.scholar.oa_recovery is True
         assert cfg.scholar.contact_email == ""
         assert cfg.scholar.oa_min_full_text_chars == 6000
+        assert cfg.scholar.oa_rescue_blocked is True
 
     def test_override_and_roundtrip(self, tmp_path):
         from hyperresearch.core.config import VaultConfig

@@ -119,6 +119,10 @@ class NoteMeta(BaseModel):
     oa_source: str | None = None         # Resolver: unpaywall | europepmc
     oa_version: str | None = None        # publishedVersion | acceptedVersion | submittedVersion
     oa_license: str | None = None        # Licence reported by the resolver, when known
+    # substituted = a thin page was replaced. rescued = the source could not be
+    # read at all, so the ENTIRE note (title and authors included) is the
+    # open-access copy and nothing in it came from `source`.
+    oa_recovery_kind: str | None = None
 
     @field_validator("tags", mode="before")
     @classmethod

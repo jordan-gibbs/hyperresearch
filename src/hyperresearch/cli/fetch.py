@@ -307,66 +307,119 @@ def fetch(
     if not json_output:
         console.print(f"[dim]Fetching with {prov.name}...[/]")
 
+    # Open-access rescue for blocked sources. A 403, a login wall or a bot wall
+    # is where a paywalled paper is most completely lost — and, since the DOI
+    # identifies the work rather than the host, most likely to have a legal
+    # open-access copy sitting somewhere else. `_rescue` returns a usable result
+    # or None; when it returns None every block below behaves exactly as before.
+    from hyperresearch.core.oa import (
+        oa_frontmatter,
+        recover_full_text,
+        recovery_notice,
+        rescue_full_text,
+    )
+    from hyperresearch.core.scholar import extract_doi
+
+    rescue_reason: str | None = None
+    rescue_doi: str | None = None
+    oa_location = None
+
+    def _rescue(reason: str, raw_html: str | None):
+        """Attempt an OA rescue. Returns a WebResult or None."""
+        # URL and meta tags only — never the blocked page's body text, which on
+        # a captcha or error page carries no DOI worth trusting.
+        doi = extract_doi(url, raw_html, None)
+        rescued, loc = rescue_full_text(vault, prov, url, doi)
+        if rescued is None:
+            return None
+        nonlocal rescue_reason, oa_location, rescue_doi
+        rescue_reason, oa_location, rescue_doi = reason, loc, doi
+        if not json_output:
+            console.print(
+                f"[cyan]Source blocked — recovered an open-access copy[/] "
+                f"({loc.resolver}, {len(rescued.content or ''):,} chars)"
+            )
+        return rescued
+
     try:
         result = prov.fetch(url)
     except Exception as e:
-        if json_output:
-            output(error(str(e), "FETCH_ERROR"), json_mode=True)
-        else:
-            console.print(f"[red]Fetch failed:[/] {e}")
-        raise typer.Exit(1)
+        result = _rescue(f"fetch failed: {e}", None)
+        if result is None:
+            if json_output:
+                output(error(str(e), "FETCH_ERROR"), json_mode=True)
+            else:
+                console.print(f"[red]Fetch failed:[/] {e}")
+            raise typer.Exit(1)
 
     # Detect login redirects — abort, but ESCALATE to the browser lane
     # instead of silently losing the source.
-    if result.looks_like_login_wall(url, vault.config.junk):
-        item_id = _escalate_blocked(vault, url, "login_wall", tags, suggested_by, utility_score,
-                                    detail=f"login wall: {result.title}")
-        escalated = f" Queued for browser-lane escalation (#{item_id})." if item_id else ""
-        msg = (
-            f"Redirected to login page ({result.title}). "
-            "Try --visible flag (runs browser non-headless, sites are less aggressive). "
-            f"If that fails, re-create your login profile with 'hyperresearch setup'.{escalated}"
-        )
-        if json_output:
-            output(error(msg, "AUTH_REQUIRED_ESCALATED" if item_id else "AUTH_REQUIRED"), json_mode=True)
+    if oa_location is None and result.looks_like_login_wall(url, vault.config.junk):
+        rescued = _rescue(f"login wall: {result.title}", result.raw_html)
+        if rescued is not None:
+            result = rescued
         else:
-            console.print(f"[red]Auth required:[/] {msg}")
-        raise typer.Exit(1)
+            item_id = _escalate_blocked(vault, url, "login_wall", tags, suggested_by, utility_score,
+                                        detail=f"login wall: {result.title}")
+            escalated = f" Queued for browser-lane escalation (#{item_id})." if item_id else ""
+            msg = (
+                f"Redirected to login page ({result.title}). "
+                "Try --visible flag (runs browser non-headless, sites are less aggressive). "
+                f"If that fails, re-create your login profile with 'hyperresearch setup'.{escalated}"
+            )
+            if json_output:
+                output(error(msg, "AUTH_REQUIRED_ESCALATED" if item_id else "AUTH_REQUIRED"), json_mode=True)
+            else:
+                console.print(f"[red]Auth required:[/] {msg}")
+            raise typer.Exit(1)
 
     # Detect junk pages — captcha, error pages, binary garbage, empty content.
     # Bot-detection junk (Cloudflare/captcha walls) escalates to the browser
     # lane; content-quality junk (error pages, empty content) does not — a
     # 404 in Chrome is still a 404.
-    junk_reason = result.looks_like_junk(vault.config.junk)
+    junk_reason = result.looks_like_junk(vault.config.junk) if oa_location is None else None
     if junk_reason:
-        item_id = None
-        if junk_reason.startswith("Bot detection"):
-            reason = "captcha" if "captcha" in junk_reason.lower() else "bot_block"
-            item_id = _escalate_blocked(vault, url, reason, tags, suggested_by, utility_score,
-                                        detail=junk_reason)
-        escalated = f" Queued for browser-lane escalation (#{item_id})." if item_id else ""
-        msg = f"Skipped junk content from {url}: {junk_reason}.{escalated}"
-        if json_output:
-            output(error(msg, "JUNK_ESCALATED" if item_id else "JUNK_CONTENT"), json_mode=True)
+        rescued = _rescue(junk_reason, result.raw_html)
+        if rescued is not None:
+            result = rescued
         else:
-            console.print(f"[yellow]Skipped:[/] {msg}")
-        raise typer.Exit(1)
+            item_id = None
+            if junk_reason.startswith("Bot detection"):
+                reason = "captcha" if "captcha" in junk_reason.lower() else "bot_block"
+                item_id = _escalate_blocked(vault, url, reason, tags, suggested_by, utility_score,
+                                            detail=junk_reason)
+            escalated = f" Queued for browser-lane escalation (#{item_id})." if item_id else ""
+            msg = f"Skipped junk content from {url}: {junk_reason}.{escalated}"
+            if json_output:
+                output(error(msg, "JUNK_ESCALATED" if item_id else "JUNK_CONTENT"), json_mode=True)
+            else:
+                console.print(f"[yellow]Skipped:[/] {msg}")
+            raise typer.Exit(1)
 
-    # Source-ranking capture: DOI/arXiv id + the orchestrator's utility score
-    from hyperresearch.core.scholar import extract_doi
-
-    detected_doi = extract_doi(url, result.raw_html, result.content)
+    # Source-ranking capture: DOI/arXiv id + the orchestrator's utility score.
+    # On a rescue, the DOI we resolved with is the authority — re-extracting
+    # would read it out of the substitute's body instead.
+    detected_doi = rescue_doi if oa_location is not None else extract_doi(
+        url, result.raw_html, result.content
+    )
 
     # Open-access recovery: a paywalled paper arrives as an abstract, so when a
     # thin result carries a DOI we swap in a legal full-text copy. `source` and
     # `source_domain` deliberately keep pointing at the URL that was asked for
     # — the note is about the paper, and the substitution is disclosed in the
-    # body banner and the oa_* frontmatter below.
-    original_domain = result.domain
+    # body banner and the oa_* frontmatter below. On a rescue the source domain
+    # comes from the URL, since `result.domain` is the substitute's host.
+    original_domain = (
+        urlparse(url).netloc.lower() if oa_location is not None else result.domain
+    )
     original_chars = len(result.content or "")
-    from hyperresearch.core.oa import oa_frontmatter, recover_full_text, recovery_notice
 
-    result, oa_location = recover_full_text(vault, prov, url, detected_doi, result)
+    if oa_location is None:
+        result, oa_location = recover_full_text(vault, prov, url, detected_doi, result)
+    else:
+        # Rescued above. Nothing was read from the source, so there is no
+        # original length to report in the banner.
+        original_chars = 0
 
     # Write note
     note_title = title or result.title or urlparse(url).path.split("/")[-1] or "Untitled"
@@ -386,7 +439,12 @@ def fetch(
     if detected_doi:
         extra_meta["doi"] = detected_doi
     if oa_location is not None:
-        extra_meta.update(oa_frontmatter(oa_location))
+        extra_meta.update(
+            oa_frontmatter(
+                oa_location,
+                kind="rescued" if rescue_reason else "substituted",
+            )
+        )
     if utility_score is not None:
         extra_meta["utility_score"] = utility_score
 
@@ -411,7 +469,11 @@ def fetch(
     # must not have to scroll or check frontmatter to learn that these bytes
     # came from somewhere other than `source:`.
     if oa_location is not None:
-        body_content = recovery_notice(oa_location, url, original_chars) + "\n" + body_content
+        body_content = (
+            recovery_notice(oa_location, url, original_chars, blocked_reason=rescue_reason)
+            + "\n"
+            + body_content
+        )
 
     note_path = write_note(
         vault.notes_dir,
@@ -545,6 +607,9 @@ def fetch(
             "version": oa_location.version,
             "license": oa_location.license,
             "replaced_chars": original_chars,
+            "kind": "rescued" if rescue_reason else "substituted",
+            "nothing_from_source": bool(rescue_reason),
+            "blocked_reason": rescue_reason,
         }
 
     if json_output:
@@ -558,6 +623,11 @@ def fetch(
                 f"  [cyan]Body from:[/] {oa_location.url} "
                 f"([bold]{oa_location.version or 'version unknown'}[/], via {oa_location.resolver})"
             )
+            if rescue_reason:
+                console.print(
+                    f"  [yellow]Source was never read[/] ({rescue_reason}) — this whole "
+                    "note, title and authors included, is the open-access copy."
+                )
             if not oa_location.is_version_of_record:
                 console.print(
                     "  [yellow]Note:[/] this is not the version of record — "

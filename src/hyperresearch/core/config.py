@@ -167,6 +167,10 @@ class ScholarSettings:
     # Publishers 403 their own open-access PDFs often enough that one attempt
     # loses papers sitting in a repository two candidates down.
     oa_max_attempts: int = 3
+    # Also try when the source cannot be read AT ALL (403, login wall, bot
+    # wall). Separately switchable because such a note is made entirely of the
+    # open-access copy — nothing in it came from the URL that was asked for.
+    oa_rescue_blocked: bool = True
 
 
 def _build_section(section_cls, data: dict):
@@ -374,6 +378,12 @@ class VaultConfig:
                 "A recovered copy is only accepted if it is both longer than the page we",
                 "already had and long enough to clear oa_min_full_text_chars, so a",
                 "repository record page cannot pass for full text.",
+                "",
+                "oa_rescue_blocked also runs this when the source cannot be read at all —",
+                "a 403, a login wall, a bot wall. Those notes are made ENTIRELY of the",
+                "open-access copy: the title and authors did not come from the source URL",
+                "either. They are marked `oa_recovery_kind: rescued`. Set this to false if",
+                "you would rather have no note than a note built from a substitute.",
             ),
         )
         lines += [
@@ -391,4 +401,8 @@ class VaultConfig:
             lines += ["", f"[profile.{overlay_name}]"]
             lines += [f"{k} = {self._toml_value(v)}" for k, v in table.items()]
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_path.write_text("\n".join(lines) + "\n")
+        # Explicit UTF-8. TOML is UTF-8 by spec and `load` reads it as such, so
+        # taking the platform default here (cp1252 on Windows) writes a file
+        # this same class cannot read back the moment any value or comment
+        # carries a non-ASCII character.
+        config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

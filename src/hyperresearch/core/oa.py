@@ -6,9 +6,12 @@ landing page (an abstract is not junk), and downstream investigators then
 reason over ~1-3k characters while the report cites the work as though the
 paper had been read.
 
-This module closes that gap. Given a DOI and a thin fetch result, it asks two
-free APIs whether a legal open-access copy exists and, if so, refetches from
-there:
+This module closes that gap. Given a DOI, it asks two free APIs whether a legal
+open-access copy exists and, if so, refetches from there. Two entry points:
+`recover_full_text` replaces a thin result (an abstract), and
+`rescue_full_text` handles the case where the source could not be read at all
+— a 403, a login wall, a bot wall — where the paper is most completely lost and
+an open-access copy is most likely to exist. The APIs:
 
 1. **Unpaywall** (`api.unpaywall.org`) — broad coverage, but their terms want a
    real contact address, so it is SKIPPED unless `[scholar] contact_email` is
@@ -22,13 +25,17 @@ indexes.
 
 INVARIANTS
 ----------
-* **Recovery can never fail a fetch.** Every error path returns the original
-  result untouched, because the abstract you already have beats no note at all.
+* **Recovery can never fail a fetch.** Every error path leaves the caller
+  exactly where it was, because the abstract you already have beats no note at
+  all — and a failed fetch that rescue cannot help still fails as it always did.
+  Rescue only ever turns a failure into a note, never the reverse.
 * **Recovery never shrinks a note.** If the recovered copy extracts to less
   text than the landing page, the landing page wins.
 * **The swap is always disclosed** — in the note body (a blockquote banner), in
-  four `oa_*` frontmatter fields, and in the CLI/JSON output. A reader must
+  the `oa_*` frontmatter fields, and in the CLI/JSON output. A reader must
   never have to guess that the bytes came from somewhere other than `source:`.
+  A rescued note says so even more loudly, because for those NOTHING came from
+  `source:` — not the body, not the title, not the authors.
 * **Resolved URLs are attacker-influenceable** (they arrive inside a
   third-party API response) and are therefore gated by `check_oa_url` before
   anything fetches them.
@@ -452,23 +459,55 @@ _VERSION_PROSE = {
 }
 
 
-def recovery_notice(loc: OALocation, original_url: str, original_chars: int) -> str:
+def _one_line(text: str, limit: int = 160) -> str:
+    """Flatten a reason to one short line.
+
+    The banner is a markdown blockquote, so an embedded newline drops the rest
+    of it out of the quote and it renders as body text. Provider errors arrive
+    multi-line often enough (`httpx` appends a docs URL) that this has to be
+    enforced here rather than trusted to every caller.
+    """
+    flat = " ".join(text.split())
+    return flat if len(flat) <= limit else flat[: limit - 1].rstrip() + "…"
+
+
+def recovery_notice(
+    loc: OALocation,
+    original_url: str,
+    original_chars: int,
+    *,
+    blocked_reason: str | None = None,
+) -> str:
     """The banner prepended to a recovered note body.
 
     Loud on purpose. Anyone reading this note — human or agent — has to be able
     to see at a glance that the text below did not come from `source:`, and
     which version of the paper they are actually reading.
+
+    `blocked_reason` switches this from the substitution wording to the rescue
+    wording, where the distinction is sharper still: the source was never read,
+    so every word of the note — title and authors included — came from the
+    open-access copy.
     """
     what = _VERSION_PROSE.get(
         loc.version or "", "an open-access copy of unrecorded version"
     )
-    lines = [
-        "> [!] **Open-access full text substituted.**",
-        f"> The body below is **{what}**, retrieved from"
-        f" <{loc.url}> via {loc.resolver}.",
-        f"> It is NOT the content of {original_url}, which returned only"
-        f" {original_chars:,} characters (an abstract or paywall page).",
-    ]
+    if blocked_reason:
+        lines = [
+            "> [!] **Recovered from an open-access copy. The source URL was never read.**",
+            f"> {original_url} could not be retrieved ({_one_line(blocked_reason)}).",
+            f"> Everything below — including the title and author metadata — is"
+            f" **{what}**, retrieved from <{loc.url}> via {loc.resolver}."
+            f" NOTHING in this note came from the source URL.",
+        ]
+    else:
+        lines = [
+            "> [!] **Open-access full text substituted.**",
+            f"> The body below is **{what}**, retrieved from"
+            f" <{loc.url}> via {loc.resolver}.",
+            f"> It is NOT the content of {original_url}, which returned only"
+            f" {original_chars:,} characters (an abstract or paywall page).",
+        ]
     if loc.license:
         lines.append(f"> Licence reported by {loc.resolver}: `{loc.license}`.")
     if loc.version != "publishedVersion":
@@ -482,9 +521,15 @@ def recovery_notice(loc: OALocation, original_url: str, original_chars: int) -> 
     return "\n".join(lines) + "\n"
 
 
-def oa_frontmatter(loc: OALocation) -> dict:
-    """The `oa_*` frontmatter fields recording a recovery."""
-    meta = {"oa_url": loc.url, "oa_source": loc.resolver}
+def oa_frontmatter(loc: OALocation, *, kind: str = "substituted") -> dict:
+    """The `oa_*` frontmatter fields recording a recovery.
+
+    `kind` is `substituted` when a thin page was replaced, or `rescued` when
+    the source could not be read at all and the note is made entirely of the
+    open-access copy. Two different trust profiles, so they get two different
+    values rather than one shared "this came from elsewhere" flag.
+    """
+    meta = {"oa_url": loc.url, "oa_source": loc.resolver, "oa_recovery_kind": kind}
     if loc.version:
         meta["oa_version"] = loc.version
     if loc.license:
@@ -515,17 +560,14 @@ def _fetch_jats(url: str, fallback_title: str | None):
     return WebResult(url=url, title=title or "Untitled", content=markdown)
 
 
-def recover_full_text(vault, prov, url: str, doi: str | None, result):
-    """Try to replace a thin result with an open-access full text.
+def _try_candidates(vault, prov, doi: str, settings, *, fallback_title, beat_chars: int):
+    """Walk the OA candidates for `doi` and return the first usable full text.
 
-    Returns `(result, location)`. `location` is None when nothing was swapped,
-    in which case `result` is returned untouched. Never raises — see the
-    module docstring's invariants.
+    Returns `(result, location)`, or `(None, None)` when nothing clears the
+    bars. Shared by both entry points below; `beat_chars` is what a candidate
+    has to exceed, which is the length of the text already in hand (0 when the
+    source could not be read at all).
     """
-    settings = getattr(vault.config, "scholar", None)
-    if settings is None or not doi or not needs_oa_recovery(result, settings):
-        return result, None
-
     import logging
 
     log = logging.getLogger(__name__)
@@ -541,7 +583,7 @@ def recover_full_text(vault, prov, url: str, doi: str | None, result):
             )
         )
     except Exception:
-        return result, None
+        return None, None
 
     attempts = 0
     for loc in candidates:
@@ -563,7 +605,7 @@ def recover_full_text(vault, prov, url: str, doi: str | None, result):
 
                 recovered = _fetch_pdf(loc.url, vault.config.fetch)
             elif loc.kind == "jats":
-                recovered = _fetch_jats(loc.url, result.title)
+                recovered = _fetch_jats(loc.url, fallback_title)
             elif prov is not None:
                 recovered = prov.fetch(loc.url)
             else:
@@ -583,7 +625,7 @@ def recover_full_text(vault, prov, url: str, doi: str | None, result):
         # authors, a 200-word summary) passes for full text just by being
         # marginally longer than the publisher's abstract.
         recovered_len = len(recovered.content or "")
-        if recovered_len <= len(result.content or ""):
+        if recovered_len <= beat_chars:
             continue
         if recovered_len < settings.oa_min_full_text_chars:
             log.debug(
@@ -595,4 +637,54 @@ def recover_full_text(vault, prov, url: str, doi: str | None, result):
 
         return recovered, loc
 
-    return result, None
+    return None, None
+
+
+def recover_full_text(vault, prov, url: str, doi: str | None, result):
+    """Try to replace a thin result with an open-access full text.
+
+    Returns `(result, location)`. `location` is None when nothing was swapped,
+    in which case `result` is returned untouched. Never raises — see the
+    module docstring's invariants.
+    """
+    settings = getattr(vault.config, "scholar", None)
+    if settings is None or not doi or not needs_oa_recovery(result, settings):
+        return result, None
+
+    recovered, loc = _try_candidates(
+        vault,
+        prov,
+        doi,
+        settings,
+        fallback_title=result.title,
+        beat_chars=len(result.content or ""),
+    )
+    if recovered is None:
+        return result, None
+    return recovered, loc
+
+
+def rescue_full_text(vault, prov, url: str, doi: str | None):
+    """Try for an open-access copy when the source could not be read AT ALL.
+
+    The blocked cases — a hard HTTP error, a login wall, a bot wall — are where
+    a paywalled paper is most completely lost, and also where an open-access
+    copy is most likely to exist. `recover_full_text` cannot serve them: it
+    keys off a thin-but-real result, and here there is no result to be thin.
+
+    A note built from this path is a stronger claim than a substitution, since
+    NOTHING from `source:` was ever read — not the body, not the title, not the
+    authors. It is recorded as `oa_recovery_kind: rescued` so that difference
+    survives into `note show`.
+
+    Returns `(result, location)`, or `(None, None)`.
+    """
+    settings = getattr(vault.config, "scholar", None)
+    if settings is None or not doi:
+        return None, None
+    if not settings.oa_recovery or not settings.oa_rescue_blocked:
+        return None, None
+
+    return _try_candidates(
+        vault, prov, doi, settings, fallback_title=None, beat_chars=0
+    )

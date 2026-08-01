@@ -102,6 +102,14 @@ somewhere else.** Whenever that happened:
   substantially from the published paper. Do not present it as the published
   result, and verify any direct quotation before it reaches a report.
 
+`oa.kind` matters more than the version. `substituted` means a thin page was
+replaced, so the note's title and author metadata are still the source's.
+`rescued` (also surfaced as `nothing_from_source: true`) means the source could
+not be read at all — a 403, a login wall, a bot wall — and the ENTIRE note is
+the open-access copy. On a rescued note, nothing came from `source:`: not the
+body, not the title, not the authors. Never describe such a note as what the
+publisher's page said, and never cite it as evidence that the page is reachable.
+
 Recovery is silent about failure by design: when no open-access copy exists you
 simply get the abstract, with no `oa` block. Absence of the block means the
 body came from `source:` as usual.
