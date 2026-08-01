@@ -3679,9 +3679,9 @@ def _prune_global_step_skills(home: Path) -> str | None:
         suffix = name[len("hyperresearch-"):]
         if not suffix or not suffix[0].isdigit():
             continue
-        for f in child.iterdir():
-            f.unlink()
-        child.rmdir()
+        if not _is_our_skill_dir(child):
+            continue
+        _remove_skill_dir(child)
         pruned.append(name)
 
     if not pruned:
@@ -3957,6 +3957,38 @@ _RETIRED_SKILL_DIRS: tuple[str, ...] = (
     "research",            # /research alias retired in v0.8.1 — only /hyperresearch now
 )
 
+# Every SKILL.md this project has ever installed names the project in its
+# frontmatter or its body. The retired dirs predate any install marker, so a
+# marker file cannot be used to recognize them — the content we shipped is the
+# only evidence available after the fact.
+_OWNED_SKILL_MARKERS: tuple[str, ...] = ("hyperresearch", "layercake")
+
+
+def _is_our_skill_dir(path: Path) -> bool:
+    """True when `path` holds a SKILL.md this project wrote.
+
+    A name match alone is not license to delete a directory. `research` is an
+    ordinary English word and an obvious name for a hand-written personal
+    skill, and `--global` puts the prune in ~/.claude/skills/, which is shared
+    across every project the user has. Deleting on name alone destroyed user
+    content that was never ours (#73).
+    """
+    skill_file = path / "SKILL.md"
+    if not skill_file.is_file():
+        return False
+    try:
+        text = skill_file.read_text(encoding="utf-8", errors="replace").lower()
+    except OSError:
+        return False
+    return any(marker in text for marker in _OWNED_SKILL_MARKERS)
+
+
+def _remove_skill_dir(path: Path) -> None:
+    """Delete a skill directory and everything under it."""
+    import shutil
+
+    shutil.rmtree(path)
+
 # V1 modality files — left over inside .claude/skills/hyperresearch/ on
 # vaults that were installed before the V8 alias-based entry skill.
 _RETIRED_HYPERRESEARCH_FILES: tuple[str, ...] = (
@@ -3973,8 +4005,13 @@ def _prune_retired_agents(vault_root: Path) -> str | None:
     Running this on a fresh vault is a no-op. On an upgraded vault, it removes
     retired agent .md files and the old /research-ensemble + /research-layercake
     skill dirs so the installed state matches the current architecture.
+
+    A retired skill dir is only removed when its SKILL.md is recognizably one
+    we shipped. Anything else with the same name belongs to the user and is
+    reported instead of deleted.
     """
     pruned: list[str] = []
+    kept: list[str] = []
 
     agents_dir = vault_root / ".claude" / "agents"
     if agents_dir.exists():
@@ -3988,16 +4025,13 @@ def _prune_retired_agents(vault_root: Path) -> str | None:
     if skills_dir.exists():
         for name in _RETIRED_SKILL_DIRS:
             p = skills_dir / name
-            if p.is_dir():
-                for child in p.iterdir():
-                    if child.is_file():
-                        child.unlink()
-                    elif child.is_dir():
-                        # Should not happen — skills are flat — but be safe
-                        import shutil
-                        shutil.rmtree(child)
-                p.rmdir()
-                pruned.append(f"skill dir {name}")
+            if not p.is_dir():
+                continue
+            if not _is_our_skill_dir(p):
+                kept.append(name)
+                continue
+            _remove_skill_dir(p)
+            pruned.append(f"skill dir {name}")
 
         # V1 modality files (SKILL-collect.md etc.) left inside the
         # /hyperresearch skill dir from the old multi-file install layout.
@@ -4009,9 +4043,17 @@ def _prune_retired_agents(vault_root: Path) -> str | None:
                     p.unlink()
                     pruned.append(f"file hyperresearch/{name}")
 
-    if not pruned:
+    parts: list[str] = []
+    if pruned:
+        parts.append("Pruned retired: " + ", ".join(pruned))
+    if kept:
+        parts.append(
+            "Left alone (not ours): "
+            + ", ".join(f".claude/skills/{n}" for n in kept)
+        )
+    if not parts:
         return None
-    return "Pruned retired: " + ", ".join(pruned)
+    return " | ".join(parts)
 
 
 def _read_skill_source(src_name: str) -> str | None:
@@ -4120,9 +4162,9 @@ def _install_hyperresearch_step_skills(vault_root: Path) -> str | None:
         is_legacy_layercake = child.name.startswith("layercake-")
         if not (is_stale_hpr or is_legacy_layercake):
             continue
-        for f in child.iterdir():
-            f.unlink()
-        child.rmdir()
+        if not _is_our_skill_dir(child):
+            continue
+        _remove_skill_dir(child)
         pruned.append(child.name)
 
     if not installed and not pruned:
