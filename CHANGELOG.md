@@ -12,6 +12,16 @@
   the provider actually launches and prefer `python -m patchright install
   chromium`, falling back to plain playwright for non-stealth installs; the
   manual-install hint names both commands.
+- **Collision note ids survive the frontmatter re-parse** (an orphan-note
+  foreign-key crash). `write_note()` appended `-2` to a slug already sitting on
+  `slugify()`'s 80-char cap, producing an 82-char id whose next parse
+  re-slugified it back under the cap: the suffix fell off, the second note
+  collapsed into the base id, sync refused the duplicate, and the `sources`
+  insert died with `IntegrityError: FOREIGN KEY constraint failed`, leaving the
+  `.md` file on disk but permanently unregistered. Collision ids are now built
+  by trimming the base so base+suffix fits both the 80-char and 200-byte caps,
+  then normalized once, so the disk id equals its own re-parse; short-title
+  collisions keep their existing `-2` ids, so existing vaults do not shift.
 
 ### Two safety fixes in the viewer and the installer
 
