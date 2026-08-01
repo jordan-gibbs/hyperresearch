@@ -223,4 +223,14 @@ def get_provider(
         except ImportError:
             raise ImportError("tavily provider requires: pip install \"hyperresearch[tavily]\"")
 
-    raise ValueError(f"Unknown web provider: {name!r}. Available: builtin, crawl4ai, exa, tavily")
+    if name == "parallel":
+        try:
+            from hyperresearch.web.parallel_provider import ParallelProvider
+
+            return ParallelProvider()
+        except ImportError:
+            raise ImportError('parallel provider requires: pip install "hyperresearch[mcp]"')
+
+    raise ValueError(
+        f"Unknown web provider: {name!r}. Available: builtin, crawl4ai, exa, tavily, parallel"
+    )
