@@ -24,6 +24,13 @@ def fetch_batch(
     """Fetch multiple URLs and save each as a research note. Batched sync for speed."""
     from hyperresearch.core.enrich import enrich_note_file
     from hyperresearch.core.note import write_note
+    from hyperresearch.core.oa import (
+        oa_frontmatter,
+        recover_full_text,
+        recovery_notice,
+        rescue_full_text,
+    )
+    from hyperresearch.core.scholar import extract_doi
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.core.vault import Vault, VaultError
     from hyperresearch.web.base import get_provider
@@ -137,22 +144,66 @@ def fetch_batch(
         for url in visible_urls:
             _fetch_one(visible_prov, url, "visible")
 
-    # Phase 1: Write all note files to disk (no sync yet)
-    note_files = []  # (note_path, url, result, domain, content_hash)
+    # Partition into what can be written and what was blocked. Blocked sources
+    # get one open-access rescue attempt before being written off — see
+    # cli/fetch.py for the reasoning. It matters more here: the pipeline fetches
+    # in waves through this command, so one bot-walled publisher silently drops
+    # a whole cluster of papers at once.
+    pending = []  # (url, result, oa_location, rescue_reason)
+    blocked = [(f["url"], f"fetch failed: {f['error']}", None) for f in failed_urls]
+
     for result in results:
         url = result.url
-
-        # Skip login redirects
         if result.looks_like_login_wall(url, vault.config.junk):
-            if not json_output:
+            blocked.append((url, f"login wall: {result.title}", result.raw_html))
+            continue
+        pending.append((url, result, None, None))
+
+    rescued_urls: set[str] = set()
+    for burl, reason, raw_html in blocked:
+        # URL and meta tags only — a wall page's body carries no DOI worth
+        # trusting.
+        rescued, loc = rescue_full_text(vault, prov, burl, extract_doi(burl, raw_html, None))
+        if rescued is None:
+            if raw_html is not None and not json_output:
                 console.print(
-                    f"  [yellow]Auth required:[/] {url} — login page detected, skipping. "
+                    f"  [yellow]Auth required:[/] {burl} — login page detected, skipping. "
                     "Run 'hyperresearch setup' to create a login profile."
                 )
             continue
+        pending.append((burl, rescued, loc, reason))
+        rescued_urls.add(burl)
+        if not json_output:
+            console.print(
+                f"  [cyan]Blocked — recovered an open-access copy:[/] {burl} "
+                f"(via {loc.resolver})"
+            )
+
+    # A rescued URL is no longer lost, so it should not still be reported as a
+    # failure to the caller.
+    failed_urls[:] = [f for f in failed_urls if f["url"] not in rescued_urls]
+
+    # Phase 1: Write all note files to disk (no sync yet)
+    note_files = []  # (note_path, url, result, domain, content_hash, oa_location, rescue_reason)
+    for url, result, oa_location, rescue_reason in pending:
+        # Open-access recovery. This path writes its own notes rather than
+        # going through cli.fetch, so the DOI capture and the OA swap both have
+        # to be repeated here — and they matter more here, because the pipeline
+        # fetches in waves through this command.
+        if oa_location is None:
+            detected_doi = extract_doi(url, result.raw_html, result.content)
+            original_domain = result.domain
+            original_chars = len(result.content or "")
+            result, oa_location = recover_full_text(vault, prov, url, detected_doi, result)
+        else:
+            # Rescued: nothing was read from the source, so its domain comes
+            # from the URL and there is no original length to report.
+            detected_doi = extract_doi(url, None, None)
+            original_domain = urlparse(url).netloc.lower()
+            original_chars = 0
 
         title = result.title or urlparse(url).path.split("/")[-1] or "Untitled"
-        domain = result.domain
+        domain = original_domain
 
         extra_meta = {
             "source": url,
@@ -160,11 +211,28 @@ def fetch_batch(
             "fetched_at": result.fetched_at.isoformat(),
             "fetch_provider": prov.name,
         }
+        if detected_doi:
+            extra_meta["doi"] = detected_doi
+
+        body_content = result.content
+        if oa_location is not None:
+            extra_meta.update(
+                oa_frontmatter(
+                    oa_location, kind="rescued" if rescue_reason else "substituted"
+                )
+            )
+            body_content = (
+                recovery_notice(
+                    oa_location, url, original_chars, blocked_reason=rescue_reason
+                )
+                + "\n"
+                + body_content
+            )
 
         note_path = write_note(
             vault.notes_dir,
             title=title,
-            body=result.content,
+            body=body_content,
             tags=tags,
             status="draft",
             source=url,
@@ -176,10 +244,22 @@ def fetch_batch(
         enrich_note_file(note_path, conn, tags)
 
         content_hash = hashlib.sha256(result.content.encode("utf-8")).hexdigest()[:16]
-        note_files.append((note_path, url, result, domain, content_hash))
+        note_files.append(
+            (note_path, url, result, domain, content_hash, oa_location, rescue_reason)
+        )
 
         if not json_output:
             console.print(f"  [green]+[/] {title}")
+            if oa_location is not None:
+                console.print(
+                    f"    [cyan]body from:[/] {oa_location.url} "
+                    f"({oa_location.version or 'version unknown'}, via {oa_location.resolver})"
+                )
+                if rescue_reason:
+                    console.print(
+                        f"    [yellow]source never read[/] ({rescue_reason}) — "
+                        "title and authors are the open-access copy's too"
+                    )
 
     # Phase 2: ONE sync to index all notes
     plan = compute_sync_plan(vault)
@@ -188,7 +268,7 @@ def fetch_batch(
 
     # Phase 3: Bulk-insert source records
     created_notes = []
-    for note_path, url, result, domain, content_hash in note_files:
+    for note_path, url, result, domain, content_hash, oa_location, rescue_reason in note_files:
         note_id = note_path.stem
         conn.execute(
             """INSERT OR IGNORE INTO sources (url, note_id, domain, fetched_at, provider, content_hash)
@@ -207,13 +287,24 @@ def fetch_batch(
                 image_timeout_s=vault.config.fetch.image_timeout_s,
             )
 
-        created_notes.append({
+        entry = {
             "note_id": note_id,
             "title": result.title or "Untitled",
             "url": url,
             "domain": domain,
             "word_count": len(result.content.split()),
-        })
+        }
+        if oa_location is not None:
+            entry["oa"] = {
+                "url": oa_location.url,
+                "resolver": oa_location.resolver,
+                "version": oa_location.version,
+                "license": oa_location.license,
+                "kind": "rescued" if rescue_reason else "substituted",
+                "nothing_from_source": bool(rescue_reason),
+                "blocked_reason": rescue_reason,
+            }
+        created_notes.append(entry)
 
     conn.commit()
 
@@ -228,11 +319,15 @@ def fetch_batch(
             if plan.to_add or plan.to_update:
                 execute_sync(vault, plan)
 
+    oa_recovered = sum(1 for n in created_notes if "oa" in n)
+    oa_rescued = sum(1 for n in created_notes if n.get("oa", {}).get("kind") == "rescued")
     data = {
         "notes_created": created_notes,
         "total_fetched": len(created_notes),
         "skipped": len(all_urls) - len(new_urls),
         "failed_urls": failed_urls,
+        "oa_recovered": oa_recovered,
+        "oa_rescued": oa_rescued,
     }
 
     if json_output:
@@ -244,4 +339,14 @@ def fetch_batch(
         )
         if failed_urls:
             msg += f", [red]{len(failed_urls)} failed[/]"
+        if oa_recovered:
+            msg += (
+                f"\n[cyan]{oa_recovered} note(s) carry an open-access full text in place of a "
+                "paywalled page[/] — each one says so in its body banner and oa_* frontmatter."
+            )
+        if oa_rescued:
+            msg += (
+                f"\n[yellow]{oa_rescued} of those had a source that could not be read at all[/] "
+                "— those notes are entirely the open-access copy, titles and authors included."
+            )
         console.print(msg + ".")
