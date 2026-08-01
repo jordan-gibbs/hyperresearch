@@ -27,6 +27,7 @@
 - **Every citation is verified before the report ships.** A skeptical cite-checker audits whether each cited source actually supports its sentence. Hallucinated quotes and unacknowledged retractions are hard blocks at the gate.
 - **Syndication doesn't count as consensus.** An independence audit clusters derivative copies, so five reprints of one press release argue with the weight of one source.
 - **Adversarial by construction.** Four critics attack every draft in parallel, and a tool-locked patcher can only apply surgical edits. It physically cannot rewrite the report.
+- **Paywalled papers get read, not skimmed.** A closed paper normally enters a vault as a 1,500-character abstract that the report then cites as though it had been read. Hyperresearch asks Unpaywall and Europe PMC for a legal open-access copy and stores the full text instead, even when the publisher blocks the fetch outright. Every substitution is disclosed in the note, the frontmatter, and the CLI output.
 - **Nothing is thrown away.** Every source lands in a searchable markdown-plus-SQLite vault that your next session reuses before it fetches anything new.
 - **Crashed runs resume.** Each run keeps a manifest; `run resume` picks up at the exact step where it died.
 - **Scales from 30 minutes to a dissertation.** Bounded queries auto-route to a 5-step fast path. Opt-in dissertation runs write 25K–80K words across chapters, from 300–450 sources.
@@ -91,6 +92,25 @@ hyperresearch profile use full       # back to the 55–80-source baseline
 
 The gear persists per project and survives reinstalls. Custom gears: define `[profile.<name>]` in `.hyperresearch/config.toml` (any knob: source targets, loci caps, draft counts, word targets, per-agent models) and `profile use <name>`.
 
+### Run levers: what voice the report is written in
+
+Tiers and gears set how much work happens. Levers set what kind of report comes out, and step 1 picks them from your prompt's verb shape. An explicit directive in your prompt always wins.
+
+| Lever | Values | What changes |
+|---|---|---|
+| `register` | `teach` / `survey` / `analyze` / `advocate` | "Teach me X" gets a pedagogical explainer; "what's the landscape" gets a map of the field with no verdict; `analyze` (the default) gets the evaluative argument; `advocate` defends one named thesis |
+| `domain_notes` | freeform | Sourcing strategy, evidence norms, recency window for the field in question |
+| `inference_depth` | `surface` / `standard` / `deep` | The rabbithole dial. Step 4 can upgrade it after seeing what the corpus actually holds |
+
+The levers render into role-scoped shim files that spawn templates paste verbatim into subagent prompts, so the critics move with the register instead of undoing it. In `survey` register the dialectic critic flags unfair representation rather than missing commitment, and the polish auditor stops striking hedges. In `advocate` all of them tighten instead.
+
+The cite-checker and the ship gate receive no shim at all. Verification never softens by mode.
+
+```bash
+hyperresearch levers set <tag> inference_depth=deep --rerender   # go deeper mid-run
+hyperresearch run status -j                                      # see what step 1 chose
+```
+
 ### The two load-bearing principles
 
 1. **Patch, never regenerate.** After step 11 produces the synthesized report (or step 10 for light tier), the only modifications are surgical Edit hunks. The patcher and polish auditor are tool-locked to `[Read, Edit]` at the Claude Code allowlist level so they physically cannot Write a new draft. Per-hunk caps make "just rewrite it" mechanically impossible. Critic findings that don't fit a small hunk escalate as structural issues.
@@ -143,6 +163,40 @@ hyperresearch lint -j                                      # Health check (broke
 
 **Semantic search, if you want it.** `hyperresearch embed sync` populates embeddings (provider-pluggable: `voyage`, `openai`, or the default `none`, which needs zero API keys) and `search --semantic` blends vector similarity with full-text ranking.
 
+### Curation: notes have a lifecycle
+
+Every session ends with a curation pass, and notes move through `draft` → `review` → `evergreen`, or `stale` → `deprecated` → `archive` as material ages out. That's what keeps a vault from turning into a landfill of half-read pages.
+
+```bash
+hyperresearch note update <id> --summary "..." --add-tag <t> -j   # promote a draft
+hyperresearch dedup -j                                            # near-duplicate pairs by content similarity
+hyperresearch topic tree -j                                       # the topic hierarchy
+hyperresearch index build -j                                      # regenerate index pages
+hyperresearch batch set-status stale --tag <t> -j                 # bulk lifecycle moves
+hyperresearch link --note <id> --dry-run -j                       # wiki-links the linker would add
+```
+
+### You are not locked in
+
+The vault is markdown in a directory. Everything below is a convenience on top of that, not a dependency.
+
+```bash
+hyperresearch export json -o out.json # every note as structured JSON
+hyperresearch export vault <dir>      # a filtered subset to another directory
+hyperresearch import <dir>            # pull an existing markdown collection in
+hyperresearch git changed -j          # notes with uncommitted changes
+hyperresearch git log -j              # notes touched by recent commits
+hyperresearch watch                   # auto-sync while you edit in your own editor
+```
+
+---
+
+## Use the vault outside Claude Code
+
+**An MCP server.** `pip install hyperresearch[mcp]`, then `hyperresearch mcp` speaks stdio, so Claude Desktop, Cursor, or anything else that speaks MCP can work the same vault. Thirteen tools: `search_notes`, `read_note`, `read_many`, `list_notes`, `get_backlinks`, `get_hubs`, `vault_status`, `lint_vault`, `check_source`, `list_sources`, `fetch_url`, `create_note`, `update_note`.
+
+**A local web UI.** `hyperresearch serve --open` starts a stdlib HTTP server on port 8080 with note browsing, tag pages, search, and an interactive link graph. No build step and no JavaScript dependencies.
+
 ---
 
 ## Source ranking: quality is persistent, not vibes
@@ -186,6 +240,17 @@ hyperresearch run verify <tag> -j    # Ship gate: headings, length, citation den
 - **Retractions block the ship.** Citing a retracted source without acknowledging the retraction is a hard error at the final gate
 - **Schema integrity.** `tier`, `content_type`, and `type` are SQLite CHECK-constrained vocabularies; corrupted frontmatter cannot poison the index
 - **Hygiene leaks caught on the way out.** Scaffold sections, YAML frontmatter, and prompt echoes are stripped by step 15 before ship
+- **Fetched text is data, never instructions.** Web-fetched bodies are served inside an `<untrusted-source>` fence on both `note show` and `search`, so a page telling the agent to ignore its instructions is read as content
+
+---
+
+## The web is hostile input
+
+A research agent reads hundreds of pages it did not choose, and any one of them can contain text addressed to the agent rather than to you.
+
+Every body fetched from the web is served wrapped in `<untrusted-source url="...">` delimiters with an inline treat-as-data preamble, on both paths that serve bodies (`note show` in single, batch, and JSON forms, and `search` with bodies included). Notes your own pipeline subagents wrote pass through unwrapped. Forged fence tags inside a fetched body are neutralized and left visible for forensics, the `url` attribute is HTML-escaped with control characters stripped, and in `search` the wrapping happens after token-budget truncation so the closing fence can never be severed. The fetcher, depth-investigator, draft-orchestrator, and source-analyst prompts all carry a policy block telling them not to launder a fenced page's directives into trusted output.
+
+Resolved URLs from third-party APIs get the same treatment. An open-access location arrives inside someone else's JSON, so it's checked for scheme, embedded credentials, and publicly-routable resolution before anything fetches it.
 
 ---
 
