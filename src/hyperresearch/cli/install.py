@@ -18,12 +18,12 @@ def install(
         False,
         "--global",
         "-g",
-        help="Install Claude Code entry skill + agents to ~/.claude/ so /hyperresearch works in every Claude Code session anywhere. Skips vault init, CLAUDE.md, and the 16 step skills (those happen per-project on first /hyperresearch run).",
+        help="Install the entry skill + agents globally for Claude Code and Codex. Skips vault init, agent docs, and step skills (created per-project on first use).",
     ),
     steps_only: bool = typer.Option(
         False,
         "--steps-only",
-        help="Install only the 16 step skills to <PATH>/.claude/skills/. Used internally by the entry skill bootstrap on first /hyperresearch invocation in a project. Not normally invoked by users.",
+        help="Install only the 16 step skills for Claude Code and Codex. Used internally by the entry skill bootstrap on first use.",
     ),
     profile: str | None = typer.Option(
         None,
@@ -31,7 +31,7 @@ def install(
         help="Pipeline profile to render skill/agent prompts from (built-in gears: full, premier; plus any [profile.*] defined in .hyperresearch/config.toml). Defaults to the gear persisted by `hyperresearch profile use` (or 'full'). See `hyperresearch profile list`.",
     ),
 ) -> None:
-    """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
+    """Install the vault, docs, skills, agents, and hooks for Claude Code and Codex."""
     import sys
 
     from hyperresearch.core.hooks import (
@@ -86,10 +86,10 @@ def install(
             )
             return
         if result:
-            console.print(f"[green]Step skills installed:[/] {target}/.claude/skills/")
+            console.print(f"[green]Step skills installed for Claude Code and Codex:[/] {target}")
             console.print(f"  {result}")
         else:
-            console.print(f"[dim]Step skills already installed at {target}/.claude/skills/[/]")
+            console.print(f"[dim]Step skills already installed at {target}[/]")
         return
 
     # Global install path: only the user-level Claude Code entry skill +
@@ -116,18 +116,18 @@ def install(
             )
             return
 
-        console.print(f"[green]Global install:[/] {home}/.claude/")
+        console.print(f"[green]Global install:[/] {home}")
         if hook_actions:
             for action in hook_actions:
                 console.print(f"  {action}")
         else:
             console.print("[dim]All skills and agents already installed.[/]")
         console.print(
-            "\n[bold]Ready.[/] /hyperresearch is now available in every Claude Code session."
+            "\n[bold]Ready.[/] Use /hyperresearch in Claude Code or $hyperresearch in Codex."
         )
         console.print(
             "[dim]On first /hyperresearch run in a project, the vault, research/ folder, "
-            "and the 16 step skills are created in that project's .claude/.[/]"
+            "and the 16 step skills are created in that project.[/]"
         )
         return
 

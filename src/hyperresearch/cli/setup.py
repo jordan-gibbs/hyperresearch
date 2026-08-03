@@ -137,13 +137,13 @@ def setup(
     vault.config.name = vault_name
     vault.config.save(vault.config_path)
 
-    # Inject CLAUDE.md
+    # Inject CLAUDE.md and AGENTS.md
     hpr_path = _resolve_executable()
     doc_actions = inject_agent_docs(root)
     for action in doc_actions:
         console.print(f"  [green]Docs:[/] {action}")
 
-    # Install Claude Code hook + skills + subagents (rendered from the
+    # Install Claude Code and Codex hooks + skills + subagents (rendered from the
     # persisted scale gear, if one was chosen via `hpr profile use`)
     hook_actions = install_hooks(root, hpr_path=hpr_path, profile=vault.config.pipeline_profile)
     for action in hook_actions:
@@ -165,7 +165,7 @@ def setup(
     summary.add_row("Provider", f"[bold]{provider}[/]")
     summary.add_row("Profile", f"[bold]{profile_desc}[/]")
     summary.add_row("Stealth", "[bold]on[/]" if magic else "[dim]off[/]")
-    summary.add_row("Platform", "[bold]Claude Code[/]")
+    summary.add_row("Platform", "[bold]Claude Code + Codex[/]")
     summary.add_row("CLI", f"[dim]{hpr_path}[/]")
 
     console.print(

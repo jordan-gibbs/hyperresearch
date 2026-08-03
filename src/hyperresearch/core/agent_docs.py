@@ -216,14 +216,7 @@ def _resolve_executable() -> str:
 
 
 def inject_agent_docs(vault_root: Path) -> list[str]:
-    """Inject hyperresearch docs into CLAUDE.md at the vault root.
-
-    Always writes/updates CLAUDE.md. Does NOT touch AGENTS.md, GEMINI.md,
-    or .github/copilot-instructions.md — hyperresearch is a Claude Code
-    harness now, not a multi-platform tool. Pre-existing non-Claude doc
-    files are left untouched (we don't delete user content), but no new
-    ones are created.
-    """
+    """Inject bounded Hyperresearch guidance for Claude Code and Codex."""
     hpr_path = _resolve_executable()
     # Use forward slashes — bash on Windows eats backslashes
     hpr_path = hpr_path.replace("\\", "/")
@@ -236,9 +229,10 @@ def inject_agent_docs(vault_root: Path) -> list[str]:
     )
 
     modified: list[str] = []
-    result = _inject_into_file(vault_root / "CLAUDE.md", blurb, "CLAUDE.md")
-    if result:
-        modified.append(result)
+    for filename in ("CLAUDE.md", "AGENTS.md"):
+        result = _inject_into_file(vault_root / filename, blurb, filename)
+        if result:
+            modified.append(result)
     return modified
 
 

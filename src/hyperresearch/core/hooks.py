@@ -10,6 +10,7 @@ spawned via the Task tool.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -3540,7 +3541,16 @@ if (vault) {{
         '',
         'For multiple URLs, use subagents to fetch in parallel.',
     ].join('\\n');
-    process.stderr.write(msg + '\\n');
+    if (process.argv.includes('--codex')) {{
+        process.stdout.write(JSON.stringify({{
+            hookSpecificOutput: {{
+                hookEventName: 'PreToolUse',
+                additionalContext: msg,
+            }},
+        }}));
+    }} else {{
+        process.stderr.write(msg + '\\n');
+    }}
 }}
 """
 
@@ -3568,6 +3578,7 @@ def install_hooks(
 
     for installer in (
         lambda: _install_claude_hook(vault_root, hpr_path),
+        lambda: _install_codex_hook(vault_root, hpr_path),
         lambda: _install_hyperresearch_skill(vault_root),
         lambda: _install_hyperresearch_step_skills(vault_root),
         lambda: _install_researcher_agent(vault_root, hpr_path),
@@ -3658,31 +3669,26 @@ def install_global_hooks(
 
 
 def _prune_global_step_skills(home: Path) -> str | None:
-    """Remove hyperresearch-N-* step skill dirs from ~/.claude/skills/.
+    """Remove global hyperresearch-N-* step skill dirs for both agents.
 
     Used by install_global_hooks to clean up after older versions (≤0.8.2)
     that installed step skills globally. Step skills now live per-project.
     """
-    skills_root = home / ".claude" / "skills"
-    if not skills_root.is_dir():
-        return None
-
     pruned: list[str] = []
-    for child in skills_root.iterdir():
-        if not child.is_dir():
+    for skills_root in (home / ".claude" / "skills", home / ".agents" / "skills"):
+        if not skills_root.is_dir():
             continue
-        # Match hyperresearch-<digit>-* (the 16 step skills) but not
-        # the entry skill at .claude/skills/hyperresearch/
-        name = child.name
-        if not name.startswith("hyperresearch-"):
-            continue
-        suffix = name[len("hyperresearch-"):]
-        if not suffix or not suffix[0].isdigit():
-            continue
-        if not _is_our_skill_dir(child):
-            continue
-        _remove_skill_dir(child)
-        pruned.append(name)
+        for child in skills_root.iterdir():
+            if not child.is_dir():
+                continue
+            name = child.name
+            suffix = name.removeprefix("hyperresearch-")
+            if suffix == name or not suffix or not suffix[0].isdigit():
+                continue
+            if not _is_our_skill_dir(child):
+                continue
+            _remove_skill_dir(child)
+            pruned.append(name)
 
     if not pruned:
         return None
@@ -3735,6 +3741,88 @@ def _install_claude_hook(vault_root: Path, hpr_path: str) -> str | None:
     return "Claude Code: .claude/settings.json (PreToolUse hook)"
 
 
+def _install_codex_hook(vault_root: Path, hpr_path: str) -> str | None:
+    """Install the equivalent Codex PreToolUse hook."""
+    hook_path = _write_hook_script(vault_root, hpr_path)
+    settings_dir = vault_root / ".codex"
+    settings_dir.mkdir(exist_ok=True)
+    settings_path = settings_dir / "hooks.json"
+
+    settings = {}
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid Codex hooks file; refusing to overwrite {settings_path}") from exc
+
+    if not isinstance(settings, dict):
+        raise ValueError(f"Invalid Codex hooks file; expected an object in {settings_path}")
+
+    pre_tool = settings.setdefault("hooks", {}).setdefault("PreToolUse", [])
+    for entry in pre_tool:
+        if isinstance(entry, dict):
+            for hook in entry.get("hooks", []):
+                if "hyperresearch" in hook.get("command", ""):
+                    return None
+
+    command = f'node "{hook_path.as_posix()}" --codex'
+    pre_tool.append(
+        {
+            "matcher": "WebSearch|WebFetch|web__run",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": command,
+                    "commandWindows": command,
+                    "statusMessage": "Checking the Hyperresearch vault",
+                }
+            ],
+        }
+    )
+    settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+    return "Codex: .codex/hooks.json (PreToolUse hook)"
+
+
+def _write_if_changed(path: Path, content: str) -> bool:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() and path.read_text(encoding="utf-8") == content:
+        return False
+    path.write_text(content, encoding="utf-8")
+    return True
+
+
+def _adapt_for_codex(content: str) -> str:
+    """Translate the few Claude-specific invocation spellings Codex cannot use."""
+    content = re.sub(r'Skill\(skill: "([^"]+)"\)', r'$\1', content)
+    content = content.replace(".claude/skills/", ".agents/skills/")
+    content = content.replace("the `Skill` tool", "explicit `$skill-name` invocation")
+    content = content.replace("via the Skill tool", "as a Codex skill")
+    content = content.replace("TodoWrite", "the session plan")
+    content = content.replace("Task call", "subagent spawn")
+    content = content.replace("Claude-in-Chrome", "a Codex Chrome-control integration")
+    content = re.sub(
+        r'ToolSearch query: "select:mcp__claude-in-chrome__[^\n]+"\n\nThen call tabs_context_mcp once\.',
+        "Use the available Codex Chrome-control skill or tools and inspect the current tabs once.",
+        content,
+    )
+    return content
+
+
+def _codex_agent_toml(filename: str, content: str, label: str) -> str:
+    end = content.find("\n---\n", 4) if content.startswith("---\n") else -1
+    instructions = content[end + 5 :].lstrip() if end >= 0 else content
+    instructions = (
+        "Codex adapter: obey any behavioral tool limits below even if the runtime exposes "
+        "additional tools.\n\n" + _adapt_for_codex(instructions)
+    )
+    name = Path(filename).stem
+    return (
+        f"name = {json.dumps(name, ensure_ascii=False)}\n"
+        f"description = {json.dumps('Hyperresearch ' + label + '.', ensure_ascii=False)}\n"
+        f"developer_instructions = {json.dumps(instructions, ensure_ascii=False)}\n"
+    )
+
+
 def _write_agent_file(
     vault_root: Path,
     filename: str,
@@ -3742,19 +3830,19 @@ def _write_agent_file(
     label: str,
 ) -> str | None:
     """Install a subagent file, returning the install message or None if unchanged."""
-    agents_dir = vault_root / ".claude" / "agents"
-    agents_dir.mkdir(parents=True, exist_ok=True)
-    agent_path = agents_dir / filename
-
     content = _render_installed(content)
+    claude_path = vault_root / ".claude" / "agents" / filename
+    codex_filename = f"{Path(filename).stem}.toml"
+    codex_path = vault_root / ".codex" / "agents" / codex_filename
 
-    if agent_path.exists():
-        existing = agent_path.read_text(encoding="utf-8")
-        if existing == content:
-            return None
-
-    agent_path.write_text(content, encoding="utf-8")
-    return f"Claude Code: .claude/agents/{filename} ({label})"
+    changed = []
+    if _write_if_changed(claude_path, content):
+        changed.append(f"Claude Code: .claude/agents/{filename}")
+    if _write_if_changed(codex_path, _codex_agent_toml(filename, content, label)):
+        changed.append(f"Codex: .codex/agents/{codex_filename}")
+    if not changed:
+        return None
+    return f"{' + '.join(changed)} ({label})"
 
 
 def _install_researcher_agent(vault_root: Path, hpr_path: str) -> str | None:
@@ -4074,7 +4162,7 @@ def _read_skill_source(src_name: str) -> str | None:
 
 
 def _install_hyperresearch_skill(vault_root: Path) -> str | None:
-    """Install the entry skill at .claude/skills/hyperresearch/SKILL.md.
+    """Install the entry skill for Claude Code and Codex.
 
     Claude Code registers `/hyperresearch` as the slash-command trigger via
     the skill's `name: hyperresearch` frontmatter. The 16 step skills are
@@ -4085,13 +4173,16 @@ def _install_hyperresearch_skill(vault_root: Path) -> str | None:
         return None
     content = _render_installed(content)
 
-    skill_dir = vault_root / ".claude" / "skills" / "hyperresearch"
-    skill_dir.mkdir(parents=True, exist_ok=True)
-    dest_path = skill_dir / "SKILL.md"
-    if dest_path.exists() and dest_path.read_text(encoding="utf-8") == content:
+    changed = []
+    claude_path = vault_root / ".claude" / "skills" / "hyperresearch" / "SKILL.md"
+    codex_path = vault_root / ".agents" / "skills" / "hyperresearch" / "SKILL.md"
+    if _write_if_changed(claude_path, content):
+        changed.append("Claude Code")
+    if _write_if_changed(codex_path, _adapt_for_codex(content)):
+        changed.append("Codex")
+    if not changed:
         return None
-    dest_path.write_text(content, encoding="utf-8")
-    return "Claude Code: .claude/skills/hyperresearch/SKILL.md (/hyperresearch trigger)"
+    return f"{' + '.join(changed)}: hyperresearch entry skill"
 
 
 _HYPERRESEARCH_STEP_SKILLS = [
@@ -4117,7 +4208,7 @@ _HYPERRESEARCH_STEP_SKILLS = [
 
 
 def _install_hyperresearch_step_skills(vault_root: Path) -> str | None:
-    """Install the 16 V8 step skills, each as its own Claude Code skill directory.
+    """Install the V8 step skills for Claude Code and Codex.
 
     Each step skill lives at `.claude/skills/hyperresearch-N-name/SKILL.md` and is
     invocable via the Skill tool. The orchestrator (loaded via /hyperresearch)
@@ -4129,8 +4220,10 @@ def _install_hyperresearch_step_skills(vault_root: Path) -> str | None:
     V8 layout where steps were numbered differently) so the user doesn't see
     obsolete entries in their skill list.
     """
-    skills_root = vault_root / ".claude" / "skills"
-    skills_root.mkdir(parents=True, exist_ok=True)
+    skill_roots = (
+        (vault_root / ".claude" / "skills", lambda value: value),
+        (vault_root / ".agents" / "skills", _adapt_for_codex),
+    )
 
     expected = set(_HYPERRESEARCH_STEP_SKILLS)
     installed: list[str] = []
@@ -4143,29 +4236,27 @@ def _install_hyperresearch_step_skills(vault_root: Path) -> str | None:
             continue
         content = _render_installed(content)
 
-        skill_dir = skills_root / skill_name
-        skill_dir.mkdir(parents=True, exist_ok=True)
-        dest_path = skill_dir / "SKILL.md"
-
-        if dest_path.exists() and dest_path.read_text(encoding="utf-8") == content:
-            continue
-
-        dest_path.write_text(content, encoding="utf-8")
-        installed.append(skill_name)
+        changed = False
+        for skills_root, adapter in skill_roots:
+            dest_path = skills_root / skill_name / "SKILL.md"
+            changed = _write_if_changed(dest_path, adapter(content)) or changed
+        if changed:
+            installed.append(skill_name)
 
     # Prune stale skill dirs: any hyperresearch-* not in current roster, plus
     # any leftover layercake-* dirs from the pre-rename install layout.
-    for child in skills_root.iterdir():
-        if not child.is_dir():
-            continue
-        is_stale_hpr = child.name.startswith("hyperresearch-") and child.name not in expected
-        is_legacy_layercake = child.name.startswith("layercake-")
-        if not (is_stale_hpr or is_legacy_layercake):
-            continue
-        if not _is_our_skill_dir(child):
-            continue
-        _remove_skill_dir(child)
-        pruned.append(child.name)
+    for skills_root, _ in skill_roots:
+        for child in skills_root.iterdir():
+            if not child.is_dir():
+                continue
+            is_stale_hpr = child.name.startswith("hyperresearch-") and child.name not in expected
+            is_legacy_layercake = child.name.startswith("layercake-")
+            if not (is_stale_hpr or is_legacy_layercake):
+                continue
+            if not _is_our_skill_dir(child):
+                continue
+            _remove_skill_dir(child)
+            pruned.append(child.name)
 
     if not installed and not pruned:
         return None
@@ -4175,4 +4266,4 @@ def _install_hyperresearch_step_skills(vault_root: Path) -> str | None:
         parts.append(f"{len(installed)} step skills: {', '.join(installed)}")
     if pruned:
         parts.append(f"pruned: {', '.join(pruned)}")
-    return f"Claude Code: .claude/skills/hyperresearch-N-*/SKILL.md ({'; '.join(parts)})"
+    return f"Claude Code + Codex: hyperresearch step skills ({'; '.join(parts)})"
