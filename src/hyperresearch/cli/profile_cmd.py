@@ -147,10 +147,18 @@ def profile_use(
     vault.config.pipeline_profile = name
     vault.config.save(vault.config_path)
 
-    from hyperresearch.core.agent_docs import _resolve_executable
+    from hyperresearch.core.agent_docs import _resolve_executable, detect_agent_platform
     from hyperresearch.core.hooks import install_hooks
 
-    actions = install_hooks(vault.root, hpr_path=_resolve_executable(), profile=name)
+    hpr_path = _resolve_executable()
+    platform = detect_agent_platform(vault.root)
+    actions: list[str] = []
+    if platform in {"claude", "both"}:
+        actions.extend(install_hooks(vault.root, hpr_path=hpr_path, profile=name))
+    if platform in {"codex", "both"}:
+        from hyperresearch.core.codex import install_codex
+
+        actions.extend(install_codex(vault.root, hpr_path=hpr_path, profile=name))
 
     data = {
         "gear": name,

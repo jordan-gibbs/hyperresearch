@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import pytest
 from typer.testing import CliRunner
 
 from hyperresearch.cli import app
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _skip_browser_setup(monkeypatch):
+    """Profile plumbing does not need to install a browser binary."""
+    monkeypatch.setattr(
+        "hyperresearch.cli.install._setup_crawl4ai",
+        lambda _vault: "not_installed",
+    )
 
 
 def _sweep_text(vault) -> str:
@@ -25,9 +35,7 @@ def test_install_default_profile_is_full(tmp_vault, monkeypatch):
 
 def test_install_profile_light_changes_primary(tmp_vault, monkeypatch):
     monkeypatch.chdir(tmp_vault.root)
-    result = runner.invoke(
-        app, ["install", str(tmp_vault.root), "--profile", "light", "--json"]
-    )
+    result = runner.invoke(app, ["install", str(tmp_vault.root), "--profile", "light", "--json"])
     assert result.exit_code == 0
     sweep = _sweep_text(tmp_vault)
     # `p` (primary) is now light: planned_searches renders (8, 20)
@@ -42,9 +50,7 @@ def test_install_profile_light_changes_primary(tmp_vault, monkeypatch):
 
 def test_install_unknown_profile_fails_cleanly(tmp_vault, monkeypatch):
     monkeypatch.chdir(tmp_vault.root)
-    result = runner.invoke(
-        app, ["install", str(tmp_vault.root), "--profile", "bogus", "--json"]
-    )
+    result = runner.invoke(app, ["install", str(tmp_vault.root), "--profile", "bogus", "--json"])
     assert result.exit_code == 1
     # No half-written render should exist from the failed run: install validates
     # the profile before writing (the file may exist from vault init defaults,
@@ -56,9 +62,7 @@ def test_install_unknown_profile_fails_cleanly(tmp_vault, monkeypatch):
 
 def test_install_steps_only_renders(tmp_vault, monkeypatch):
     monkeypatch.chdir(tmp_vault.root)
-    result = runner.invoke(
-        app, ["install", str(tmp_vault.root), "--steps-only", "--json"]
-    )
+    result = runner.invoke(app, ["install", str(tmp_vault.root), "--steps-only", "--json"])
     assert result.exit_code == 0
     sweep = _sweep_text(tmp_vault)
     assert "<<" not in sweep
@@ -86,7 +90,7 @@ def test_profile_use_premier_switches_gear(tmp_vault, monkeypatch):
     assert "| `full` | 90 | 100–130 |" in sweep
     # Gear persisted in config
     cfg_text = tmp_vault.config_path.read_text(encoding="utf-8")
-    assert '[pipeline]' in cfg_text
+    assert "[pipeline]" in cfg_text
     assert 'profile = "premier"' in cfg_text
 
 
@@ -101,9 +105,7 @@ def test_bare_install_keeps_persisted_gear(tmp_vault, monkeypatch):
     sweep = _sweep_text(tmp_vault)
     assert 'rendered from profile "premier"' in sweep
     # An explicit --profile still overrides the persisted gear
-    result = runner.invoke(
-        app, ["install", str(tmp_vault.root), "--profile", "full", "--json"]
-    )
+    result = runner.invoke(app, ["install", str(tmp_vault.root), "--profile", "full", "--json"])
     assert result.exit_code == 0
     assert 'rendered from profile "full"' in _sweep_text(tmp_vault)
 
@@ -146,3 +148,39 @@ def test_profile_use_preserves_user_overlays(tmp_vault, monkeypatch):
     p = resolve_profile("megareview", cfg_path)
     assert p.source_min == 250
     assert p.loci_max == 20
+
+
+def test_profile_use_rerenders_both_installed_platforms(tmp_vault, monkeypatch):
+    monkeypatch.chdir(tmp_vault.root)
+    installed = runner.invoke(
+        app,
+        ["install", str(tmp_vault.root), "--platform", "both", "--json"],
+    )
+    assert installed.exit_code == 0
+
+    switched = runner.invoke(app, ["profile", "use", "premier", "--json"])
+    assert switched.exit_code == 0
+    claude_skill = (
+        tmp_vault.root / ".claude" / "skills" / "hyperresearch-2-width-sweep" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    codex_skill = (
+        tmp_vault.root / ".agents" / "skills" / "hyperresearch-2-width-sweep" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert 'rendered from profile "premier"' in claude_skill
+    assert 'rendered from profile "premier"' in codex_skill
+
+
+def test_unrelated_agents_md_does_not_change_claude_profile_workflow(
+    tmp_vault,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_vault.root)
+    agents_md = tmp_vault.root / "AGENTS.md"
+    original = "# User rules\n\nDo not modify this file.\n"
+    agents_md.write_text(original, encoding="utf-8")
+
+    result = runner.invoke(app, ["profile", "use", "premier", "--json"])
+
+    assert result.exit_code == 0
+    assert agents_md.read_text(encoding="utf-8") == original
+    assert not (tmp_vault.root / ".agents").exists()

@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Codex compatibility
+
+- **Additive platform installer:** `hyperresearch install --platform codex|both`
+  now installs Codex project instructions and skills while preserving the
+  existing Claude Code default and behavior.
+- **Native Codex layout:** the router and pipeline steps install under
+  `.agents/skills/`, with 16 native custom agents under `.codex/agents/` and
+  reusable role-prompt references as a generic-subagent fallback. Read-heavy
+  roles default to GPT-5.6 Terra; synthesis and critique roles use GPT-5.6 Sol.
+- **Durable Codex guidance:** `AGENTS.md` is created or updated idempotently
+  without overwriting user-authored content. Profile changes, repair, and
+  agent-doc refreshes keep whichever integrations are present up to date.
+- **Lifecycle recovery:** project installs merge a SessionStart hook into
+  `.codex/hooks.json`, preserving unrelated user hooks while restoring concise
+  vault guidance on startup, resume, clear, and post-compaction continuation.
+
 ## [0.10.0] - 2026-08-01
 
 ### Open-access full-text recovery (Unpaywall + Europe PMC)
