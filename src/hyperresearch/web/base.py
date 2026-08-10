@@ -227,9 +227,9 @@ def get_provider(
         try:
             from hyperresearch.web.parallel_provider import ParallelProvider
 
-            return ParallelProvider()
+            return ParallelProvider(settings=settings)
         except ImportError:
-            raise ImportError('parallel provider requires: pip install "hyperresearch[mcp]"')
+            raise ImportError('parallel provider requires: pip install "hyperresearch[parallel]"')
 
     raise ValueError(
         f"Unknown web provider: {name!r}. Available: builtin, crawl4ai, exa, tavily, parallel"

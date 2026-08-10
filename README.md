@@ -45,6 +45,21 @@ Then `/hyperresearch <anything>` in Claude Code.
 >
 > Power users: `hyperresearch install --global` makes `/hyperresearch` reachable from every Claude Code session anywhere, at the cost of ~15 lines in every session's system reminder. Per-project install (above) keeps unrelated CC sessions clean.
 
+For keyless web search and page extraction through Parallel's free Search MCP endpoint:
+
+```bash
+pip install "hyperresearch[parallel]"
+```
+
+```toml
+# .hyperresearch/config.toml
+[web]
+provider = "parallel"
+```
+
+All Parallel requests from one Hyperresearch process share a random session ID.
+Parallel uses it to correlate free-tier requests in its logs and for rate limiting.
+
 ---
 
 ## The 16-step research pipeline

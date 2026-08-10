@@ -6,7 +6,7 @@ Configuration:
     provider = "parallel"
 
 Optional install:
-    pip install "hyperresearch[mcp]"
+    pip install "hyperresearch[parallel]"
 """
 
 from __future__ import annotations
@@ -14,34 +14,40 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Mapping
-from datetime import UTC, datetime
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from mcp import ClientSession
-from mcp.client.streamable_http import streamable_http_client
-from mcp.types import CallToolResult
+from mcp.client.streamable_http import streamablehttp_client
 
+from hyperresearch.core.config import FetchSettings
 from hyperresearch.web.base import WebResult
+
+if TYPE_CHECKING:
+    from mcp.types import CallToolResult
 
 _ENDPOINT = "https://search.parallel.ai/mcp"
 _MAX_OBJECTIVE_CHARS = 5000
 _MAX_SEARCH_QUERY_CHARS = 200
+_SESSION_ID = uuid4().hex
 
 
 class ParallelProvider:
     """Web provider backed by Parallel's free Search MCP endpoint.
 
-    Each operation uses a short-lived MCP connection while the provider keeps
-    one stable session identifier for free-tier request correlation. Transport,
-    tool arguments, and result validation stay behind the synchronous
-    ``WebProvider`` interface used by Hyperresearch's CLI.
+    Each operation uses a short-lived MCP connection. All provider instances in
+    a process send the same random ``session_id``; Parallel uses it to correlate
+    free-tier requests in its logs and for rate limiting. Transport, tool
+    arguments, and result validation stay behind the synchronous ``WebProvider``
+    interface used by Hyperresearch's CLI.
     """
 
     name = "parallel"
 
-    def __init__(self) -> None:
-        self._session_id = uuid4().hex
+    def __init__(self, settings: FetchSettings | None = None) -> None:
+        settings = settings or FetchSettings()
+        self._timeout = timedelta(milliseconds=settings.page_timeout_ms)
 
     def search(self, query: str, max_results: int = 5) -> list[WebResult]:
         """Search the web and return ranked results with Markdown excerpts."""
@@ -51,7 +57,7 @@ class ParallelProvider:
             {
                 "objective": objective,
                 "search_queries": [search_query],
-                "session_id": self._session_id,
+                "session_id": _SESSION_ID,
             },
         )
         results = _result_items(payload, "web_search")
@@ -64,7 +70,7 @@ class ParallelProvider:
             {
                 "urls": [url],
                 "full_content": True,
-                "session_id": self._session_id,
+                "session_id": _SESSION_ID,
             },
         )
         results = _result_items(payload, "web_fetch")
@@ -77,11 +83,23 @@ class ParallelProvider:
 
     async def _call_tool_async(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         async with (
-            streamable_http_client(_ENDPOINT) as (read_stream, write_stream, _),
-            ClientSession(read_stream, write_stream) as session,
+            streamablehttp_client(
+                _ENDPOINT,
+                timeout=self._timeout,
+                sse_read_timeout=self._timeout,
+            ) as (read_stream, write_stream, _),
+            ClientSession(
+                read_stream,
+                write_stream,
+                read_timeout_seconds=self._timeout,
+            ) as session,
         ):
             await session.initialize()
-            result = await session.call_tool(name, arguments=arguments)
+            result = await session.call_tool(
+                name,
+                arguments=arguments,
+                read_timeout_seconds=self._timeout,
+            )
         return _decode_tool_result(result, name)
 
 
@@ -111,8 +129,9 @@ def _decode_tool_result(result: CallToolResult, tool_name: str) -> dict[str, Any
         detail = text or "unknown MCP error"
         raise RuntimeError(f"Parallel {tool_name} failed: {detail}")
 
-    if result.structuredContent is not None:
-        return dict(result.structuredContent)
+    structured_content = getattr(result, "structuredContent", None)
+    if structured_content is not None:
+        return dict(structured_content)
 
     if not text:
         raise RuntimeError(f"Parallel {tool_name} returned no structured or text content")
