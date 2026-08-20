@@ -88,9 +88,22 @@ The entry skill is a thin router. It pins down the canonical research query, the
 hyperresearch profile list           # all profiles + descriptions + current gear
 hyperresearch profile use premier    # 100–130 sources, doubled depth budget (~3–5 h)
 hyperresearch profile use full       # back to the 55–80-source baseline
+hyperresearch profile use orcarouter # full scale, every subagent routed through OrcaRouter
 ```
 
 The gear persists per project and survives reinstalls. Custom gears: define `[profile.<name>]` in `.hyperresearch/config.toml` (any knob: source targets, loci caps, draft counts, word targets, per-agent models) and `profile use <name>`.
+
+#### Using OrcaRouter as the model gateway
+
+The `orcarouter` gear runs the standard full pipeline (same scale envelope) but pins every installed subagent to gateway-namespaced model IDs (`anthropic/claude-sonnet-5`, `anthropic/claude-opus-5`) that route through [OrcaRouter](https://www.orcarouter.ai). Point Claude Code at the gateway and set your key:
+
+```bash
+export ANTHROPIC_BASE_URL="https://api.orcarouter.ai"
+export ANTHROPIC_AUTH_TOKEN="sk-orca-..."   # your OrcaRouter API key
+hyperresearch profile use orcarouter
+```
+
+The next `/hyperresearch` run (or `hyperresearch install --profile orcarouter`) renders every agent with those model IDs, so the whole 16-step pipeline — fetchers through critics — executes through the gateway. It also runs gateway-level, zero-trust security for AI agents on the same endpoint — screening every prompt/response and governing every tool call on a default-deny basis, with no application code changes.
 
 ### Run levers: what voice the report is written in
 
@@ -119,7 +132,7 @@ hyperresearch run status -j                                      # see what step
 
 ### Subagent roster
 
-Models are profile config, not hardcode. The table shows the shipped defaults, and you can override any of them in `.hyperresearch/config.toml`: `[profile.full]` with `models = { fetcher = "haiku" }` swaps every fetcher to Haiku on the next install or `profile use`.
+Models are profile config, not hardcode. The table shows the shipped defaults, and you can override any of them in `.hyperresearch/config.toml`: `[profile.full]` with `models = { fetcher = "haiku" }` swaps every fetcher to Haiku on the next install or `profile use`. The `orcarouter` gear ships the same roster through the [OrcaRouter](https://www.orcarouter.ai) gateway (see above).
 
 | Agent | Default model | Role |
 |---|---|---|

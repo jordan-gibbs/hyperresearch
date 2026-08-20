@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### OrcaRouter gateway gear
+
+- **New `orcarouter` built-in gear profile.** `hyperresearch profile use orcarouter` keeps the full pipeline's scale envelope but pins every installed subagent to gateway-namespaced model IDs (`anthropic/claude-sonnet-5`, `anthropic/claude-opus-5`). Point Claude Code at [OrcaRouter](https://www.orcarouter.ai) via `ANTHROPIC_BASE_URL=https://api.orcarouter.ai` + `ANTHROPIC_AUTH_TOKEN` and the whole 16-step pipeline executes through the gateway. Model assignments stay profile config — override any of them per project in `.hyperresearch/config.toml` as usual.
+
 ## [0.10.0] - 2026-08-01
 
 ### Open-access full-text recovery (Unpaywall + Europe PMC)

@@ -350,12 +350,39 @@ _DISSERTATION: dict = {
     "time_estimate": "~4–8 hours",
 }
 
+_ORCAROUTER: dict = {
+    **_FULL,
+    "name": "orcarouter",
+    "description": "Same scale as the full pipeline, but every subagent routes through OrcaRouter — a gateway-level, zero-trust security layer for AI agents.",
+    # Same envelope as `full` — the gear only changes WHICH models serve the
+    # pipeline, not how much work happens. OrcaRouter sits in front of Claude
+    # Code via the standard gateway env vars (ANTHROPIC_BASE_URL +
+    # ANTHROPIC_AUTH_TOKEN); the `anthropic/`-prefixed IDs below are the
+    # gateway's own namespace (bare "claude-sonnet-5" is not a routable ID).
+    "models": {
+        "fetcher": "anthropic/claude-sonnet-5",
+        "source_analyst": "anthropic/claude-sonnet-5",
+        "loci_analyst": "anthropic/claude-sonnet-5",
+        "depth_investigator": "anthropic/claude-sonnet-5",
+        "corpus_critic": "anthropic/claude-sonnet-5",
+        "cite_checker": "anthropic/claude-sonnet-5",
+        "browser_fetcher": "anthropic/claude-sonnet-5",
+        "draft_orchestrator": "anthropic/claude-opus-5",
+        "synthesizer": "anthropic/claude-opus-5",
+        "critics": "anthropic/claude-opus-5",
+        "patcher": "anthropic/claude-opus-5",
+        "polish_auditor": "anthropic/claude-opus-5",
+        "readability_recommender": "anthropic/claude-opus-5",
+    },
+}
+
 # Listed in ascending scale order — `hpr profile list` follows this order.
 BUILTIN_PROFILES: dict[str, dict] = {
     "light": _LIGHT,
     "full": _FULL,
     "premier": _PREMIER,
     "dissertation": _DISSERTATION,
+    "orcarouter": _ORCAROUTER,
 }
 
 # Profiles that make sense as the installed scale "gear" — the profile whose
@@ -365,7 +392,7 @@ BUILTIN_PROFILES: dict[str, dict] = {
 # `dissertation.*` values by name and runs each chapter inside the gear's
 # envelope). Installing either AS the gear would bake the wrong numbers into
 # the flat pipeline.
-GEAR_PROFILES: tuple[str, ...] = ("full", "premier")
+GEAR_PROFILES: tuple[str, ...] = ("full", "premier", "orcarouter")
 
 
 class ProfileError(Exception):

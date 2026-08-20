@@ -28,7 +28,7 @@ def install(
     profile: str | None = typer.Option(
         None,
         "--profile",
-        help="Pipeline profile to render skill/agent prompts from (built-in gears: full, premier; plus any [profile.*] defined in .hyperresearch/config.toml). Defaults to the gear persisted by `hyperresearch profile use` (or 'full'). See `hyperresearch profile list`.",
+        help="Pipeline profile to render skill/agent prompts from (built-in gears: full, premier, orcarouter; plus any [profile.*] defined in .hyperresearch/config.toml). Defaults to the gear persisted by `hyperresearch profile use` (or 'full'). See `hyperresearch profile list`.",
     ),
 ) -> None:
     """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""

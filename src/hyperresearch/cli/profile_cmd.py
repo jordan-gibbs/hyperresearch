@@ -6,8 +6,9 @@ Two distinct concepts, one command group:
   bounded queries) and `dissertation` (opt-in chaptered mega-runs). The
   pipeline routes tiers itself.
 - **The gear** is the scale profile whose numbers are rendered into the
-  installed skill/agent prompts: `full` (standard) or `premier` (max
-  width/depth), plus any user-defined `[profile.*]` overlay. Switch gears
+  installed skill/agent prompts: `full` (standard), `premier` (max
+  width/depth), or `orcarouter` (full scale routed through the OrcaRouter
+  gateway), plus any user-defined `[profile.*]` overlay. Switch gears
   with `hpr profile use <name>` — it re-renders every installed prompt and
   persists the choice in `.hyperresearch/config.toml`.
 """
@@ -100,13 +101,13 @@ def profile_list(
             )
     console.print(
         "\n[dim]Tiers route per query (light auto, dissertation opt-in). "
-        "Switch the scale gear with: hyperresearch profile use <full|premier>[/]"
+        "Switch the scale gear with: hyperresearch profile use <full|premier|orcarouter>[/]"
     )
 
 
 @app.command("use")
 def profile_use(
-    name: str = typer.Argument(..., help="Gear profile to switch to (full, premier, or a [profile.*] overlay)"),
+    name: str = typer.Argument(..., help="Gear profile to switch to (full, premier, orcarouter, or a [profile.*] overlay)"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
     """Switch the pipeline scale gear: re-render installed skills/agents from this profile and persist it as the project default."""
@@ -126,7 +127,7 @@ def profile_use(
             f"'{name}' is a run-time tier, not a scale gear. "
             "light is auto-selected for bounded queries; dissertation runs are requested "
             "per query (or via `hyperresearch run init <tag> --profile dissertation`). "
-            "Gears control the flat pipeline's scale: full, premier, or a custom [profile.*] overlay."
+            "Gears control the flat pipeline's scale: full, premier, orcarouter, or a custom [profile.*] overlay."
         )
         if json_output:
             output(error(msg, "TIER_NOT_GEAR"), json_mode=True)

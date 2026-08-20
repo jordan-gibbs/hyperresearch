@@ -56,7 +56,7 @@ class TestBuiltins:
 
     def test_list_builtins(self):
         # Ascending scale order — `hpr profile list` follows this.
-        assert list_profiles() == ["light", "full", "premier", "dissertation"]
+        assert list_profiles() == ["light", "full", "premier", "dissertation", "orcarouter"]
 
     def test_all_builtins_validate(self):
         for name in BUILTIN_PROFILES:
@@ -95,9 +95,28 @@ class TestBuiltins:
     def test_gear_profiles_are_valid_builtins(self):
         from hyperresearch.core.profiles import GEAR_PROFILES
 
-        assert GEAR_PROFILES == ("full", "premier")
+        assert GEAR_PROFILES == ("full", "premier", "orcarouter")
         for name in GEAR_PROFILES:
             assert name in BUILTIN_PROFILES
+
+    def test_orcarouter_gear_pins_gateway_namespaced_models(self):
+        """The orcarouter gear is full-scale but routes every agent through the
+        OrcaRouter gateway: all model assignments carry the `anthropic/`
+        namespace the gateway requires, and the scale envelope matches full."""
+        p = resolve_profile("orcarouter")
+        full = resolve_profile("full")
+        # Same scale envelope as the standard full pipeline — the gear only
+        # changes which models serve it, not how much work happens.
+        assert p.steps == full.steps
+        assert p.source_min == full.source_min
+        assert p.source_target == full.source_target
+        assert p.chapters == (0, 0)
+        # Every agent routes through the gateway namespace, never a bare alias.
+        for field, model in p.models.model_dump().items():
+            assert model.startswith("anthropic/"), f"{field} not namespaced: {model}"
+        # Sonnet-class agents stay sonnet-class, opus-class agents stay opus.
+        assert p.models.fetcher == "anthropic/claude-sonnet-5"
+        assert p.models.synthesizer == "anthropic/claude-opus-5"
 
     def test_modelmap_covers_every_installed_agent(self):
         from hyperresearch.core.profiles import ModelMap
@@ -189,7 +208,7 @@ class TestUserOverlay:
 
     def test_listing_includes_user_profiles(self, tmp_path: Path):
         cfg = self._write(tmp_path, "[profile.dissertation]\nsource_min = 250\n")
-        assert list_profiles(cfg) == ["light", "full", "premier", "dissertation"]
+        assert list_profiles(cfg) == ["light", "full", "premier", "dissertation", "orcarouter"]
 
     def test_missing_config_is_fine(self, tmp_path: Path):
         p = resolve_profile("full", tmp_path / "nope.toml")
@@ -283,6 +302,7 @@ class TestProfileCli:
         payload = json.loads(result.stdout)
         names = [p["name"] for p in payload["data"]["profiles"]]
         assert "full" in names and "light" in names and "premier" in names
+        assert "orcarouter" in names
 
     def test_profile_list_marks_current_gear(self, tmp_vault, monkeypatch):
         import json
@@ -301,10 +321,11 @@ class TestProfileCli:
         assert rows["full"]["current_gear"] is True
         assert rows["premier"]["current_gear"] is False
         # Friendly metadata is present for every built-in
-        for name in ("light", "full", "premier", "dissertation"):
+        for name in ("light", "full", "premier", "dissertation", "orcarouter"):
             assert rows[name]["description"]
             assert rows[name]["kind"] in ("gear", "tier")
         assert rows["premier"]["kind"] == "gear"
+        assert rows["orcarouter"]["kind"] == "gear"
         assert rows["dissertation"]["kind"] == "tier"
 
     def test_profile_validate_catches_bad_overlay(self, tmp_vault, monkeypatch):
