@@ -29,9 +29,9 @@ def fetch_and_save(
     tags = tags or []
     conn = vault.db
 
-    # Check if URL already fetched
+    # Check if URL already fetched (a NULL note_id here is an orphaned row, not a live duplicate)
     existing = conn.execute("SELECT note_id FROM sources WHERE url = ?", (url,)).fetchone()
-    if existing:
+    if existing and existing["note_id"] is not None:
         raise ValueError(f"URL already fetched as note '{existing['note_id']}'")
 
     # Auto-visible for sites that kill headless sessions on first contact
@@ -157,11 +157,18 @@ def fetch_and_save(
     if plan.to_add or plan.to_update:
         execute_sync(vault, plan)
 
-    # Record source
+    # Record source (upsert: an orphaned row for this url may already exist)
     content_hash = hashlib.sha256(result.content.encode("utf-8")).hexdigest()[:16]
     conn.execute(
         """INSERT INTO sources (url, note_id, domain, fetched_at, provider, content_hash)
-           VALUES (?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(url) DO UPDATE SET
+               note_id = excluded.note_id,
+               domain = excluded.domain,
+               fetched_at = excluded.fetched_at,
+               provider = excluded.provider,
+               content_hash = excluded.content_hash,
+               status = 'active'""",
         (url, note_id, domain, result.fetched_at.isoformat(), prov.name, content_hash),
     )
     conn.commit()

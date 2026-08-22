@@ -13,6 +13,7 @@ import logging
 import os
 import pathlib
 import sys
+import threading
 from datetime import UTC, datetime
 
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, DefaultMarkdownGenerator
@@ -33,6 +34,33 @@ if sys.platform == "win32":
                 _stream.reconfigure(encoding="utf-8", errors="replace")
             except Exception:
                 pass
+
+
+def _run_coro(coro):
+    """Run ``coro`` to completion, whether or not this thread already has a running
+    event loop (the MCP server dispatches sync tools on its own loop's thread; the
+    CLI does not). A plain ``asyncio.run(coro)`` only works in the second case, so
+    fall back to a dedicated thread, which has no running loop of its own.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    box: dict = {}
+
+    def _target() -> None:
+        try:
+            box["result"] = asyncio.run(coro)
+        except BaseException as exc:  # re-raised on the caller's thread below
+            box["error"] = exc
+
+    thread = threading.Thread(target=_target)
+    thread.start()
+    thread.join()
+    if "error" in box:
+        raise box["error"]
+    return box["result"]
 
 
 def _is_pdf_url(url: str) -> bool:
@@ -292,9 +320,9 @@ class Crawl4AIProvider:
 
         # When visible + profile: use Playwright directly (crawl4ai managed browser ignores headless=False)
         if not self._headless and self._data_dir:
-            return asyncio.run(self._fetch_visible(url))
+            return _run_coro(self._fetch_visible(url))
 
-        result = asyncio.run(self._fetch_async(url))
+        result = _run_coro(self._fetch_async(url))
 
         # Post-fetch PDF detection: if the browser got binary garbage (PDF served
         # inline without proper content-type handling), re-fetch as a direct PDF download.
