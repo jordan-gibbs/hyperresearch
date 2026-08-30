@@ -3,12 +3,12 @@
 A run is one /hyperresearch invocation. Everything run-scoped lives under
 `research/runs/<vault_tag>/`:
 
-    run.json          — the manifest (this module's contract)
-    events.jsonl      — append-only event log (step boundaries, spawns, fetches)
-    query.md          — canonical verbatim research query
+    run.json         , the manifest (this module's contract)
+    events.jsonl     , append-only event log (step boundaries, spawns, fetches)
+    query.md         , canonical verbatim research query
     scaffold.md, prompt-decomposition.json, loci.json, comparisons.md, ...
-    temp/             — scratch artifacts (claims JSONs, drafts, notes)
-    chapters/chN/     — per-chapter artifact sets (dissertation profile)
+    temp/            , scratch artifacts (claims JSONs, drafts, notes)
+    chapters/chN/    , per-chapter artifact sets (dissertation profile)
 
 The manifest replaces the 1.x "find the highest-numbered artifact on disk"
 recovery heuristic with explicit, durable state: per-step status, per-chapter
@@ -16,7 +16,7 @@ status, spend counters, and a budget ceiling. The orchestrator updates it at
 step boundaries via `hpr run ...` commands; `hpr run resume <tag>` computes
 the exact next position.
 
-Vault notes stay global — runs are ephemeral workspaces over the compounding
+Vault notes stay global, runs are ephemeral workspaces over the compounding
 vault. Final reports ship to `research/notes/final_report_<vault_tag>.md`.
 """
 
@@ -197,7 +197,7 @@ def add_spend(
 
     # Budget governor: crossing the ceiling flips the run to blocked. The
     # orchestrator checks `hpr run status` at step boundaries and must pause
-    # (never silently skip tier-mandated steps — shrink fan-out instead).
+    # (never silently skip tier-mandated steps, shrink fan-out instead).
     budget = manifest.get("budget_usd")
     if budget is not None and spend["estimated_usd"] >= budget and manifest["status"] == "running":
         manifest["status"] = "blocked"
@@ -344,12 +344,52 @@ def run_report_data(vault, vault_tag: str) -> dict:
     }
 
 
+def _declared_tier(run_dir: Path) -> str | None:
+    """The `pipeline_tier` step 1 wrote into prompt-decomposition.json.
+
+    Tolerant on purpose: a missing or unreadable decomposition just means
+    "no declared tier", and verify_run reports the unreadable case through
+    its own `decomposition-readable` check.
+    """
+    decomp_path = run_dir / "prompt-decomposition.json"
+    if not decomp_path.exists():
+        return None
+    try:
+        decomp = json.loads(decomp_path.read_text(encoding="utf-8-sig"))
+    except json.JSONDecodeError:
+        return None
+    tier = decomp.get("pipeline_tier") if isinstance(decomp, dict) else None
+    return tier if isinstance(tier, str) and tier.strip() else None
+
+
+def _required_step_ids(manifest: dict, run_dir: Path, config_path: Path | None) -> set[str]:
+    """Step ids whose artifacts the ship gate demands.
+
+    The router initializes a run with the installed gear and lets step 1
+    reclassify it: "the manifest's profile field is informational, the
+    decomposition's tier rules". So when the decomposition declares a tier
+    that disagrees with the manifest profile, that tier's step set wins;
+    otherwise (no tier, same tier, or a tier that resolves to nothing) the
+    manifest's own `profile_steps` stand.
+    """
+    from hyperresearch.core.profiles import ProfileError, resolve_profile
+
+    steps = {str(s) for s in manifest.get("profile_steps", [])}
+    tier = _declared_tier(run_dir)
+    if tier is None or tier == manifest.get("profile"):
+        return steps
+    try:
+        return {str(s) for s in resolve_profile(tier, config_path).steps}
+    except ProfileError:
+        return steps
+
+
 def verify_run(vault, vault_tag: str) -> dict:
     """Structural verification battery for a completed run.
 
     The CI-able gate: report exists, headings honored, length in profile
     range, citation density above floor, tier-mandated artifacts present,
-    cite-check findings resolved. Returns {passed, checks: [...]} — each
+    cite-check findings resolved. Returns {passed, checks: [...]}, each
     check {name, ok, detail}. Content lint rules (quote-integrity etc.)
     run separately via `hpr lint`.
     """
@@ -458,7 +498,7 @@ def verify_run(vault, vault_tag: str) -> dict:
         # Content gates: the blocking lint rules run in-process, so this ONE
         # command carries the whole ship verdict. Bench Q62 shipped with 24
         # hallucinated-quote errors because the orchestrator ran the lint
-        # separately and re-interpreted the failures as false positives —
+        # separately and re-interpreted the failures as false positives,
         # folding the rules in here removes that seam.
         try:
             from hyperresearch.cli.lint import (
@@ -478,15 +518,16 @@ def verify_run(vault, vault_tag: str) -> dict:
                     rule,
                     not errors,
                     "clean" if not errors else (
-                        f"{len(errors)} error(s) — first: "
+                        f"{len(errors)} error(s), first: "
                         f"{errors[0].get('message', '')[:160]}"
                     ),
                 )
         except Exception as exc:
             check("content-lints", False, f"content lint rules failed to run: {exc}")
 
-    # Tier-mandated artifacts
-    steps = set(manifest.get("profile_steps", []))
+    # Tier-mandated artifacts, keyed on the tier the run actually ran (see
+    # _required_step_ids) rather than the profile it was initialized with.
+    steps = _required_step_ids(manifest, run_dir, vault.config_path)
     if {"12", "14"} <= steps:
         for name in (
             "critic-findings-dialectic.json", "critic-findings-depth.json",
@@ -527,7 +568,7 @@ def finish_run(vault, vault_tag: str) -> dict:
     """The terminal ship gate: verify, then flip the manifest accordingly.
 
     This is the ONLY path to status "done". Verification failure flips the
-    run to blocked (blocked_on="verify") instead — the caller's job is then
+    run to blocked (blocked_on="verify") instead, the caller's job is then
     to change the REPORT until the gate passes, never to re-interpret the
     checks. The verify result is recorded in the manifest either way, so
     `run status` and the bench harness can see whether a "done" run actually

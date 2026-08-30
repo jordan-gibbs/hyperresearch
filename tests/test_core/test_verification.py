@@ -194,7 +194,7 @@ class TestIndependence:
         from hyperresearch.core.note import write_note
         from hyperresearch.core.sync import compute_sync_plan, execute_sync
 
-        pr = "NEW YORK, PRNewswire — MegaCorp announces quantum widget breakthrough today."
+        pr = "NEW YORK, PRNewswire, MegaCorp announces quantum widget breakthrough today."
         for i, (title, when) in enumerate([("MegaCorp Breakthrough", "2026-01-01"),
                                            ("MegaCorp Announces Widget", "2026-01-02"),
                                            ("Quantum Widget from MegaCorp", "2026-01-03")]):
@@ -354,6 +354,61 @@ class TestCJKLengthCheck:
         by_name = {c["name"]: c for c in result["checks"]}
         assert by_name["length-in-range"]["ok"] is True
         assert "300-900" in by_name["length-in-range"]["detail"]
+
+
+class TestClassifiedTierArtifacts:
+    """The router lets step 1 reclassify a run's tier after `run init`:
+    "the manifest's profile field is informational -- the decomposition's
+    tier rules". The ship gate has to read the same rule, or a
+    light-classified run started on the installed gear is asked for critic
+    findings that light tier never produces."""
+
+    def _light_classified_gear_run(self, tmp_vault, tag: str, tier: str | None):
+        init_run(tmp_vault, tag, profile="full")
+        run_dir = tmp_vault.run_dir(tag)
+        decomp = {
+            "response_format": "short",
+            "required_section_headings": ["## Findings"],
+        }
+        if tier is not None:
+            decomp["pipeline_tier"] = tier
+        (run_dir / "prompt-decomposition.json").write_text(
+            json.dumps(decomp), encoding="utf-8"
+        )
+        (run_dir / "polish-log.json").write_text('{"applied": []}', encoding="utf-8")
+        report = tmp_vault.root / "research" / "notes" / f"final_report_{tag}.md"
+        report.write_text(
+            "## Findings\n\n"
+            + ("Substantive sentence with real evidence attached [[src-note]]. " * 80),
+            encoding="utf-8",
+        )
+        return run_dir
+
+    def test_light_classified_gear_run_passes_without_critic_artifacts(self, tmp_vault):
+        self._light_classified_gear_run(tmp_vault, "tier-01", "light")
+
+        result = verify_run(tmp_vault, "tier-01")
+        names = {c["name"] for c in result["checks"]}
+        assert not [n for n in names if n.startswith("artifact:critic-findings")]
+        assert "artifact:patch-log.json" not in names
+        assert "artifact:polish-log.json" in names
+        assert result["passed"] is True
+
+    def test_gear_run_without_declared_tier_still_needs_critic_artifacts(self, tmp_vault):
+        self._light_classified_gear_run(tmp_vault, "tier-02", None)
+
+        result = verify_run(tmp_vault, "tier-02")
+        by_name = {c["name"]: c for c in result["checks"]}
+        assert by_name["artifact:critic-findings-dialectic.json"]["ok"] is False
+        assert result["passed"] is False
+
+    def test_unknown_declared_tier_falls_back_to_manifest_profile(self, tmp_vault):
+        self._light_classified_gear_run(tmp_vault, "tier-03", "bogus")
+
+        result = verify_run(tmp_vault, "tier-03")
+        by_name = {c["name"]: c for c in result["checks"]}
+        assert by_name["artifact:critic-findings-dialectic.json"]["ok"] is False
+        assert result["passed"] is False
 
 
 class TestTelemetryAndVerify:
@@ -522,7 +577,7 @@ class TestFinishGate:
 
     def test_verify_includes_content_gates(self, tmp_vault):
         """verify_run itself must carry quote-integrity + retracted-citations
-        checks — one command, whole verdict."""
+        checks, one command, whole verdict."""
         self._well_formed_light_run(tmp_vault, "fin-06")
         result = verify_run(tmp_vault, "fin-06")
         names = {c["name"] for c in result["checks"]}
