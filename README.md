@@ -44,21 +44,6 @@ Then `/hyperresearch <anything>` in Claude Code.
 >
 > Power users: `hyperresearch install --global` makes `/hyperresearch` reachable from every Claude Code session anywhere, at the cost of ~15 lines in every session's system reminder. Per-project install (above) keeps unrelated CC sessions clean.
 
-For keyless web search and page extraction through Parallel's free Search MCP endpoint:
-
-```bash
-pip install "hyperresearch[parallel]"
-```
-
-```toml
-# .hyperresearch/config.toml
-[web]
-provider = "parallel"
-```
-
-All Parallel requests from one Hyperresearch process share a random session ID.
-Parallel uses it to correlate free-tier requests in its logs and for rate limiting.
-
 ---
 
 ## The 16-step research pipeline
@@ -265,6 +250,24 @@ A research agent reads hundreds of pages it did not choose, and any one of them 
 Every body fetched from the web is served wrapped in `<untrusted-source url="...">` delimiters with an inline treat-as-data preamble, on both paths that serve bodies (`note show` in single, batch, and JSON forms, and `search` with bodies included). Notes your own pipeline subagents wrote pass through unwrapped. Forged fence tags inside a fetched body are neutralized and left visible for forensics, the `url` attribute is HTML-escaped with control characters stripped, and in `search` the wrapping happens after token-budget truncation so the closing fence can never be severed. The fetcher, depth-investigator, draft-orchestrator, and source-analyst prompts all carry a policy block telling them not to launder a fenced page's directives into trusted output.
 
 Resolved URLs from third-party APIs get the same treatment. An open-access location arrives inside someone else's JSON, so it's checked for scheme, embedded credentials, and publicly-routable resolution before anything fetches it.
+
+---
+
+## Web providers
+
+The `[web] provider` setting in `.hyperresearch/config.toml` picks how pages are fetched and, for the providers that support it, how the web is searched. All are optional extras except the default.
+
+- **`builtin`** (default) — plain HTTP fetch with no search. Zero extra dependencies; the starting point everything else improves on.
+- **`crawl4ai`** — headless browser fetch with stealth, PDF extraction and the browser-escalation lane. The one the pipeline is tuned for. `pip install "hyperresearch[crawl4ai]"`.
+- **`exa`** — neural web search and page extraction. Needs an API key. `pip install "hyperresearch[exa]"`.
+- **`tavily`** — search and extraction built for agents. Needs an API key. `pip install "hyperresearch[tavily]"`.
+- **`parallel`** — [Parallel](https://parallel.ai/)'s Search MCP endpoint, which needs no account or key. Search only — bulk fetch waves degrade to per-URL, so it is a good search provider rather than a replacement for the crawl4ai fetch path. Every request from one process carries a random session ID that Parallel uses for correlation and rate limiting on its side. `pip install "hyperresearch[parallel]"`.
+
+```toml
+# .hyperresearch/config.toml
+[web]
+provider = "crawl4ai"
+```
 
 ---
 

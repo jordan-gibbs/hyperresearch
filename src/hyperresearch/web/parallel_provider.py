@@ -34,11 +34,11 @@ _SESSION_ID = uuid4().hex
 
 
 class ParallelProvider:
-    """Web provider backed by Parallel's free Search MCP endpoint.
+    """Web provider backed by Parallel's keyless Search MCP endpoint.
 
     Each operation uses a short-lived MCP connection. All provider instances in
     a process send the same random ``session_id``; Parallel uses it to correlate
-    free-tier requests in its logs and for rate limiting. Transport, tool
+    requests in its logs and for rate limiting. Transport, tool
     arguments, and result validation stay behind the synchronous ``WebProvider``
     interface used by Hyperresearch's CLI.
     """
