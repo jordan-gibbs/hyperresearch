@@ -77,25 +77,22 @@ def search_fts(
     """Execute a full-text search against the notes_fts table.
 
     Raises:
-        SearchQueryError: the query is empty or has no searchable terms.
+        SearchQueryError: the query has no searchable terms, unless it is blank
+            and at least one metadata filter is supplied.
         sqlite3.OperationalError: the FTS index is missing or unreadable. This is
             deliberately not swallowed — a broken index must not look like a
             topic with no results.
     """
     fts_query = preprocess_query(query)
 
-    if not fts_query.strip():
+    where, filter_params = filters.to_sql("n") if filters else ("1=1", [])
+    filter_only = not query.strip() and where != "1=1"
+    if not fts_query.strip() and not filter_only:
         raise SearchQueryError(
             f"Search query {query!r} contains no searchable terms. "
-            "Provide at least one word or quoted phrase."
+            "Provide at least one word, quoted phrase, or a filter without a text query."
         )
-
-    filter_clause = ""
-    filter_params: list = []
-    if filters:
-        where, filter_params = filters.to_sql("n")
-        if where != "1=1":
-            filter_clause = f"AND {where}"
+    filter_clause = f"AND {where}"
 
     # Exclude auto-generated index pages by default
     index_clause = "" if include_index else "AND n.type != 'index'"
@@ -107,24 +104,28 @@ def search_fts(
     tgw = w.get("tags_weight", 5.0)
     aw = w.get("aliases_weight", 3.0)
 
+    source = "notes n" if filter_only else "notes_fts fts JOIN notes n ON fts.id = n.id"
+    match = "1=1" if filter_only else "notes_fts MATCH ?"
+    snippet = "COALESCE(n.summary, '')" if filter_only else "snippet(notes_fts, 2, '>>>', '<<<', '...', 64)"
+    score = "0.0" if filter_only else f"bm25(notes_fts, 0.0, {tw}, {bw}, {tgw}, {aw})"
+    order = "n.created DESC, n.id" if filter_only else "score"
     sql = f"""
         SELECT
             n.id, n.title, n.path, n.status, n.type, n.tier, n.content_type,
-            n.quality_score,
+            n.quality_score, n.doi, n.venue, n.citation_count, n.is_retracted, n.oa_version,
             n.created, n.updated, n.word_count, n.summary,
-            snippet(notes_fts, 2, '>>>', '<<<', '...', 64) as snippet,
-            bm25(notes_fts, 0.0, {tw}, {bw}, {tgw}, {aw}) as score,
+            {snippet} as snippet,
+            {score} as score,
             (SELECT GROUP_CONCAT(t.tag, ',') FROM tags t WHERE t.note_id = n.id) as tag_list
-        FROM notes_fts fts
-        JOIN notes n ON fts.id = n.id
-        WHERE notes_fts MATCH ?
+        FROM {source}
+        WHERE {match}
         {filter_clause}
         {index_clause}
-        ORDER BY score
+        ORDER BY {order}
         LIMIT ? OFFSET ?
     """
 
-    params = [fts_query, *filter_params, limit, offset]
+    params = [*([fts_query] if not filter_only else []), *filter_params, limit, offset]
 
     try:
         rows = conn.execute(sql, params).fetchall()
@@ -148,6 +149,11 @@ def search_fts(
             # sqlite3.Row.__contains__ is broken; row.keys() is reliable.
             "tier": row["tier"] if "tier" in row.keys() else None,  # noqa: SIM118
             "content_type": row["content_type"] if "content_type" in row.keys() else None,  # noqa: SIM118
+            "doi": row["doi"],
+            "venue": row["venue"],
+            "citation_count": row["citation_count"],
+            "is_retracted": None if row["is_retracted"] is None else bool(row["is_retracted"]),
+            "oa_version": row["oa_version"],
             "tags": tag_list,
             "created": row["created"],
             "updated": row["updated"],

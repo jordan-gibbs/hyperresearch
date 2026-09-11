@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 SCHEMA_SQL = """
 PRAGMA journal_mode=WAL;
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS notes (
     independence     REAL,
     citation_count   INTEGER,
     venue            TEXT,
-    is_retracted     INTEGER NOT NULL DEFAULT 0,
+    is_retracted     INTEGER,
     quality_score    REAL,
     -- Open-access recovery (v11). When oa_url is set, the note BODY came from
     -- there and NOT from `source` — see core/oa.py. Frontmatter-mirrored.

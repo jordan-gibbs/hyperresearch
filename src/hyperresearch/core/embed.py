@@ -19,6 +19,8 @@ from __future__ import annotations
 import struct
 from datetime import UTC, datetime
 
+from hyperresearch.search.filters import SearchFilters
+
 DEFAULT_MODELS = {
     "voyage": "voyage-3-lite",
     "openai": "text-embedding-3-small",
@@ -160,7 +162,9 @@ def embed_sync(vault, batch_size: int = 32) -> dict:
     }
 
 
-def semantic_search(vault, query: str, limit: int = 20) -> list[dict]:
+def semantic_search(
+    vault, query: str, limit: int = 20, *, filters: SearchFilters | None = None,
+) -> list[dict]:
     """Brute-force cosine search. Returns [{id, score}] best-first."""
     cfg = vault.config.embeddings
     if cfg.provider == "none":
@@ -172,7 +176,12 @@ def semantic_search(vault, query: str, limit: int = 20) -> list[dict]:
 
     conn = vault.db
     results = []
-    for row in conn.execute("SELECT note_id, vector FROM embeddings").fetchall():
+    where, params = filters.to_sql("n") if filters else ("1=1", [])
+    rows = conn.execute(
+        f"SELECT e.note_id, e.vector FROM embeddings e JOIN notes n ON n.id = e.note_id "
+        f"WHERE n.type != 'index' AND {where}", params,
+    ).fetchall()
+    for row in rows:
         score = cosine(query_vec, _unpack(row["vector"]))
         results.append({"id": row["note_id"], "score": score})
     results.sort(key=lambda r: r["score"], reverse=True)

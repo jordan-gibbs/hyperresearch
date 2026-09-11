@@ -268,7 +268,7 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
             note.word_count, meta.summary, created_iso, updated_iso,
             file_mtime, note.content_hash, synced_at,
             meta.doi, meta.utility_score, meta.citation_count, meta.venue,
-            1 if meta.is_retracted else 0,
+            None if meta.is_retracted is None else int(meta.is_retracted),
             meta.oa_url, meta.oa_source, meta.oa_version, meta.oa_license,
             meta.oa_recovery_kind,
         ),

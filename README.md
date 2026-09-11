@@ -31,6 +31,9 @@
 - **Crashed runs resume.** Each run keeps a manifest; `run resume` picks up at the exact step where it died.
 - **Scales from 30 minutes to a dissertation.** Bounded queries auto-route to a 5-step fast path. Opt-in dissertation runs write 25K–80K words across chapters, from 300–450 sources.
 
+Browse the vault by DOI, venue, citation count, retraction status, or retrieved
+manuscript version with [scholarly metadata filters](docs/source-search.md).
+
 ## Install
 
 ```bash
