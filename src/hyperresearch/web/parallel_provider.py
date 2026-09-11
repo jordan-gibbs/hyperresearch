@@ -112,7 +112,8 @@ class ParallelProvider:
         return _to_web_result(results[0])
 
     def _call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        return _run_coro(self._call_tool_async(name, arguments))
+        payload: dict[str, Any] = _run_coro(self._call_tool_async(name, arguments))
+        return payload
 
     async def _call_tool_async(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         async with (
