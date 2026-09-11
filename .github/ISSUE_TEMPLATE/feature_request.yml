@@ -1,0 +1,36 @@
+name: Feature request or proposal
+description: Suggest a capability, or propose a design change
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you're trying to do that you can't do today. Describe the situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like to see
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What you do now instead
+      description: |
+        If there's a config overlay, a flag, or a manual step that gets you most of the way, say so. Several proposals have turned out to be already possible via `[profile.<name>]` overrides in `.hyperresearch/config.toml` or existing CLI flags, and knowing what you already tried is the fastest way to find that out.
+    validations:
+      required: false
+
+  - type: textarea
+    id: scale
+    attributes:
+      label: Scale, if the proposal is about performance
+      description: |
+        For anything framed around "this won't hold up at size", the useful number is where it actually stops working for you: vault size, source count per run, or measured timings. Proposals with a real number attached get built; proposals without one usually get a cheaper fix.
+    validations:
+      required: false

@@ -1,0 +1,62 @@
+name: Bug report
+description: Something in the hyperresearch CLI or pipeline behaves incorrectly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, one check that saves everyone time: **is the problem in hyperresearch, or in the agent harness running it?**
+
+        hyperresearch is a Python CLI. If what you're seeing is about subagent scheduling, task notifications, context or token accounting, or how an agent decided to call a tool, that belongs to Claude Code or whichever harness you're using, not here. If you're unsure, file it — just say so.
+
+  - type: input
+    id: version
+    attributes:
+      label: hyperresearch version
+      description: Output of `hyperresearch --version`.
+      placeholder: "0.10.1"
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: OS and Python version
+      description: Output of `python -VV`, plus your OS. Use the interpreter that actually runs the CLI (the one in `.venv`), which is not always the one on PATH.
+      placeholder: "Windows 11, Python 3.11.9"
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: What you ran
+      description: The exact command. Add `-j` if the command supports it.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: What happened
+      description: |
+        Paste the literal output, including stderr — not a summary of it. Exact text matters: several past reports turned on whether a message was a parser error or a fixed string the CLI prints for any failure.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Smallest set of steps that shows the problem. If it involves a fetch, include the URL. If it involves a run, include the vault tag and `hyperresearch run status -j`.
+    validations:
+      required: false

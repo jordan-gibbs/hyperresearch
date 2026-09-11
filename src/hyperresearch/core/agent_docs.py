@@ -64,14 +64,28 @@ In a normal run, the canonical research query is the user's verbatim prompt. In 
 
 ### Academic APIs before web search
 
-For any topic with a research literature, hit academic APIs BEFORE running web searches. They return citation-ranked canonical papers; web search returns derivative commentary.
+For any topic with a research literature, search the scholarly sources BEFORE running web searches. They return citation-ranked canonical papers; web search returns derivative commentary.
 
-- **Semantic Scholar:** `https://api.semanticscholar.org/graph/v1/paper/search?query=<q>&fields=title,year,citationCount,externalIds&limit=10` — then citation-chain the top papers forward + backward.
-- **arXiv:** `https://export.arxiv.org/api/query?search_query=cat:cs.LG+AND+all:<q>&sortBy=relevance&max_results=25`
-- **OpenAlex:** `https://api.openalex.org/works?search=<q>&sort=cited_by_count:desc&per-page=15&mailto=research@example.com`
-- **PubMed:** `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=<q>&retmode=json&retmax=20`
+```bash
+{hpr} scholar search "<query>" --limit 25 -j          # every available source, deduplicated
+{hpr} scholar search "<query>" --scope papers -j      # literature only, no trials/filings/series
+{hpr} scholar search "<query>" -s openalex -s core -j # pick specific sources
+{hpr} scholar sources -j                              # what is available, what each covers
+```
 
-After the academic sweep, run web searches for context, news, non-academic angles, and at least one adversarial search ("criticism of X", "limitations of X").
+One call queries every configured source, merges records that are the same work, and returns one ranked list. Do NOT hand-assemble API URLs — results are deduplicated by DOI and title across providers, which hand-querying cannot do, and duplicate records distort every downstream count in the pipeline.
+
+`scholar sources` tells you what is actually wired on this machine and why anything is unavailable. Read it once before assuming a source is missing — several sources activate only when a key or a contact address is configured.
+
+Coverage worth knowing when you choose sources:
+
+- **OpenAlex** is the all-fields backbone and the one to reach for outside STEM — it indexes books and book chapters, not just articles.
+- **CORE** hosts open-access full text directly rather than linking to it, so it is the best route to a readable copy.
+- **DOAB** is open-access scholarly books — the humanities and social sciences publish through books, and no article-shaped API will find them.
+- **RePEc** is economics working papers, which journals index late or not at all.
+- **ClinicalTrials.gov, SEC EDGAR and FRED** return trials, filings and economic series. These are citable records but they are not papers — check `work_type` before treating a result as literature.
+
+After the scholarly sweep, run web searches for context, news, non-academic angles, and at least one adversarial search ("criticism of X", "limitations of X").
 
 ### PDFs fetch directly
 
