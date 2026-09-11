@@ -135,6 +135,7 @@ from hyperresearch.cli.levers_cmd import app as levers_app
 from hyperresearch.cli.link import app as link_app
 from hyperresearch.cli.profile_cmd import app as profile_app
 from hyperresearch.cli.run_cmd import app as run_app
+from hyperresearch.cli.scholar_cmd import app as scholar_app
 from hyperresearch.cli.sources import app as sources_app
 
 app.add_typer(profile_app, name="profile", help="Pipeline profiles (scale parameters).")
@@ -145,6 +146,7 @@ app.add_typer(escalation_app, name="escalation", help="Browser-lane queue for bl
 app.add_typer(citecheck_app, name="citecheck", help="Citation-sentence binding verification.")
 app.add_typer(levers_app, name="levers", help="Run levers (register/domain/inference shims).")
 
+app.add_typer(scholar_app, name="scholar", help="Academic and specialist source discovery.")
 app.add_typer(sources_app, name="sources", help="Fetched web sources.")
 app.add_typer(assets_app, name="assets", help="Downloaded images, screenshots, and media.")
 app.add_typer(link_app, name="link", help="Auto-discover and insert wiki-links.")

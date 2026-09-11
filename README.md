@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="assets/banner.png" alt="HYPERRESEARCH" width="700">
-</p>
+<img width="1536" height="1152" alt="replicate-prediction-x0s9c24tqxrmw0d0j5ktty8nhw" src="https://github.com/user-attachments/assets/816434ad-080e-4165-abbc-af87d009aeb0" />
 
 <h3 align="center">The Most Powerful Deep Research Harness</h3>
 
@@ -27,7 +25,8 @@
 - **Every citation is verified before the report ships.** A skeptical cite-checker audits whether each cited source actually supports its sentence. Hallucinated quotes and unacknowledged retractions are hard blocks at the gate.
 - **Syndication doesn't count as consensus.** An independence audit clusters derivative copies, so five reprints of one press release argue with the weight of one source.
 - **Adversarial by construction.** Four critics attack every draft in parallel, and a tool-locked patcher can only apply surgical edits. It physically cannot rewrite the report.
-- **Paywalled papers get read, not skimmed.** A closed paper normally enters a vault as a 1,500-character abstract that the report then cites as though it had been read. Hyperresearch asks Unpaywall and Europe PMC for a legal open-access copy and stores the full text instead, even when the publisher blocks the fetch outright. Every substitution is disclosed in the note, the frontmatter, and the CLI output.
+- **Eight scholarly sources, one query.** `hpr scholar search` hits OpenAlex, Crossref, CORE, DOAB, ClinicalTrials.gov, SEC EDGAR and FRED through one client layer and returns a single list deduplicated by DOI and title. Books, trials and filings come back alongside papers, each tagged so the pipeline knows which is which. The humanities and social sciences are covered on purpose, not as an afterthought.
+- **Paywalled papers get read, not skimmed.** A closed paper normally enters a vault as a 1,500-character abstract that the report then cites as though it had been read. Hyperresearch asks Unpaywall, Europe PMC and CORE for a legal open-access copy and stores the full text instead, even when the publisher blocks the fetch outright. Every substitution is disclosed in the note, the frontmatter, and the CLI output.
 - **Nothing is thrown away.** Every source lands in a searchable markdown-plus-SQLite vault that your next session reuses before it fetches anything new.
 - **Crashed runs resume.** Each run keeps a manifest; `run resume` picks up at the exact step where it died.
 - **Scales from 30 minutes to a dissertation.** Bounded queries auto-route to a 5-step fast path. Opt-in dissertation runs write 25K–80K words across chapters, from 300–450 sources.
@@ -268,22 +267,42 @@ LinkedIn, Twitter, Facebook, Instagram, and TikTok automatically use a visible b
 
 ---
 
-## Academic APIs before web search
+## Scholarly discovery: eight sources, one query, one deduplicated list
 
-For any topic with a research literature, hit academic APIs BEFORE web search. They return citation-ranked canonical papers; web search returns derivative commentary.
+For any topic with a research literature, search the scholarly sources BEFORE web search. They return citation-ranked canonical works; web search returns derivative commentary. That advice used to be delivered as a list of URL templates the agent was trusted to assemble by hand — no retry, no rate limiting, no dedup, no tests. It is now a real client layer:
 
-- **Semantic Scholar:** `https://api.semanticscholar.org/graph/v1/paper/search`
-- **arXiv:** `https://export.arxiv.org/api/query`
-- **OpenAlex:** `https://api.openalex.org/works`
-- **PubMed:** `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi`
+```bash
+hpr scholar search "Byzantine iconoclasm" -j                # every available source, merged
+hpr scholar search "GLP-1 cardiovascular outcomes" --scope papers -j
+hpr scholar search "credit default swaps" -s edgar -s fred -j
+hpr scholar sources                                          # what is wired, what each covers
+```
 
-After the academic sweep, run web searches for context, news, non-academic angles, and at least one adversarial search ("criticism of X", "limitations of X").
+One call queries every configured source, merges records that are the same work (by DOI first, then by normalized title and year), and returns one list. A work found by two providers carries both in `also_in`, with the higher citation count and the longer abstract. Every provider shares one cache, one per-host courtesy rate limiter, and one result shape.
+
+**The literature sources:**
+
+- **[OpenAlex](https://openalex.org/)** — ~250M works across every discipline, including books, book chapters and theses. The right default outside STEM, where the incumbent tools are weakest.
+- **[Crossref](https://www.crossref.org/)** — the DOI registry itself. Authoritative metadata for ~160M registered works, including registrations too new for anything else to have indexed.
+- **[CORE](https://core.ac.uk/)** — the largest open-access full-text aggregator. Hosts the text rather than linking to it, so it is also a full-text resolver (below). Needs a key: `CORE_API_KEY`.
+- **[DOAB](https://directory.doabooks.org/)** — peer-reviewed open-access scholarly books and chapters. The only source here that finds *the book* rather than a review of it, which matters because in the humanities the book, not the article, is the unit of publication.
+- **RePEc** — listed so the gap is visible rather than silent. Their API [has no search function](https://ideas.repec.org/api.html); `hpr scholar sources` says so and points at OpenAlex and Crossref for the DOI-bearing series.
+
+**The specialist sources** — citable records that are not papers, tagged by `work_type` so the pipeline never mistakes one for literature:
+
+- **[ClinicalTrials.gov](https://clinicaltrials.gov/)** — registered studies including the ones that never produced a paper. No key.
+- **[SEC EDGAR](https://www.sec.gov/edgar)** — full-text search over filings. The SEC rejects any request without a contact address in the User-Agent, so set `HYPERRESEARCH_CONTACT_EMAIL`.
+- **[FRED](https://fred.stlouisfed.org/)** — Federal Reserve economic series. Needs a key: `FRED_API_KEY`, which is never written to the cache.
+
+Setting `HYPERRESEARCH_CONTACT_EMAIL` also puts you in the OpenAlex and Crossref "polite pools", which are rate-limited far more generously than anonymous traffic. No placeholder is ever sent on your behalf.
+
+After the scholarly sweep, run web searches for context, news, non-academic angles, and at least one adversarial search ("criticism of X", "limitations of X").
 
 ---
 
 ## Open-access full text: read this before you cite
 
-A paywalled paper otherwise enters the vault as an abstract, and the pipeline then reasons over ~1,500 characters while citing the work as though the paper had been read. To close that, when a fetch lands a thin page carrying a DOI, hyperresearch asks [Unpaywall](https://unpaywall.org/) and [Europe PMC](https://europepmc.org/) for a legal open-access copy and stores **that** text in the note body instead.
+A paywalled paper otherwise enters the vault as an abstract, and the pipeline then reasons over ~1,500 characters while citing the work as though the paper had been read. To close that, when a fetch lands a thin page carrying a DOI, hyperresearch asks [Unpaywall](https://unpaywall.org/), [Europe PMC](https://europepmc.org/) and [CORE](https://core.ac.uk/), in that order, for a legal open-access copy and stores **that** text in the note body instead. Unpaywall needs a contact address and Europe PMC covers biomedicine only; CORE is the broad net that catches everything else, and it hosts the text directly rather than pointing at a repository that may 403.
 
 **The note's `source:` still points at the URL you asked for. The body may have come from somewhere else.** That substitution is disclosed in four places, and you should know all of them:
 

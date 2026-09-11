@@ -148,14 +148,18 @@ class ScholarSettings:
     """Open-access full-text recovery ([scholar] section).
 
     When a fetch lands a thin page that carries a DOI — a publisher abstract or
-    paywall interstitial — `core/oa.py` asks Unpaywall and Europe PMC for a
-    legal open-access copy and stores THAT text in the note body instead. The
-    swap is always disclosed: a banner at the top of the body, four `oa_*`
-    frontmatter fields, and a line in the fetch output.
+    paywall interstitial — `core/oa.py` asks Unpaywall, Europe PMC and CORE, in
+    that order, for a legal open-access copy and stores THAT text in the note
+    body instead. The swap is always disclosed: a banner at the top of the
+    body, four `oa_*` frontmatter fields, and a line in the fetch output.
 
     `contact_email` is required by Unpaywall's terms of use. Leave it empty and
     Unpaywall is skipped entirely; Europe PMC needs no key, so biomedical
-    recovery still works out of the box.
+    recovery still works out of the box. CORE is the broad net that catches
+    everything outside biomedicine — it hosts full text directly rather than
+    linking to it — and activates when the `CORE_API_KEY` environment variable
+    is set. The key lives in the environment rather than here so it can never
+    be committed with a vault.
     """
 
     oa_recovery: bool = True
@@ -373,7 +377,9 @@ class VaultConfig:
                 "",
                 "contact_email: REQUIRED by Unpaywall's terms of use. Leave it empty and",
                 "Unpaywall is skipped; Europe PMC needs no key, so recovery over its",
-                "open-access subset still works. oa_recovery = false disables everything.",
+                "open-access subset still works. Set the CORE_API_KEY environment variable",
+                "to add CORE, which covers every field and hosts full text directly.",
+                "oa_recovery = false disables everything.",
                 "",
                 "A recovered copy is only accepted if it is both longer than the page we",
                 "already had and long enough to clear oa_min_full_text_chars, so a",

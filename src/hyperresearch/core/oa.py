@@ -1,4 +1,4 @@
-"""Open-access full-text recovery — Unpaywall + Europe PMC.
+"""Open-access full-text recovery — Unpaywall + Europe PMC + CORE.
 
 A paywalled paper otherwise enters the vault as an abstract. `extract_doi`
 already stamps `doi:` on every fetched note, the junk gate passes a publisher
@@ -6,22 +6,34 @@ landing page (an abstract is not junk), and downstream investigators then
 reason over ~1-3k characters while the report cites the work as though the
 paper had been read.
 
-This module closes that gap. Given a DOI, it asks two free APIs whether a legal
-open-access copy exists and, if so, refetches from there. Two entry points:
-`recover_full_text` replaces a thin result (an abstract), and
+This module closes that gap. Given a DOI, it asks three free APIs whether a
+legal open-access copy exists and, if so, refetches from there. Two entry
+points: `recover_full_text` replaces a thin result (an abstract), and
 `rescue_full_text` handles the case where the source could not be read at all
 — a 403, a login wall, a bot wall — where the paper is most completely lost and
-an open-access copy is most likely to exist. The APIs:
+an open-access copy is most likely to exist. The APIs, in the order tried:
 
 1. **Unpaywall** (`api.unpaywall.org`) — broad coverage, but their terms want a
    real contact address, so it is SKIPPED unless `[scholar] contact_email` is
    set. Shipping one shared placeholder across every install is how that
    placeholder gets rate-limited for everybody.
 2. **Europe PMC** (`www.ebi.ac.uk`) — no key, no email, biomedical only.
+3. **CORE** (`api.core.ac.uk`) — the largest open-access aggregator, and the
+   only one of the three that HOSTS the text rather than pointing at a copy
+   somewhere else: a CORE work carries its own plain-text body and a
+   CORE-served PDF. Needs a key in `CORE_API_KEY`; SKIPPED silently without
+   one, exactly as Unpaywall is skipped without an email.
+
+Unpaywall and Europe PMC go first because they know which *version* a copy is
+— Unpaywall labels every location, and Europe PMC only serves the version of
+record. CORE does not say, so a CORE recovery is recorded as unknown-version
+and the banner tells the reader to check quotations. That makes CORE the broad
+net behind the two authoritative resolvers rather than a replacement for them.
 
 So the feature degrades cleanly: with no configuration at all it still recovers
-biomedical literature; adding an email widens it to everything Unpaywall
-indexes.
+biomedical literature; an email widens it to everything Unpaywall indexes; a
+CORE key widens it to everything CORE has harvested, which is most of what
+sits in institutional repositories outside biomedicine.
 
 INVARIANTS
 ----------
@@ -40,17 +52,26 @@ INVARIANTS
   third-party API response) and are therefore gated by `check_oa_url` before
   anything fetches them.
 
-All HTTP goes through `scholar._fetch_json`, so lookups land in the `api_cache`
-table and re-running a vault is cheap and offline-friendly. Tests monkeypatch
-`scholar._http_get_json`; no test here hits the network.
+Unpaywall and Europe PMC lookups go through `scholar._fetch_json`; CORE needs
+a bearer header, which that layer cannot send, so it goes through
+`hyperresearch.scholar.base.fetch_json` instead. Both land in the `api_cache`
+table, so re-running a vault is cheap and offline-friendly. Tests monkeypatch
+`scholar._http_get_json` and `scholar.base._http_get`; no test here hits the
+network.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import socket
+import sqlite3
+from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, urlparse
+
+if TYPE_CHECKING:
+    from hyperresearch.web.base import WebResult
 
 _UNPAYWALL_BASE = "https://api.unpaywall.org/v2"
 _EPMC_BASE = "https://www.ebi.ac.uk/europepmc/webservices/rest"
@@ -84,14 +105,16 @@ class OALocation:
     """One open-access copy of a work.
 
     `kind` decides how the bytes get turned into note text:
-      "pdf"  — download and run through pymupdf, the same path arXiv takes
-      "jats" — Europe PMC's structured full-text XML, parsed here
-      "page" — an ordinary landing page, fetched through the web provider
+      "pdf"      — download and run through pymupdf, the same path arXiv takes
+      "jats"     — Europe PMC's structured full-text XML, parsed here
+      "coretext" — CORE's `/works/{id}` record, whose `fullText` field IS the
+                   paper; no extraction step at all
+      "page"     — an ordinary landing page, fetched through the web provider
     """
 
     url: str
-    resolver: str  # "unpaywall" | "europepmc"
-    kind: str  # "pdf" | "jats" | "page"
+    resolver: str  # "unpaywall" | "europepmc" | "core"
+    kind: str  # "pdf" | "jats" | "coretext" | "page"
     version: str | None = None  # publishedVersion | acceptedVersion | submittedVersion
     license: str | None = None
     host_type: str | None = None  # "publisher" | "repository" (Unpaywall only)
@@ -207,12 +230,12 @@ def iter_oa_candidates(
 
     A generator rather than a single answer, because publishers 403 their own
     open-access PDFs often enough that giving up on the first failure loses
-    papers that are sitting in a repository two candidates down. Europe PMC is
-    resolved lazily, so the extra API call only happens when Unpaywall's copies
-    have all been exhausted.
+    papers that are sitting in a repository two candidates down. Europe PMC
+    and CORE are resolved lazily, so each extra API call only happens when
+    every earlier resolver's copies have been exhausted.
 
-    arXiv identifiers are declined outright: neither API resolves them, and an
-    arXiv paper was already reachable as a PDF at fetch time.
+    arXiv identifiers are declined outright: none of the APIs resolve them,
+    and an arXiv paper was already reachable as a PDF at fetch time.
     """
     if not doi or doi.lower().startswith("arxiv:"):
         return
@@ -223,6 +246,8 @@ def iter_oa_candidates(
     epmc = _resolve_europepmc(conn, doi, ttl_days, fresh)
     if epmc is not None:
         yield epmc
+
+    yield from _core_candidates(conn, doi, ttl_days, fresh)
 
 
 def resolve_oa(
@@ -320,6 +345,167 @@ def _resolve_europepmc(conn, doi: str, ttl_days: int, fresh: bool) -> OALocation
         license=rec.get("license") or None,
         host_type="repository",
     )
+
+
+# ---------------------------------------------------------------------------
+# CORE
+# ---------------------------------------------------------------------------
+
+_CORE_KEY_ENV = "CORE_API_KEY"
+
+
+def _core_api_key() -> str | None:
+    """The CORE key, or None — in which case CORE is skipped without a sound.
+
+    Read from the environment on every call rather than cached, so a key
+    exported mid-session takes effect and a test can unset it cleanly.
+    """
+    from hyperresearch.scholar.base import env_key
+
+    return env_key(_CORE_KEY_ENV)
+
+
+def _core_version(rec: dict[str, Any]) -> str | None:
+    """Which version of the paper CORE is holding, when it actually says.
+
+    CORE has no equivalent of Unpaywall's `version` field. The one signal it
+    does carry is the document classification, and "preprint" there is
+    unambiguous: that copy is `submittedVersion`. Everything else — including
+    the null this field usually is — is recorded as unknown. It would be easy
+    to stamp `publishedVersion` on a record with a DOI and be right most of
+    the time; the cost of the wrong cases is a report quoting a preprint as
+    the version of record, so the version stays honest and the banner's
+    "quote with care" line fires instead.
+    """
+    for key in ("documentType", "fieldOfStudy"):
+        value = rec.get(key)
+        if isinstance(value, str) and "preprint" in value.lower():
+            return "submittedVersion"
+    return None
+
+
+def _core_license(rec: dict[str, Any]) -> str | None:
+    """CORE's v3 work schema documents no licence field, so this is almost
+    always None. Read defensively rather than not at all: if one ever appears
+    it belongs in the banner, and inventing a value is not an option."""
+    value = rec.get("license")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _core_candidates(
+    conn: sqlite3.Connection | None, doi: str, ttl_days: int, fresh: bool
+) -> Iterator[OALocation]:
+    """Yield CORE's copies of `doi`, best first. Silent no-op without a key.
+
+    Order is the same thinking as `_unpaywall_candidates` — the copy most
+    likely to yield clean text first, then the fallbacks:
+
+    1. CORE's own plain text, via `/works/{id}`. No PDF extraction, no column
+       interleaving, no header bleed: the body is the body.
+    2. The CORE-hosted PDF (`downloadUrl`), which CORE serves itself and so
+       does not 403 the way a publisher's "open" PDF does.
+    3. The repository or publisher URLs CORE harvested from
+       (`sourceFulltextUrls`), pdf or page as their shape suggests.
+
+    Every failure is soft: a missing key, a dead module, an unparseable
+    response, or a record with none of the above all yield nothing, and the
+    caller carries on with whatever it already had.
+    """
+    key = _core_api_key()
+    if not key:
+        return
+
+    try:
+        from hyperresearch.scholar.base import fetch_json
+        from hyperresearch.scholar.providers import core_oa
+    except ImportError:
+        return
+
+    try:
+        data = fetch_json(
+            conn,
+            core_oa.doi_search_url(doi),
+            ttl_days=ttl_days,
+            fresh=fresh,
+            headers=core_oa.auth_headers(key),
+        )
+    except Exception:
+        return
+    if not isinstance(data, dict):
+        return
+    results = data.get("results")
+    if not isinstance(results, list) or not results:
+        return
+    rec = results[0]
+    if not isinstance(rec, dict):
+        return
+
+    version = _core_version(rec)
+    licence = _core_license(rec)
+
+    def build(target: str, kind: str) -> OALocation:
+        return OALocation(
+            url=target,
+            resolver="core",
+            kind=kind,
+            version=version,
+            license=licence,
+            host_type="repository",
+        )
+
+    seen: set[str] = set()
+
+    core_id = rec.get("id")
+    if isinstance(core_id, int) or (isinstance(core_id, str) and core_id.strip()):
+        target = core_oa.work_url(str(core_id).strip())
+        seen.add(target)
+        yield build(target, "coretext")
+
+    download = rec.get("downloadUrl")
+    if isinstance(download, str) and download.strip() and download not in seen:
+        seen.add(download)
+        yield build(download, "pdf")
+
+    for target in core_oa.source_fulltext_urls(rec):
+        if target in seen:
+            continue
+        seen.add(target)
+        yield build(target, "pdf" if core_oa.looks_like_pdf(target) else "page")
+
+
+def _fetch_core_text(url: str, fallback_title: str | None) -> WebResult | None:
+    """Fetch a CORE work record and wrap its plain text as a WebResult, or None.
+
+    Deliberately uncached (`conn=None`): the same reasoning as `_http_get_text`
+    — `api_cache` is for small metadata JSON and the note is the cache for a
+    full paper. The key is re-read here rather than threaded through the
+    candidate, so a location that outlives the environment it was built in
+    cannot carry a stale credential around with it.
+    """
+    from hyperresearch.web.base import WebResult
+
+    key = _core_api_key()
+    if not key:
+        return None
+    try:
+        from hyperresearch.scholar.base import fetch_json
+        from hyperresearch.scholar.providers import core_oa
+    except ImportError:
+        return None
+
+    data = fetch_json(None, url, headers=core_oa.auth_headers(key))
+    text = core_oa.full_text_from_work(data)
+    if text is None:
+        return None
+
+    title = fallback_title
+    if isinstance(data, dict):
+        reported = data.get("title")
+        if isinstance(reported, str) and reported.strip():
+            title = reported.strip()
+    return WebResult(url=url, title=title or "Untitled", content=text)
 
 
 # ---------------------------------------------------------------------------
@@ -607,6 +793,8 @@ def _try_candidates(vault, prov, doi: str, settings, *, fallback_title, beat_cha
                 recovered = _fetch_pdf(loc.url, vault.config.fetch)
             elif loc.kind == "jats":
                 recovered = _fetch_jats(loc.url, fallback_title)
+            elif loc.kind == "coretext":
+                recovered = _fetch_core_text(loc.url, fallback_title)
             elif prov is not None:
                 recovered = prov.fetch(loc.url)
             else:

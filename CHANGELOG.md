@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+### Scholarly discovery: eight sources through one client layer
+
+Academic discovery used to be four URL templates rendered into the agent's instructions by `core/agent_docs.py`, which the model was trusted to assemble and call by hand. No retry, no rate limiting, no dedup, no offline tests — and one of those templates shipped `mailto=research@example.com`, a shared placeholder on every install, which is exactly the anti-pattern the open-access resolver refuses to commit for Unpaywall. It is now a real package.
+
+- **`hpr scholar search` and `hpr scholar sources`.** One query hits every configured provider, merges records that are the same work, and returns one list. `sources` lists what is wired, what each covers, and why anything is unavailable — so a user is never guessing which source to reach for.
+- **Dedup is by DOI first, then normalized title within ±1 year.** The year tolerance is deliberate: providers disagree systematically about online-first versus print year for the same article. Two *different* DOIs never merge regardless of title, which is what stops four 2025 reprints of a famous paper from collapsing into one record. A work confirmed by several providers carries them in `also_in`, with the highest citation count and the longest abstract.
+- **`--limit` is per provider, not a cap on the merged list.** A post-merge cap would show only the first provider's records at small limits and make every other source look empty.
+- **Providers: OpenAlex, Crossref, CORE, DOAB, ClinicalTrials.gov, SEC EDGAR, FRED.** Each is a real client through one cache-first, rate-limited HTTP seam (`scholar/base.py`), with fixtures matching live response shapes. OpenAlex's abstracts arrive as an inverted word-position index and are reconstructed; Crossref's arrive as JATS XML and are stripped; ClinicalTrials.gov and EDGAR were verified against the live services, including EDGAR's User-Agent gate.
+- **Non-STEM coverage is a first-class goal.** OpenAlex and DOAB return books and book chapters, which matters because in the humanities the book is the unit of publication and nothing in the stack could find one before. DOAB is the only source that finds *the book* rather than a review of it.
+- **RePEc is listed as unavailable, on purpose.** Their API documents that it has no search function. Shipping an honest "cannot search" with a pointer to OpenAlex for the DOI-bearing series beats silently omitting the field.
+- **`HYPERRESEARCH_CONTACT_EMAIL` replaces the placeholder.** Set it and OpenAlex and Crossref serve you from their polite pools, and SEC EDGAR — which rejects any request without a contact address — becomes available. Unset, no address is sent at all.
+- **Specialist records are tagged, not disguised.** Trials, filings and economic series come back with `work_type` set so the pipeline never treats a 10-K as a paper.
+- **`FRED_API_KEY` is never cached.** FRED authenticates by query parameter and the cache keys on URL, so FRED requests bypass the cache rather than write the key into the vault's SQLite in plaintext.
+
+### CORE is the third open-access resolver
+
+Recovery used to ask Unpaywall, then Europe PMC. But `contact_email` is empty by default, which disables Unpaywall, and Europe PMC is biomedical only — so a stock install's open-access recovery covered almost nothing outside biomedicine while the 0.10.0 notes presented it as a headline feature. [CORE](https://core.ac.uk/) now runs third: it is the largest full-text open-access aggregator, and unlike Unpaywall it hosts the plain text directly rather than pointing at a repository that may 403.
+
+- Activates when `CORE_API_KEY` is set; skipped silently otherwise, the same way Unpaywall is skipped without a contact address.
+- Every existing invariant holds and is tested: a candidate is accepted only if it is longer than what we had and clears `oa_min_full_text_chars`; failure is soft; resolver URLs go through `check_oa_url`; `oa_max_attempts` is honoured; the four-place disclosure contract is populated; `oa_source` gains the value `core`.
+- **Version is recorded honestly.** CORE does not reliably say which version it holds, so `oa_version` stays unset unless CORE marks the record a preprint — and the banner then says the version is unrecorded and tells the reader to quote with care, rather than implying version of record.
+
+### Agent prose now points at the client
+
+The "Academic APIs before web search" section of the injected agent instructions tells agents to run `hpr scholar search` and not to hand-assemble API URLs, and explains what each source is for.
+
 ## [0.10.1] - 2026-09-11
 
 A maintenance release. Everything here is a contributed fix, and two of them unblock users who could not ship a run at all.
