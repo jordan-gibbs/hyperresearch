@@ -441,9 +441,19 @@ def note_update(
     from hyperresearch.core.frontmatter import parse_frontmatter, serialize_frontmatter
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.core.vault import Vault
-    from hyperresearch.models.note import ContentType, Tier
+    from hyperresearch.models.note import ContentType, NoteStatus, Tier
 
     # Validate enums up-front
+    if set_status is not None:
+        try:
+            NoteStatus(set_status)
+        except ValueError:
+            valid = ", ".join(s.value for s in NoteStatus)
+            if json_output:
+                output(error(f"Invalid --status '{set_status}'. Must be one of: {valid}", "INVALID_STATUS"), json_mode=True)
+            else:
+                console.print(f"[red]Invalid --status '{set_status}'.[/] Must be one of: {valid}")
+            raise typer.Exit(1)
     if set_tier is not None:
         try:
             Tier(set_tier)

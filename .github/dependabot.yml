@@ -1,0 +1,29 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        patterns:
+          - "pytest*"
+          - "ruff"
+          - "mypy"
+    labels:
+      - dependencies
+    ignore:
+      # mcp 2.0 removed `mcp.server.fastmcp`, which src/hyperresearch/mcp/server.py
+      # builds every tool on. The `<2` bound in pyproject.toml is deliberate.
+      # Drop this once the server is ported off fastmcp.
+      - dependency-name: mcp
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies

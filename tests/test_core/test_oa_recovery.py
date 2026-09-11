@@ -125,6 +125,28 @@ class TestNeedsRecovery:
         settings = ScholarSettings(oa_min_full_text_chars=100)
         assert oa.needs_oa_recovery(_result(ABSTRACT), settings) is False
 
+    @pytest.mark.parametrize("phrase", oa._PAYWALL_PHRASES)
+    def test_every_listed_phrase_triggers(self, phrase):
+        """Each phrase in the list must actually fire on a long page.
+
+        The phrases are matched literally against the lowercased body, so a
+        phrase that never matches is dead weight nobody notices — the length
+        gate quietly covers for it on short pages. Parametrizing over the
+        tuple keeps a new entry honest.
+        """
+        body = FULL_TEXT[:8000] + f" {phrase.title()} to continue."
+        assert oa.needs_oa_recovery(_result(body), ScholarSettings()) is True
+
+    def test_purchase_this_article_triggers(self):
+        """Regression: the list carried "buy this article" and "purchase pdf"
+        but not "purchase this article", a common publisher wording. On a
+        long interstitial — nav chrome over the length threshold, no article
+        text — that paywall read as full text and no OA lookup was attempted,
+        so the note kept the abstract and the report cited it as though read.
+        """
+        body = FULL_TEXT[:8000] + " Purchase this article to read the full text."
+        assert oa.needs_oa_recovery(_result(body), ScholarSettings()) is True
+
 
 class TestResolve:
     def test_arxiv_ids_are_declined(self, tmp_vault, monkeypatch):

@@ -194,7 +194,7 @@ class TestIndependence:
         from hyperresearch.core.note import write_note
         from hyperresearch.core.sync import compute_sync_plan, execute_sync
 
-        pr = "NEW YORK, PRNewswire, MegaCorp announces quantum widget breakthrough today."
+        pr = "NEW YORK, PRNewswire — MegaCorp announces quantum widget breakthrough today."
         for i, (title, when) in enumerate([("MegaCorp Breakthrough", "2026-01-01"),
                                            ("MegaCorp Announces Widget", "2026-01-02"),
                                            ("Quantum Widget from MegaCorp", "2026-01-03")]):
@@ -358,7 +358,7 @@ class TestCJKLengthCheck:
 
 class TestClassifiedTierArtifacts:
     """The router lets step 1 reclassify a run's tier after `run init`:
-    "the manifest's profile field is informational -- the decomposition's
+    "the manifest's profile field is informational — the decomposition's
     tier rules". The ship gate has to read the same rule, or a
     light-classified run started on the installed gear is asked for critic
     findings that light tier never produces."""
@@ -577,7 +577,7 @@ class TestFinishGate:
 
     def test_verify_includes_content_gates(self, tmp_vault):
         """verify_run itself must carry quote-integrity + retracted-citations
-        checks, one command, whole verdict."""
+        checks — one command, whole verdict."""
         self._well_formed_light_run(tmp_vault, "fin-06")
         result = verify_run(tmp_vault, "fin-06")
         names = {c["name"] for c in result["checks"]}
