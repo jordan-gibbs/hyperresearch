@@ -24,6 +24,39 @@ from mcp.client.streamable_http import streamablehttp_client
 from hyperresearch.core.config import FetchSettings
 from hyperresearch.web.base import WebResult
 
+
+def _run_coro(coro: Any) -> Any:
+    """Run a coroutine to completion from synchronous code, loop or no loop.
+
+    `asyncio.run` refuses to start when the calling thread already has a
+    running loop — which is exactly the situation inside the MCP server,
+    where FastMCP dispatches sync tool functions inline on its own loop, and
+    inside any test harness that wraps the call in one. In that case the
+    coroutine runs on a fresh thread with its own loop and the result is
+    joined back. Outside a loop this is plain `asyncio.run`.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    import threading
+
+    box: dict[str, Any] = {}
+
+    def _target() -> None:
+        try:
+            box["value"] = asyncio.run(coro)
+        except BaseException as exc:  # re-raised on the caller's thread
+            box["error"] = exc
+
+    thread = threading.Thread(target=_target, name="parallel-mcp-call", daemon=True)
+    thread.start()
+    thread.join()
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
 if TYPE_CHECKING:
     from mcp.types import CallToolResult
 
@@ -79,7 +112,7 @@ class ParallelProvider:
         return _to_web_result(results[0])
 
     def _call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        return asyncio.run(self._call_tool_async(name, arguments))
+        return _run_coro(self._call_tool_async(name, arguments))
 
     async def _call_tool_async(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         async with (
