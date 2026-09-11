@@ -344,6 +344,46 @@ def run_report_data(vault, vault_tag: str) -> dict:
     }
 
 
+def _declared_tier(run_dir: Path) -> str | None:
+    """The `pipeline_tier` step 1 wrote into prompt-decomposition.json.
+
+    Tolerant on purpose: a missing or unreadable decomposition just means
+    "no declared tier", and verify_run reports the unreadable case through
+    its own `decomposition-readable` check.
+    """
+    decomp_path = run_dir / "prompt-decomposition.json"
+    if not decomp_path.exists():
+        return None
+    try:
+        decomp = json.loads(decomp_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    tier = decomp.get("pipeline_tier") if isinstance(decomp, dict) else None
+    return tier if isinstance(tier, str) and tier.strip() else None
+
+
+def _required_step_ids(manifest: dict, run_dir: Path, config_path: Path | None) -> set[str]:
+    """Step ids whose artifacts the ship gate demands.
+
+    The router initializes a run with the installed gear and lets step 1
+    reclassify it: "the manifest's profile field is informational — the
+    decomposition's tier rules". So when the decomposition declares a tier
+    that disagrees with the manifest profile, that tier's step set wins;
+    otherwise (no tier, same tier, or a tier that resolves to nothing) the
+    manifest's own `profile_steps` stand.
+    """
+    from hyperresearch.core.profiles import ProfileError, resolve_profile
+
+    steps = {str(s) for s in manifest.get("profile_steps", [])}
+    tier = _declared_tier(run_dir)
+    if tier is None or tier == manifest.get("profile"):
+        return steps
+    try:
+        return {str(s) for s in resolve_profile(tier, config_path).steps}
+    except ProfileError:
+        return steps
+
+
 def verify_run(vault, vault_tag: str) -> dict:
     """Structural verification battery for a completed run.
 
@@ -485,8 +525,9 @@ def verify_run(vault, vault_tag: str) -> dict:
         except Exception as exc:
             check("content-lints", False, f"content lint rules failed to run: {exc}")
 
-    # Tier-mandated artifacts
-    steps = set(manifest.get("profile_steps", []))
+    # Tier-mandated artifacts, keyed on the tier the run actually ran (see
+    # _required_step_ids) rather than the profile it was initialized with.
+    steps = _required_step_ids(manifest, run_dir, vault.config_path)
     if {"12", "14"} <= steps:
         for name in (
             "critic-findings-dialectic.json", "critic-findings-depth.json",

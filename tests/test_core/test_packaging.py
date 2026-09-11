@@ -26,6 +26,9 @@ def test_dev_extra_covers_tested_optional_providers():
     dev_deps = set(optional["dev"])
 
     assert "exa-py>=2.0.0" in dev_deps
+    assert "mcp>=1.6,<2" in dev_deps
+    assert optional["mcp"] == ["mcp>=1.6,<2"]
+    assert optional["parallel"] == ["mcp>=1.8,<2"]
     assert "exa" in optional
     assert "crawl4ai" in optional
     assert "watch" in optional
