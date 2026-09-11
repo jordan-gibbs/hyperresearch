@@ -367,6 +367,22 @@ def update_note(note_id: str, status: str = "", add_tags: str = "", remove_tags:
     """
     from hyperresearch.core.frontmatter import parse_frontmatter, serialize_frontmatter
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
+    from hyperresearch.models.note import NoteStatus
+
+    # Validate up-front. NoteMeta is a pydantic model without
+    # validate_assignment, so `meta.status = status` would accept any string
+    # and write it to frontmatter — after which parse_frontmatter refuses to
+    # read the note back and sync drops it from the index for good.
+    if status:
+        try:
+            NoteStatus(status)
+        except ValueError:
+            valid = ", ".join(s.value for s in NoteStatus)
+            return json.dumps({
+                "ok": False,
+                "error": f"Invalid status '{status}'. Must be one of: {valid}",
+                "error_code": "INVALID_STATUS",
+            })
 
     vault = _get_vault()
     vault.auto_sync()

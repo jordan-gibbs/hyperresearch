@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Claude Code / agent harness behavior
+    url: https://github.com/anthropics/claude-code/issues
+    about: Subagent scheduling, task notifications, token accounting, or how an agent chose to call a tool. Different maintainers, different repo.
+  - name: Security vulnerability
+    url: https://github.com/jordan-gibbs/hyperresearch/security/advisories/new
+    about: Report privately through a security advisory rather than a public issue.

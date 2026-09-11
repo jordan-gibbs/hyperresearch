@@ -3727,7 +3727,7 @@ def _install_claude_hook(vault_root: Path, hpr_path: str) -> str | None:
         "matcher": "Glob|Grep|WebSearch|WebFetch",
         "hooks": [{
             "type": "command",
-            "command": f"node {hook_path.as_posix()}",
+            "command": f'node "{hook_path.as_posix()}"',
         }],
     })
 

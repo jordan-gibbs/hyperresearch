@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import shlex
+
 from hyperresearch.core.hooks import (
     _RETIRED_AGENT_FILES,
     _RETIRED_SKILL_DIRS,
+    _install_claude_hook,
     _install_depth_critic_agent,
     _install_depth_investigator_agent,
     _install_dialectic_critic_agent,
@@ -435,3 +439,25 @@ def test_install_hooks_second_run_is_noop(tmp_vault):
     # Hook installer may still report the hook is already installed → no
     # actions or a trivial subset. Must not crash, must not reinstall files.
     assert not second or all("pruned" not in a.lower() for a in second)
+
+
+# ---------------------------------------------------------------------------
+# The registered command must survive the shell that runs it
+# ---------------------------------------------------------------------------
+
+
+def test_installed_hook_command_keeps_the_script_path_in_one_argument(tmp_path):
+    """Claude Code runs a hook command through a shell, so an unquoted path is
+    split at its first space and node receives a truncated script path. Project
+    directories with spaces are ordinary — a Windows user directory, or anything
+    under "My Documents" — and the hook then fails on every matching tool call
+    without the reminder ever appearing."""
+    project = tmp_path / "my project"
+    project.mkdir()
+
+    _install_claude_hook(project, "hyperresearch")
+
+    settings = json.loads((project / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    command = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+
+    assert shlex.split(command) == ["node", (project / ".hyperresearch" / "hook.js").as_posix()]

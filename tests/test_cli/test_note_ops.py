@@ -117,3 +117,48 @@ def test_note_list_with_filters(vault_with_notes):
     result = runner.invoke(app, ["note", "list", "--sort", "title", "--limit", "1", "--json"])
     data = json.loads(result.output)
     assert data["count"] == 1
+
+
+def test_note_update_rejects_invalid_status(vault_with_notes):
+    """`note update --status` must validate before writing frontmatter.
+
+    Regression test: NoteMeta is a pydantic model configured without
+    validate_assignment, so `meta.status = set_status` used to accept any
+    string and serialize it straight into the note. The write reported
+    success, but parse_frontmatter then refused to read the note back, and
+    execute_sync swallowed the ValidationError per-file — leaving the note
+    permanently absent from the index while the DB served stale rows. A
+    one-letter typo (`evergreeen`) was enough to orphan a note for good.
+    """
+    result = runner.invoke(
+        app, ["note", "update", "alpha-note", "--status", "evergreeen", "--json"]
+    )
+    assert result.exit_code == 1
+    data = json.loads(result.output)
+    assert data["ok"] is False
+    assert data["error_code"] == "INVALID_STATUS"
+    assert "evergreen" in data["error"]  # lists the valid values
+
+    # The note on disk must be untouched and still parseable.
+    from hyperresearch.core.frontmatter import parse_frontmatter
+
+    content = (vault_with_notes / "research/notes/alpha-note.md").read_text(encoding="utf-8")
+    meta, _ = parse_frontmatter(content)
+    assert meta.status == "draft"
+
+
+def test_note_update_accepts_valid_status_and_stays_indexed(vault_with_notes):
+    """The happy path must still write, and the note must survive a resync."""
+    result = runner.invoke(
+        app, ["note", "update", "alpha-note", "--status", "evergreen", "--json"]
+    )
+    assert result.exit_code == 0
+    assert json.loads(result.output)["ok"] is True
+
+    sync = runner.invoke(app, ["sync", "--json"])
+    assert sync.exit_code == 0
+    assert not json.loads(sync.output)["data"]["errors"]
+
+    listed = runner.invoke(app, ["note", "list", "--json"])
+    rows = json.loads(listed.output)["data"]
+    assert [n["status"] for n in rows if n["id"] == "alpha-note"] == ["evergreen"]

@@ -69,6 +69,7 @@ _VERSION_RANK = {
 _PAYWALL_PHRASES = (
     "purchase pdf",
     "buy this article",
+    "purchase this article",
     "rent this article",
     "purchase access",
     "subscribe to access",

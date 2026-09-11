@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-11
+
+A maintenance release. Everything here is a contributed fix, and two of them unblock users who could not ship a run at all.
+
+- **The `length-in-range` verify gate no longer measures CJK reports with a Latin-script ruler (#71, fixed by @tetra4rnav in #64).** `verify_run` counted whitespace-separated tokens, which in Japanese or Chinese counts almost nothing — a correctly-sized report measured roughly 20x short and `run finish` hard-blocked it, with no honest way past the gate. Length is now measured in characters when whitespace doesn't segment the text, against a new `char_targets_no_word_boundary` profile field. Detection is by average token length rather than Unicode range, which matters: Hangul *is* space-delimited, and a range-based check would have broken Korean while fixing Japanese. This shipped to `main` three days after the 0.10.0 tag and has been sitting unreleased since.
+
+- **`hpr serve` no longer hangs on an idle browser connection (#87, reported by @muppavv, fixed by @maximilliangrand in #96).** The viewer ran a single-threaded `HTTPServer` whose handler set no read timeout, so one socket that connected and sent nothing starved every other client — and Chrome opens exactly such a preconnect socket, which meant the first page load with `--open` could poison the server. The symptom was indistinguishable from a hang: no error, no CPU. Now `ThreadingHTTPServer` with a handler read timeout. The shared SQLite connection that made threading unsafe was correctly retired at the same time, rather than papered over with a lock.
+
+- **An invalid `--status` is rejected instead of silently corrupting a note (@MarceloSenai in #89).** `NoteMeta` had no `validate_assignment`, so `note update --status evergreeen` wrote the typo straight to frontmatter. The note then failed validation on the next sync, dropped out of the index, and `note list` kept serving the stale row — every later edit to that note going unindexed too. The valid set is read from the `NoteStatus` enum rather than a hand-maintained list, so it can't drift.
+
+- **"Purchase this article" is recognised as a paywall (@MarceloSenai in #91).** The phrase list had "buy this article" and "purchase pdf" but not this one, so those interstitials passed as full text and open-access recovery never ran — the note kept an abstract while the report cited it as though the paper had been read. The gate's own comment used this exact phrase as its worked example.
+
+- **The registered PreToolUse hook command quotes the script path (@dajiaohuang in #98).** `install` wrote `node <path>` into `.claude/settings.json` unquoted, and a hook command runs through a shell — so a project directory containing a space split the path there and node was handed a truncated script, making the hook exit 1 on every `Glob`, `Grep`, `WebSearch` and `WebFetch` call. Paths with spaces are ordinary (a Windows user directory, anything under `My Documents`). Installs written before this change keep the old entry, because the installer treats any existing hyperresearch hook as already installed; removing that entry and re-running `install` picks up the fix.
+
 ## [0.10.0] - 2026-08-01
 
 ### Open-access full-text recovery (Unpaywall + Europe PMC)
