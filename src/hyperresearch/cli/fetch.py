@@ -242,9 +242,9 @@ def fetch(
     vault.auto_sync()
     conn = vault.db
 
-    # Check if URL already fetched
+    # Check if URL already fetched (a NULL note_id is an orphaned row, not a live duplicate)
     existing = conn.execute("SELECT note_id FROM sources WHERE url = ?", (url,)).fetchone()
-    if existing:
+    if existing and existing["note_id"] is not None:
         note_id = existing["note_id"]
         # Graceful duplicate handling for the guided reading loop:
         # if the caller passed --suggested-by, append the breadcrumb to the

@@ -437,7 +437,7 @@ class Crawl4AIProvider:
 
     def fetch_many(self, urls: list[str]) -> list[WebResult]:
         """Fetch multiple URLs concurrently using crawl4ai's arun_many."""
-        return asyncio.run(self._fetch_many_async(urls))
+        return _run_coro(self._fetch_many_async(urls))
 
     async def _fetch_many_async(self, urls: list[str]) -> list[WebResult]:
         # Split: PDFs go direct, rest go through browser

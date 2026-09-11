@@ -109,11 +109,11 @@ def research(
                     break
                 if link_url in fetched_urls:
                     continue
-                # Check if already in DB
+                # Check if already in DB (a NULL note_id is an orphaned row, not a live duplicate)
                 existing = conn.execute(
                     "SELECT note_id FROM sources WHERE url = ?", (link_url,)
                 ).fetchone()
-                if existing:
+                if existing and existing["note_id"] is not None:
                     fetched_urls.add(link_url)
                     continue
 
@@ -238,9 +238,9 @@ def _save_result(vault, conn, prov, result, tags, parent) -> dict | None:
     if result.looks_like_login_wall(url):
         return None
 
-    # Skip if already fetched
+    # Skip if already fetched (a NULL note_id is an orphaned row, not a live duplicate)
     existing = conn.execute("SELECT note_id FROM sources WHERE url = ?", (url,)).fetchone()
-    if existing:
+    if existing and existing["note_id"] is not None:
         return None
 
     title = result.title or urlparse(url).path.split("/")[-1] or "Untitled"

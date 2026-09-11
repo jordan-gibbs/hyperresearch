@@ -80,7 +80,7 @@ def fetch_batch(
     new_urls = []
     for url in all_urls:
         existing = conn.execute("SELECT note_id FROM sources WHERE url = ?", (url,)).fetchone()
-        if existing:
+        if existing and existing["note_id"] is not None:
             if not json_output:
                 console.print(f"  [dim]Skip:[/] {url} (already fetched as {existing['note_id']})")
         else:
