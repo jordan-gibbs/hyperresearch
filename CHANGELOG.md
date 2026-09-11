@@ -28,6 +28,10 @@ Recovery used to ask Unpaywall, then Europe PMC. But `contact_email` is empty by
 
 The "Academic APIs before web search" section of the injected agent instructions tells agents to run `hpr scholar search` and not to hand-assemble API URLs, and explains what each source is for.
 
+### Fixes
+
+- **The MCP `fetch_url` tool works again, and a deleted note's URL can be fetched again (#84, fixed by @AmirF194 in #86).** Two bugs on the same path. `Crawl4AIProvider.fetch()` and `fetch_many()` called `asyncio.run()`, which raises before the coroutine runs when the caller already has a loop — and the MCP server dispatches sync tools on its own loop thread, so the tool failed on every call while the CLI never noticed. Both now go through a wrapper that runs the coroutine on a dedicated thread when a loop is present. Separately, `sources.note_id` is `ON DELETE SET NULL`, so deleting a note leaves its row behind with a NULL id; every duplicate-URL check tested row truthiness, so that URL was `DUPLICATE_URL` ("already fetched as note 'None'") forever. All four fetch paths (`fetch_and_save`, `hpr fetch`, `hpr fetch-batch`, `hpr research`) now share one orphan-aware check. The three CLI paths also record the source with `INSERT OR IGNORE`, which was a no-op on the orphaned row too — so the new note was left with no source record, and `hpr fetch`'s duplicate-race detector then deleted the note it had just written and reported `note_id: null`. Those paths now reclaim the orphaned row after the insert; the guard on `note_id IS NULL` leaves a genuine race winner untouched.
+
 ## [0.10.1] - 2026-09-11
 
 A maintenance release. Everything here is a contributed fix, and two of them unblock users who could not ship a run at all.

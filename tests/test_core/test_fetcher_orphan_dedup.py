@@ -37,6 +37,10 @@ def test_refetch_succeeds_after_the_note_is_deleted(tmp_vault, monkeypatch):
 
     second = fetch_and_save(tmp_vault, url)  # must not raise ValueError
     assert (tmp_vault.root / second["path"]).exists()
+    row = tmp_vault.db.execute(
+        "SELECT note_id FROM sources WHERE url = ?", (url,)
+    ).fetchone()
+    assert row["note_id"] == second["note_id"]  # the upsert re-linked the row
 
 
 def test_live_duplicate_is_still_rejected(tmp_vault, monkeypatch):

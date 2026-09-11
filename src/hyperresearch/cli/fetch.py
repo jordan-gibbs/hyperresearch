@@ -12,6 +12,7 @@ import typer
 
 from hyperresearch.cli._output import console, output
 from hyperresearch.core.config import AssetSettings, FetchSettings
+from hyperresearch.core.fetcher import existing_live_note_for_url, reclaim_orphaned_source_row
 from hyperresearch.models.output import error, success
 
 app = typer.Typer()
@@ -242,9 +243,10 @@ def fetch(
     vault.auto_sync()
     conn = vault.db
 
-    # Check if URL already fetched (a NULL note_id is an orphaned row, not a live duplicate)
-    existing = conn.execute("SELECT note_id FROM sources WHERE url = ?", (url,)).fetchone()
-    if existing and existing["note_id"] is not None:
+    # Check if URL already fetched (an orphaned row — note deleted — is not a duplicate,
+    # so --suggested-by never tries to append a breadcrumb to a note_id of None)
+    existing = existing_live_note_for_url(conn, url)
+    if existing:
         note_id = existing["note_id"]
         # Graceful duplicate handling for the guided reading loop:
         # if the caller passed --suggested-by, append the breadcrumb to the
@@ -539,6 +541,12 @@ def fetch(
         """INSERT OR IGNORE INTO sources (url, note_id, domain, fetched_at, provider, content_hash)
            VALUES (?, ?, ?, ?, ?, ?)""",
         (url, note_id, domain, result.fetched_at.isoformat(), prov.name, content_hash),
+    )
+    # An orphaned row (note deleted → ON DELETE SET NULL) also makes that INSERT
+    # a no-op, but nobody owns the url, so claim it. Guarded on note_id IS NULL,
+    # so a genuine race winner is left alone and the check below still fires.
+    reclaim_orphaned_source_row(
+        conn, url, note_id, domain, result.fetched_at.isoformat(), prov.name, content_hash
     )
     conn.commit()
 

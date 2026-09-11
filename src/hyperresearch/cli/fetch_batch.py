@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import typer
 
 from hyperresearch.cli._output import console, output
+from hyperresearch.core.fetcher import existing_live_note_for_url, reclaim_orphaned_source_row
 from hyperresearch.models.output import error, success
 
 
@@ -79,8 +80,9 @@ def fetch_batch(
     # Filter out already-fetched URLs
     new_urls = []
     for url in all_urls:
-        existing = conn.execute("SELECT note_id FROM sources WHERE url = ?", (url,)).fetchone()
-        if existing and existing["note_id"] is not None:
+        # An orphaned row (note deleted) is not a duplicate; only a live note skips
+        existing = existing_live_note_for_url(conn, url)
+        if existing:
             if not json_output:
                 console.print(f"  [dim]Skip:[/] {url} (already fetched as {existing['note_id']})")
         else:
@@ -274,6 +276,10 @@ def fetch_batch(
             """INSERT OR IGNORE INTO sources (url, note_id, domain, fetched_at, provider, content_hash)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (url, note_id, domain, result.fetched_at.isoformat(), prov.name, content_hash),
+        )
+        # The INSERT is also a no-op on an orphaned row (note deleted); claim it
+        reclaim_orphaned_source_row(
+            conn, url, note_id, domain, result.fetched_at.isoformat(), prov.name, content_hash
         )
 
         # Save assets if requested

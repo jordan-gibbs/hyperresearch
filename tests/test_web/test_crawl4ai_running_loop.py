@@ -76,3 +76,22 @@ def test_fetch_still_succeeds_with_no_running_loop(monkeypatch) -> None:
 
     assert result.title == "ok"
     assert result.content == "fetched content"
+
+
+def test_fetch_many_succeeds_when_called_from_a_running_event_loop(monkeypatch) -> None:
+    """fetch_many() shares fetch()'s wrapper; a bare asyncio.run() here would
+    fail the same way on the MCP server's loop thread."""
+    async def fake_fetch_many_async(self, urls):
+        return [WebResult(url=u, title="ok", content="fetched content") for u in urls]
+
+    monkeypatch.setattr(Crawl4AIProvider, "_fetch_many_async", fake_fetch_many_async)
+    provider = Crawl4AIProvider(headless=True)
+    urls = ["https://example.com/a", "https://example.com/b"]
+
+    async def call_fetch_many_on_the_running_loop():
+        return provider.fetch_many(urls)
+
+    results = _run_on_a_fresh_thread(call_fetch_many_on_the_running_loop())
+
+    assert [r.url for r in results] == urls
+    assert all(r.content == "fetched content" for r in results)

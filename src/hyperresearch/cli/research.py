@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 import typer
 
 from hyperresearch.cli._output import console, output
+from hyperresearch.core.fetcher import existing_live_note_for_url, reclaim_orphaned_source_row
 from hyperresearch.models.output import error, success
 
 
@@ -109,11 +110,8 @@ def research(
                     break
                 if link_url in fetched_urls:
                     continue
-                # Check if already in DB (a NULL note_id is an orphaned row, not a live duplicate)
-                existing = conn.execute(
-                    "SELECT note_id FROM sources WHERE url = ?", (link_url,)
-                ).fetchone()
-                if existing and existing["note_id"] is not None:
+                # Check if already in DB (an orphaned row — note deleted — is not a duplicate)
+                if existing_live_note_for_url(conn, link_url):
                     fetched_urls.add(link_url)
                     continue
 
@@ -238,9 +236,8 @@ def _save_result(vault, conn, prov, result, tags, parent) -> dict | None:
     if result.looks_like_login_wall(url):
         return None
 
-    # Skip if already fetched (a NULL note_id is an orphaned row, not a live duplicate)
-    existing = conn.execute("SELECT note_id FROM sources WHERE url = ?", (url,)).fetchone()
-    if existing and existing["note_id"] is not None:
+    # Skip if already fetched (an orphaned row — note deleted — is not a duplicate)
+    if existing_live_note_for_url(conn, url):
         return None
 
     title = result.title or urlparse(url).path.split("/")[-1] or "Untitled"
@@ -282,6 +279,10 @@ def _save_result(vault, conn, prov, result, tags, parent) -> dict | None:
         """INSERT OR IGNORE INTO sources (url, note_id, domain, fetched_at, provider, content_hash)
            VALUES (?, ?, ?, ?, ?, ?)""",
         (url, note_id, domain, result.fetched_at.isoformat(), prov.name, content_hash),
+    )
+    # The INSERT is also a no-op on an orphaned row (note deleted); claim it
+    reclaim_orphaned_source_row(
+        conn, url, note_id, domain, result.fetched_at.isoformat(), prov.name, content_hash
     )
     conn.commit()
 
