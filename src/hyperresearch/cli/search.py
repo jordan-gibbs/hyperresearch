@@ -9,12 +9,17 @@ from hyperresearch.models.output import error, success
 
 
 def search(
-    query: str = typer.Argument(..., help="Search query"),
+    query: str = typer.Argument("", help="Search query (optional when filtering metadata)"),
     tag: list[str] = typer.Option([], "--tag", "-t", help="Filter by tag (AND logic)"),
     status: str | None = typer.Option(None, "--status", "-s", help="Filter by status"),
     note_type: str | None = typer.Option(None, "--type", help="Filter by type"),
     tier: str | None = typer.Option(None, "--tier", help="Filter by epistemic tier: ground_truth|institutional|practitioner|commentary|unknown"),
     content_type: str | None = typer.Option(None, "--content-type", help="Filter by artifact kind: paper|docs|article|blog|forum|dataset|policy|code|book|transcript|review|unknown"),
+    doi: str | None = typer.Option(None, "--doi", help="Exact DOI or arXiv ID (case-insensitive)"),
+    venue: str | None = typer.Option(None, "--venue", help="Exact publication venue (case-insensitive)"),
+    min_citations: int | None = typer.Option(None, "--min-citations", help="Minimum known citation count"),
+    retraction: str | None = typer.Option(None, "--retraction", help="retracted|not-retracted|unchecked"),
+    oa_version: str | None = typer.Option(None, "--oa-version", help="Retrieved text: submittedVersion|acceptedVersion|publishedVersion"),
     parent: str | None = typer.Option(None, "--parent", "-p", help="Filter by parent topic"),
     after: str | None = typer.Option(None, "--after", help="Created after date (YYYY-MM-DD)"),
     before: str | None = typer.Option(None, "--before", help="Created before date (YYYY-MM-DD)"),
@@ -63,6 +68,35 @@ def search(
             raise typer.Exit(1)
 
     try:
+        filters = SearchFilters(
+            tags=tag or None,
+            status=status,
+            note_type=note_type,
+            tier=tier,
+            content_type=content_type,
+            doi=doi, venue=venue, min_citations=min_citations,
+            retraction=retraction, oa_version=oa_version,
+            parent=parent,
+            after=after,
+            before=before,
+            path_glob=path_glob,
+            min_words=min_words,
+            max_words=max_words,
+            linked_from=linked_from,
+            linked_to=linked_to,
+            min_inbound=min_inbound,
+            has_backlinks=has_backlinks or None,
+        )
+        if semantic and not query.strip():
+            raise ValueError("--semantic requires a text query")
+    except ValueError as e:
+        if json_output:
+            output(error(str(e), "INVALID_FILTER"), json_mode=True)
+        else:
+            console.print(f"[red]Error:[/] {e}")
+        raise typer.Exit(1) from e
+
+    try:
         vault = Vault.discover()
     except VaultError as e:
         if json_output:
@@ -73,24 +107,6 @@ def search(
     vault.auto_sync()
     if limit is None:
         limit = vault.config.search_default_limit
-
-    filters = SearchFilters(
-        tags=tag or None,
-        status=status,
-        note_type=note_type,
-        tier=tier,
-        content_type=content_type,
-        parent=parent,
-        after=after,
-        before=before,
-        path_glob=path_glob,
-        min_words=min_words,
-        max_words=max_words,
-        linked_from=linked_from,
-        linked_to=linked_to,
-        min_inbound=min_inbound,
-        has_backlinks=has_backlinks or None,
-    )
 
     ranking = {
         "title_weight": vault.config.search_title_weight,
@@ -123,7 +139,7 @@ def search(
         )
 
         try:
-            sem_hits = semantic_search(vault, query, limit=limit)
+            sem_hits = semantic_search(vault, query, limit=limit, filters=filters)
         except EmbeddingError as e:
             if json_output:
                 output(error(str(e), "EMBEDDINGS_DISABLED"), json_mode=True)
@@ -141,13 +157,16 @@ def search(
             if r is None:
                 row = vault.db.execute(
                     "SELECT id, title, path, status, type, tier, content_type, "
-                    "quality_score, created, updated, word_count, summary "
+                    "quality_score, created, updated, word_count, summary, "
+                    "doi, venue, citation_count, is_retracted, oa_version "
                     "FROM notes WHERE id = ?",
                     (note_id,),
                 ).fetchone()
                 if row is None:
                     continue
                 r = dict(row)
+                if r["is_retracted"] is not None:
+                    r["is_retracted"] = bool(r["is_retracted"])
                 r["tags"] = []
                 r["snippet"] = ""
             r["score"] = fused_score

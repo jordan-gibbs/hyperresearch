@@ -30,11 +30,20 @@ def _get_vault():
 
 
 @server.tool()
-def search_notes(query: str, tag: str = "", status: str = "", parent: str = "", limit: int = 10) -> str:
+def search_notes(
+    query: str = "", tag: str = "", status: str = "", parent: str = "", limit: int = 10,
+    doi: str | None = None, venue: str | None = None, min_citations: int | None = None,
+    retraction: str | None = None, oa_version: str | None = None,
+) -> str:
     """Search the research base by text. Returns matching notes with titles, summaries, and full bodies.
 
     Args:
-        query: Search query (supports natural language, FTS5 with porter stemming)
+        query: Search text; omit to browse matching metadata without a text constraint
+        doi: Exact DOI or arXiv ID (case-insensitive)
+        venue: Exact publication venue (case-insensitive)
+        min_citations: Minimum known citation count (nonnegative)
+        retraction: retracted, not-retracted (explicitly checked), or unchecked
+        oa_version: Retrieved text version: submittedVersion, acceptedVersion, publishedVersion
         tag: Filter by tag (comma-separated for multiple, AND logic)
         status: Filter by status (draft, review, evergreen, stale, deprecated, archive)
         parent: Filter by parent topic (e.g. "ml/deep-learning")
@@ -45,7 +54,14 @@ def search_notes(query: str, tag: str = "", status: str = "", parent: str = "", 
     from hyperresearch.search.filters import SearchFilters
     from hyperresearch.search.fts import SearchQueryError, search_fts
     tags = [t.strip() for t in tag.split(",") if t.strip()] or None
-    filters = SearchFilters(tags=tags, status=status or None, parent=parent or None)
+    try:
+        filters = SearchFilters(
+            tags=tags, status=status or None, parent=parent or None,
+            doi=doi, venue=venue, min_citations=min_citations,
+            retraction=retraction, oa_version=oa_version,
+        )
+    except ValueError as e:
+        return f"Invalid search filter: {e}"
     ranking = {
         "title_weight": vault.config.search_title_weight,
         "body_weight": vault.config.search_body_weight,

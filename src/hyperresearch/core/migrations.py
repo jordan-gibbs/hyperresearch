@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections.abc import Callable
 
@@ -269,6 +270,47 @@ def _migrate_v12_oa_recovery_kind(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE notes ADD COLUMN oa_recovery_kind TEXT")
 
 
+def _migrate_v13_nullable_retraction(conn: sqlite3.Connection) -> None:
+    """Preserve unchecked retraction state, rebuilding the derived cache safely."""
+    columns = list(conn.execute("PRAGMA table_info(notes)"))
+    if not any(row[1] == "is_retracted" and row[3] for row in columns):
+        return
+    schema = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'notes'"
+    ).fetchone()[0]
+    definition, replacements = re.subn(
+        r"\bis_retracted\s+INTEGER\s+NOT NULL\s+DEFAULT\s+0",
+        "is_retracted INTEGER", schema[schema.index("("):], flags=re.IGNORECASE,
+    )
+    if replacements != 1:
+        raise sqlite3.OperationalError("Cannot migrate unexpected notes.is_retracted definition")
+    indexes = [row[0] for row in conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'notes' AND sql IS NOT NULL"
+    )]
+    # Dropping the parent table with FK enforcement would cascade into tags,
+    # note bodies, claims and embeddings. Rebuild in a transaction with FK
+    # enforcement restored even if any operation fails.
+    conn.commit()
+    foreign_keys = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        with conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("CREATE TABLE notes_v13 " + definition)
+            names = ", ".join('"' + row[1].replace('"', '""') + '"' for row in columns)
+            conn.execute(f"INSERT INTO notes_v13 ({names}) SELECT {names} FROM notes")
+            # Old zeroes conflate unknown and false. Do not guess: invalidate
+            # sync fingerprints so the next sync restores the source Markdown.
+            conn.execute("UPDATE notes_v13 SET is_retracted = NULL WHERE is_retracted = 0")
+            conn.execute("UPDATE notes_v13 SET file_mtime = 0, content_hash = ''")
+            conn.execute("DROP TABLE notes")
+            conn.execute("ALTER TABLE notes_v13 RENAME TO notes")
+            for sql in indexes:
+                conn.execute(sql)
+    finally:
+        conn.execute(f"PRAGMA foreign_keys={int(foreign_keys)}")
+
+
 MIGRATIONS: dict[int, str | Callable[[sqlite3.Connection], None]] = {
     2: """
 CREATE TABLE IF NOT EXISTS tag_aliases (
@@ -317,6 +359,7 @@ CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
     10: _MIGRATE_V10_ESCALATIONS_SQL,
     11: _migrate_v11_oa_recovery,
     12: _migrate_v12_oa_recovery_kind,
+    13: _migrate_v13_nullable_retraction,
 }
 
 

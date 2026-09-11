@@ -24,6 +24,21 @@ class SearchFilters:
     min_inbound: int | None = None   # Minimum inbound link count
     has_backlinks: bool | None = None # Must have at least one inbound link
 
+    # Scholarly metadata describes the indexed source, not a quality guarantee.
+    doi: str | None = None
+    venue: str | None = None
+    min_citations: int | None = None
+    retraction: str | None = None
+    oa_version: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.retraction not in (None, "retracted", "not-retracted", "unchecked"):
+            raise ValueError("retraction must be retracted, not-retracted, or unchecked")
+        if self.oa_version not in (None, "submittedVersion", "acceptedVersion", "publishedVersion"):
+            raise ValueError("oa_version must be submittedVersion, acceptedVersion, or publishedVersion")
+        if self.min_citations is not None and self.min_citations < 0:
+            raise ValueError("min_citations must be nonnegative")
+
     def to_sql(self, table_alias: str = "n") -> tuple[str, list]:
         """Build SQL WHERE clauses and parameters."""
         clauses: list[str] = []
@@ -75,6 +90,22 @@ class SearchFilters:
         if self.max_words is not None:
             clauses.append(f"{table_alias}.word_count <= ?")
             params.append(self.max_words)
+
+        for column, value in (("doi", self.doi), ("venue", self.venue)):
+            if value is not None:
+                clauses.append(f"{table_alias}.{column} = ? COLLATE NOCASE")
+                params.append(value)
+        if self.min_citations is not None:
+            clauses.append(f"{table_alias}.citation_count >= ?")
+            params.append(self.min_citations)
+        if self.oa_version is not None:
+            clauses.append(f"{table_alias}.oa_version = ?")
+            params.append(self.oa_version)
+        if self.retraction == "unchecked":
+            clauses.append(f"{table_alias}.is_retracted IS NULL")
+        elif self.retraction is not None:
+            clauses.append(f"{table_alias}.is_retracted = ?")
+            params.append(int(self.retraction == "retracted"))
 
         # Graph-aware filters
         if self.linked_from:

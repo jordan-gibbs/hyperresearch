@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add scholarly metadata filters and metadata-only browsing to CLI and MCP search, including semantic filtering and a cache upgrade that preserves unchecked retraction status.
+
 ## [0.11.1] - 2026-09-11
 
 ### Seven fixes from the backlog sweep
