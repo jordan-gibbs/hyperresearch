@@ -26,7 +26,7 @@ def legacy_vault(tmp_vault):
         conn.execute(
             "INSERT INTO notes (id, title, path, created, file_mtime, content_hash, synced_at, is_retracted) "
             "VALUES (?, ?, ?, '2026-01-01', ?, 'legacy', '2026-01-01', ?)",
-            (name, name, str(path.relative_to(tmp_vault.root)), path.stat().st_mtime, int(bool(state))),
+            (name, name, path.relative_to(tmp_vault.root).as_posix(), path.stat().st_mtime, int(bool(state))),
         )
         conn.execute("INSERT INTO note_content VALUES (?, 'body', 'body')", (name,))
         conn.execute("INSERT INTO tags VALUES (?, 'evidence')", (name,))
@@ -58,7 +58,11 @@ def test_upgrade_preserves_relations_and_resyncs_frontmatter(legacy_vault):
     }
     assert migrate(conn, 13) == []
     _migrate_v13_nullable_retraction(conn)  # interrupted version stamp is harmless
-    execute_sync(vault, compute_sync_plan(vault))  # no --force required
+    plan = compute_sync_plan(vault)  # no --force required
+    assert len(plan.to_update) == 3
+    assert not plan.to_add and not plan.to_delete
+    result = execute_sync(vault, plan)
+    assert not result.errors
     assert dict(vault.db.execute('SELECT id, is_retracted FROM notes')) == {
         'known': 0, 'unchecked': None, 'retracted': 1,
     }
