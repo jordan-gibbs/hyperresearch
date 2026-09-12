@@ -461,6 +461,8 @@ def test_install_hooks_registers_full_hyperresearch_roster(tmp_vault):
         "hyperresearch-synthesizer.md",
         "hyperresearch-browser-fetcher.md",
         "hyperresearch-cite-checker.md",
+        "hyperresearch-decomposer.md",
+        "hyperresearch-chief-editor.md",
     }
     actual_agents = {p.name for p in agents_dir.iterdir() if p.is_file()}
     assert expected_agents == actual_agents, (
@@ -506,3 +508,71 @@ def test_installed_hook_command_keeps_the_script_path_in_one_argument(tmp_path):
     command = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
 
     assert shlex.split(command) == ["node", (project / ".hyperresearch" / "hook.js").as_posix()]
+
+
+# ---------------------------------------------------------------------------
+# Oracle seats — decomposer (step 1) and chief editor (step 12)
+# ---------------------------------------------------------------------------
+
+
+def _skill(vault, name: str) -> str:
+    return (vault.root / ".claude" / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+
+
+def _agent(vault, name: str) -> str:
+    return (vault.root / ".claude" / "agents" / f"{name}.md").read_text(encoding="utf-8")
+
+
+def test_oracle_seats_off_by_default(tmp_vault):
+    """Defaults must not change the shipped pipeline: step 1 stays inline and
+    step 12 spawns four critics. The agent files still install (so a later
+    `profile use` can switch them on without a reinstall) but carry the
+    sentinel model values, and neither skill mentions delegation."""
+    install_hooks(tmp_vault.root, "hyperresearch")
+    assert "model: orchestrator" in _agent(tmp_vault, "hyperresearch-decomposer")
+    assert "model: off" in _agent(tmp_vault, "hyperresearch-chief-editor")
+    step1 = _skill(tmp_vault, "hyperresearch-1-decompose")
+    step12 = _skill(tmp_vault, "hyperresearch-12-critics")
+    assert "oracle decomposer seat" not in step1
+    assert "subagent_type: hyperresearch-decomposer" not in step1
+    assert "Oracle seat active" not in step12
+    assert "subagent_type: hyperresearch-chief-editor" not in step12
+    assert "Spawn all 4 critics in parallel" in step12
+
+
+def test_oracle_seats_render_delegation_when_profile_sets_them(tmp_vault):
+    """A profile that assigns models to the seats flips both skills into
+    delegation mode and renders the model into the agent frontmatter."""
+    cfg = tmp_vault.root / ".hyperresearch" / "config.toml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(
+        '[profile.oracle]\nextends = "full"\n'
+        'models = { decomposer = "openai/gpt-6-astra", chief_editor = "openai/gpt-6-astra" }\n',
+        encoding="utf-8",
+    )
+    install_hooks(tmp_vault.root, "hyperresearch", profile="oracle")
+    assert "model: openai/gpt-6-astra" in _agent(tmp_vault, "hyperresearch-decomposer")
+    assert "model: openai/gpt-6-astra" in _agent(tmp_vault, "hyperresearch-chief-editor")
+    step1 = _skill(tmp_vault, "hyperresearch-1-decompose")
+    assert "subagent_type: hyperresearch-decomposer" in step1
+    assert "skill_path: .claude/skills/hyperresearch-1-decompose/SKILL.md" in step1
+    # the inline procedure is retained so the orchestrator can audit output
+    assert "Procedure item 10" in step1
+    step12 = _skill(tmp_vault, "hyperresearch-12-critics")
+    assert "subagent_type: hyperresearch-chief-editor" in step12
+    assert "Skip items 1\u20132 below" in step12.replace("\n", " ")  # en dash, as in the skill
+    # other agents untouched by the seats
+    assert "model: opus" in _agent(tmp_vault, "hyperresearch-dialectic-critic")
+
+
+def test_chief_editor_writes_all_four_findings_files(tmp_vault):
+    """The patcher and `run verify` expect the four critic files; the chief
+    editor prompt must commit to writing every one of them in the standard
+    schema, with the per-lens caps rendered from the profile."""
+    install_hooks(tmp_vault.root, "hyperresearch")
+    body = _agent(tmp_vault, "hyperresearch-chief-editor")
+    for lens in ("dialectic", "depth", "width", "instruction"):
+        assert f"critic-findings-{lens}.json" in body
+    assert '"critic_type": "dialectic|depth|width|instruction"' in body
+    assert "dialectic 12, depth 12" in body  # full-gear caps rendered
+    assert "hyperresearch search" in body  # {hpr_path} substituted

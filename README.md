@@ -138,6 +138,10 @@ Models are profile config, not hardcode. The table shows the shipped defaults, a
 | `hyperresearch-polish-auditor` | Opus | Tool-locked `[Read, Edit]`. Cuts filler, strips hygiene leaks |
 | `hyperresearch-readability-recommender` | Opus | Writes JSON suggestions for paragraph rhythm and list/table conversion |
 | `hyperresearch-browser-fetcher` | Sonnet | Drains the escalation queue by driving your real Chrome (Claude-in-Chrome) |
+| `hyperresearch-decomposer` | off | **Oracle seat.** Set `models = { decomposer = "<model>" }` and step 1 (query decomposition, the artifact every later step is bound by) runs on that model instead of the orchestrator |
+| `hyperresearch-chief-editor` | off | **Oracle seat.** Set `models = { chief_editor = "<model>" }` and one read on that model replaces the four critics, writing the same four findings files |
+
+Oracle seats exist for cheap-model runs: put an expensive model in one or two single-call seats where judgment steers everything downstream (decomposition, the pre-draft corpus critic, the critique pass) and keep the token-heavy seats (fetchers, drafts, synthesis) on the fast model. Defaults leave both seats off, so nothing changes unless a profile opts in.
 
 ---
 

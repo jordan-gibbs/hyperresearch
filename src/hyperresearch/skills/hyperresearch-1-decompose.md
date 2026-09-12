@@ -28,7 +28,42 @@ The orchestrator's bootstrap step (in the entry skill) has already produced:
 Read both before starting. The vault_tag is in the scaffold's "Run config" section.
 
 ---
+<% if p.models.decomposer != "orchestrator" %>
+## Delegation: oracle decomposer seat
 
+This profile assigns step 1 to a `hyperresearch-decomposer` agent on model
+`<< p.models.decomposer >>`. **Do not execute Procedure items 1–9 yourself.**
+Spawn the agent (standard 3-piece contract) and wait for it:
+
+```
+subagent_type: hyperresearch-decomposer
+prompt: |
+  RESEARCH QUERY (verbatim, gospel):
+  > {{paste research/runs/<vault_tag>/query.md body}}
+
+  QUERY FILE: research/runs/<vault_tag>/query.md
+
+  PIPELINE POSITION: You are step 1 (decomposer) of the hyperresearch V8
+  pipeline. Nothing has been researched yet. After you return, the
+  orchestrator renders the lever shims and invokes step 2 (width sweep).
+
+  YOUR INPUTS:
+  - query_file_path: research/runs/<vault_tag>/query.md
+  - scaffold_path: research/runs/<vault_tag>/scaffold.md
+  - skill_path: .claude/skills/hyperresearch-1-decompose/SKILL.md
+  - vault_tag: <vault_tag>
+```
+
+When it returns: verify every artifact in the **Exit criterion** below
+exists (decomposition JSON is valid, `required_section_headings` is
+non-empty, coverage matrix has zero `Gap? = YES` rows, scaffold has a Tier
+rationale). If anything is missing, fix it yourself using the Procedure.
+Then run **Procedure item 10** (`levers render`) and continue to the exit
+criterion. The Procedure below is what the agent executes; it is kept here
+so you can audit its output against it.
+
+---
+<% endif %>
 ## Procedure
 
 1. **Re-read the canonical research query** end to end (`research/runs/<vault_tag>/query.md`).

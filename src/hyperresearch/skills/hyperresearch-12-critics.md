@@ -27,7 +27,40 @@ Read these inputs:
 ---
 
 ## Procedure
+<% if p.models.chief_editor != "off" %>
+**Oracle seat active.** This profile replaces the four critics with ONE
+`hyperresearch-chief-editor` on model `<< p.models.chief_editor >>`. It reads
+the report once through all four lenses and writes all four findings files
+itself, so steps 13 and 14 and the ship gate are unchanged. **Skip items
+1–2 below** and spawn the chief editor instead:
 
+```
+subagent_type: hyperresearch-chief-editor
+prompt: |
+  RESEARCH QUERY (verbatim, gospel):
+  > {{paste research/runs/<vault_tag>/query.md body}}
+
+  QUERY FILE: research/runs/<vault_tag>/query.md
+
+  PIPELINE POSITION: You are step 12 (chief editor, replacing the four
+  critics) of the hyperresearch V8 pipeline. Step 11 (synthesizer) produced
+  the final report at research/notes/final_report_<vault_tag>.md. After you
+  return, step 13 may run a gap-fetch wave, then step 14 (patcher) applies
+  your findings as Edit hunks.
+
+  YOUR INPUTS:
+  - draft_path: research/notes/final_report_<vault_tag>.md
+  - decomposition_path: research/runs/<vault_tag>/prompt-decomposition.json
+  - output_dir: research/runs/<vault_tag>/
+  - vault_tag: <vault_tag>
+
+  RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/critics.md here, verbatim.
+```
+
+When it returns, continue at item 3 (all four findings files must exist,
+`"findings": []` is acceptable for a lens that found nothing).
+
+<% endif %>
 1. **Spawn all 4 critics in parallel.** In ONE message:
    - `hyperresearch-dialectic-critic` → `research/runs/<vault_tag>/critic-findings-dialectic.json` (counter-evidence the draft missed or straw-manned)
    - `hyperresearch-depth-critic` → `research/runs/<vault_tag>/critic-findings-depth.json` (shallow spots where interim notes could fill substance)

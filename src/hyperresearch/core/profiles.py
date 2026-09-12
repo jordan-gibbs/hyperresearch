@@ -45,6 +45,16 @@ class ModelMap(BaseModel):
 
     Unspecified agents keep their defaults (the dict replaces wholesale, then
     defaults fill the gaps).
+
+    Two seats are OFF by default and exist so a single expensive call can
+    steer a lot of cheap work ("oracle seats"):
+
+    - `decomposer`: `"orchestrator"` (default) means the orchestrator does
+      step 1 itself. Any other value spawns a `hyperresearch-decomposer`
+      agent on that model to produce the decomposition + coverage matrix.
+    - `chief_editor`: `"off"` (default) means step 12 runs the four
+      critics. Any other value spawns ONE `hyperresearch-chief-editor` on
+      that model instead, which writes all four findings files.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, protected_namespaces=())
@@ -62,6 +72,8 @@ class ModelMap(BaseModel):
     patcher: str = "opus"
     polish_auditor: str = "opus"
     readability_recommender: str = "opus"
+    decomposer: str = "orchestrator"
+    chief_editor: str = "off"
 
     @field_validator("*")
     @classmethod

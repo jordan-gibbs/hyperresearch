@@ -50,7 +50,7 @@ Blocked fetches (login walls, bot walls, captchas) queue as escalations instead 
 
 The skill files own everything about how to research. That includes:
 - The pipeline phases and what each phase does
-- Which subagents exist and what each one is for (fetcher, source-analyst, loci-analyst, depth-investigator, corpus-critic, draft-orchestrators, synthesizer, 4 critics, patcher, cite-checker, polish-auditor, readability-recommender, browser-fetcher)
+- Which subagents exist and what each one is for (fetcher, source-analyst, loci-analyst, depth-investigator, corpus-critic, draft-orchestrators, synthesizer, 4 critics, patcher, cite-checker, polish-auditor, readability-recommender, browser-fetcher; plus two optional oracle seats, decomposer and chief-editor, that a profile can assign a stronger model to)
 - The tool-lock invariant (patcher and polish-auditor can only Read + Edit, never Write)
 - The subagent spawn contract (every Task call passes the verbatim research_query + pipeline position + inputs)
 - Artifact locations — everything run-scoped lives under `research/runs/<vault_tag>/` (scaffold.md, prompt-decomposition.json, loci.json, comparisons.md, critic findings, patch / polish logs); final reports at `research/notes/final_report_<vault_tag>.md`

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Oracle seats: one expensive call where judgment steers everything downstream
+
+- **Two optional agent seats, off by default.** `ModelMap` gains `decomposer` (default `"orchestrator"`) and `chief_editor` (default `"off"`). Setting `decomposer` to a model spawns a new `hyperresearch-decomposer` agent for step 1, so the decomposition and coverage matrix that bind every later step come from the strongest model in the run instead of the orchestrator. Setting `chief_editor` to a model spawns one `hyperresearch-chief-editor` in step 12 in place of the four parallel critics; it reads the report once through all four lenses and writes the same four `critic-findings-*.json` files, so the patcher, gap-fetch and `run verify` are unchanged. Together with the existing `corpus_critic` seat these are the three single-call positions where a cheap-model run (Flash / Qwen fetchers and drafts) gains the most from a top model. The defaults leave both skills rendering exactly as before; the delegation blocks are Jinja-gated on the profile.
+
 ## [0.11.1] - 2026-09-11
 
 ### Seven fixes from the backlog sweep

@@ -111,6 +111,8 @@ class TestBuiltins:
             "corpus_critic", "cite_checker", "browser_fetcher",
             "draft_orchestrator", "synthesizer", "critics", "patcher",
             "polish_auditor", "readability_recommender",
+            # oracle seats: sentinel-valued, off by default
+            "decomposer", "chief_editor",
         }
 
     def test_no_cost_estimates_anywhere(self):
