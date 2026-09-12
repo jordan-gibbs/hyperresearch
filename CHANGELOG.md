@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **`serply` web provider.** Google organic results with page fetch through the same `SERPLY_API_KEY`; opt-in via `[web] provider = "serply"`, no new dependency.
+
 ## [0.11.1] - 2026-09-11
 
 ### Seven fixes from the backlog sweep

@@ -231,6 +231,12 @@ def get_provider(
         except ImportError:
             raise ImportError('parallel provider requires: pip install "hyperresearch[parallel]"')
 
+    if name == "serply":
+        from hyperresearch.web.serply_provider import SerplyProvider
+
+        return SerplyProvider()
+
     raise ValueError(
-        f"Unknown web provider: {name!r}. Available: builtin, crawl4ai, exa, tavily, parallel"
+        f"Unknown web provider: {name!r}. "
+        "Available: builtin, crawl4ai, exa, tavily, parallel, serply"
     )
