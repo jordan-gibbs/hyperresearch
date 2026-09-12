@@ -95,7 +95,7 @@ def _latest_report(vault):
         return None, None
 
 
-_QUOTE_SPAN_RE = re.compile(r"[\"“]([^\"“”]{20,600})[\"”]")
+_QUOTE_SPAN_RE = re.compile(r'[\"“]([^\"“”]{1,600}?)[\"”]')
 _REPORT_NUMBER_RE = re.compile(r"\d[\d,]*\.\d+%?|\d[\d,]{3,}%?|\d[\d,]*%")
 
 
