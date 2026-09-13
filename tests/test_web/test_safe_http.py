@@ -316,6 +316,33 @@ def test_check_url_allows_6to4_wrapping_public_ipv4():
 
 
 # ---------------------------------------------------------------------------
+# IPv4-mapped IPv6 (::ffff:a.b.c.d) is classified by the embedded IPv4. The
+# ipaddress properties disagree across interpreters: 3.11 and 3.13 report a
+# mapped CGNAT address as public, 3.12 reports even a mapped public address
+# as reserved.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://[::ffff:10.0.0.1]/",
+        "http://[::ffff:169.254.169.254]/",  # mapped cloud metadata
+        "http://[::ffff:100.64.0.1]/",  # mapped CGNAT: allowed on 3.11 and 3.13
+    ],
+)
+def test_check_url_rejects_ipv4_mapped_private_forms(url):
+    with pytest.raises(SafeHTTPError, match="non-public address"):
+        check_url(url)
+
+
+def test_check_url_allows_ipv4_mapped_public():
+    """A mapped PUBLIC address stays fetchable: the verdict follows the
+    embedded address, where 3.12's is_reserved refused it wholesale."""
+    check_url("http://[::ffff:8.8.8.8]/")
+
+
+# ---------------------------------------------------------------------------
 # allow_private_hosts — the [fetch] escape hatch for intranet mirrors
 # ---------------------------------------------------------------------------
 
@@ -382,3 +409,23 @@ def test_safe_get_redirect_to_allowlisted_private_host_is_followed():
         allow_private_hosts=("192.168.1.20",),
     )
     assert resp.content == b"mirror content"
+
+
+# ---------------------------------------------------------------------------
+# allow_private_hosts entry hygiene
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("entry", ["192.168.1.20:8443", "mirror.internal:8443"])
+def test_allowlist_entry_with_port_is_a_loud_error(entry):
+    """A host:port entry would otherwise become a hostname that can never
+    match (URL hostnames carry no port): a silent dead entry presenting as
+    an SSRF refusal of the user's own mirror."""
+    with pytest.raises(SafeHTTPError, match="drop the port"):
+        check_url("http://8.8.8.8/", allow_private_hosts=(entry,))
+
+
+def test_allowlist_bracketed_ipv6_entry_admits_the_literal():
+    """A bracketed IPv6 entry (URL notation) parses as the address itself
+    instead of becoming a hostname that never matches."""
+    check_url("http://[::1]/", allow_private_hosts=("[::1]",))
