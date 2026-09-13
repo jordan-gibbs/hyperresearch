@@ -21,43 +21,126 @@ from hyperresearch.web.pdf import (
     is_pdf_url,
 )
 
+# Code in fetched pages must reach the vault as markdown code, not prose.
+# Flattened <pre> content passes the extractor's code-strip untouched and
+# hits WIKI_LINK_RE, where bash test syntax ([[ -n "$kernel" ]]) is lexically
+# a wiki-link; repair/graph then materialise junk stub notes named after
+# shell fragments (40 such notes in one real vault from one Arch wiki page).
+# Both extraction branches below share these helpers.
+
+
+def _fence_for(code: str) -> str:
+    """Return a backtick fence longer than any backtick run inside the code."""
+    longest = max((len(m.group(0)) for m in re.finditer(r"`+", code)), default=0)
+    return "`" * max(3, longest + 1)
+
+
+def _fenced(code: str) -> str:
+    """Wrap a code block in a fence it cannot break out of."""
+    fence = _fence_for(code)
+    body = code.strip("\n")
+    return f"\n{fence}\n{body}\n{fence}\n"
+
+
+def _inline_code(text: str) -> str:
+    """Wrap inline code in backticks (doubled when the text contains one)."""
+    if "`" in text:
+        return f"`` {text} ``"
+    return f"`{text}`"
+
 
 class _TextExtractor(HTMLParser):
-    """Minimal HTML-to-text extractor (no external deps)."""
+    """Minimal HTML-to-text extractor (no external deps).
+
+    Emits <pre> blocks as fenced code and inline <code> as backtick spans;
+    see the module comment for why that is load-bearing, not cosmetic.
+    """
 
     def __init__(self):
         super().__init__()
-        self._pieces: list[str] = []
+        # (kind, text) where kind is "text" or "code"; code segments skip the
+        # per-line strip in get_text() so indentation survives.
+        self._segments: list[tuple[str, str]] = []
         self._skip = False
         self._skip_tags = {"script", "style", "nav", "footer", "header"}
         self._title = ""
         self._in_title = False
+        self._in_pre = False
+        self._pre_buf: list[str] = []
+        self._in_inline_code = False
 
     def handle_starttag(self, tag, attrs):
         if tag in self._skip_tags:
             self._skip = True
+            return
+        if self._in_pre:
+            if tag == "br":
+                self._pre_buf.append("\n")
+            return
         if tag == "title":
             self._in_title = True
+            return
+        if tag == "pre":
+            self._in_pre = True
+            self._pre_buf = []
+            return
+        if tag == "code":
+            self._in_inline_code = True
+            return
         if tag in ("p", "br", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li"):
-            self._pieces.append("\n")
+            self._segments.append(("text", "\n"))
 
     def handle_endtag(self, tag):
         if tag in self._skip_tags:
             self._skip = False
+            return
+        if tag == "pre" and self._in_pre:
+            self._in_pre = False
+            code = "".join(self._pre_buf)
+            self._pre_buf = []
+            if code.strip():
+                self._segments.append(("code", code))
+            return
         if tag == "title":
             self._in_title = False
+            return
+        if tag == "code":
+            self._in_inline_code = False
 
     def handle_data(self, data):
         if self._in_title:
             self._title = data.strip()
-        if not self._skip:
-            self._pieces.append(data)
+        if self._skip:
+            return
+        if self._in_pre:
+            self._pre_buf.append(data)
+            return
+        if self._in_inline_code:
+            if data.strip():
+                self._segments.append(("text", _inline_code(data)))
+            return
+        self._segments.append(("text", data))
 
     def get_text(self) -> str:
-        raw = "".join(self._pieces)
-        # Collapse whitespace
-        lines = [line.strip() for line in raw.splitlines()]
-        return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+        out: list[str] = []
+        buf: list[str] = []
+
+        def flush() -> None:
+            raw = "".join(buf)
+            lines = [line.strip() for line in raw.splitlines()]
+            cleaned = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+            if cleaned:
+                out.append(cleaned)
+            buf.clear()
+
+        for kind, text in self._segments:
+            if kind == "text":
+                buf.append(text)
+            else:
+                flush()
+                out.append(_fenced(text).strip("\n"))
+        flush()
+        return "\n\n".join(out)
 
 
 class BuiltinProvider:
@@ -132,13 +215,28 @@ class BuiltinProvider:
     def _extract(self, html: str) -> tuple[str, str]:
         """Extract title and clean text from HTML. Tries bs4 first, falls back to stdlib."""
         try:
-            from bs4 import BeautifulSoup
+            from bs4 import BeautifulSoup, NavigableString
 
             soup = BeautifulSoup(html, "html.parser")
             # Remove noise
             for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
                 tag.decompose()
             title = soup.title.string.strip() if soup.title and soup.title.string else ""
+            # Preserve code as markdown BEFORE get_text() flattens the markup
+            # (module comment has the why). <pre> first, so nested <code>
+            # inside it is consumed with it; then the remaining inline <code>.
+            for pre in soup.find_all("pre"):
+                code_text = pre.get_text()
+                if code_text.strip():
+                    pre.replace_with(NavigableString(_fenced(code_text)))
+                else:
+                    pre.decompose()
+            for code in soup.find_all("code"):
+                code_text = code.get_text()
+                if code_text.strip():
+                    code.replace_with(NavigableString(_inline_code(code_text)))
+                else:
+                    code.decompose()
             text = soup.get_text(separator="\n", strip=True)
             # Collapse blank lines
             text = re.sub(r"\n{3,}", "\n\n", text)

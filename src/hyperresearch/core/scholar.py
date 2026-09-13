@@ -44,7 +44,9 @@ META_DOI_RE = re.compile(
     r"content=[\"']\s*(?:doi:)?\s*(10\.[^\"']+)[\"']",
     re.IGNORECASE,
 )
-BODY_DOI_RE = re.compile(r"\bDOI:?\s*(10\.\d{4,9}/[^\s\"'<>\])}]+)", re.IGNORECASE)
+# Fetched bodies carry markdown code spans (`DOI: 10.x/y`, DOI: `10.x/y`), so a
+# backtick may open the DOI and never belongs to it.
+BODY_DOI_RE = re.compile(r"\bDOI:?\s*`?(10\.\d{4,9}/[^\s\"'<>\])}`]+)", re.IGNORECASE)
 
 # Per-host courtesy delay between UNCACHED requests, seconds.
 _HOST_DELAY = {

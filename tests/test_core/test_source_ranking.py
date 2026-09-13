@@ -104,6 +104,12 @@ class TestDoiExtraction:
     def test_trailing_punctuation_stripped(self):
         assert extract_doi("https://x.com", content="see DOI: 10.1000/xyz123.") == "10.1000/xyz123"
 
+    def test_body_doi_inside_code_span(self):
+        # Extracted page text renders <code> as a backtick span; the backtick
+        # must not end up in the DOI, and must not hide it either.
+        assert extract_doi("https://x.com", content="cite `DOI: 10.1000/xyz123` here") == "10.1000/xyz123"
+        assert extract_doi("https://x.com", content="DOI: `10.1000/xyz123`") == "10.1000/xyz123"
+
 
 class TestPageRank:
     def test_hub_ranks_highest(self):
