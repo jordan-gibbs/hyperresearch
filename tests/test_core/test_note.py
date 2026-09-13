@@ -240,3 +240,30 @@ def test_read_empty_body(tmp_vault):
     note = read_note(path, tmp_vault.root)
     assert note.meta.title == "Empty"
     assert note.body.strip() == ""
+
+
+def test_write_note_id_is_fixed_point_of_slugify(tmp_vault):
+    # A raw note_id (broken-link text, cli/graph stub + cli/repair pass it
+    # verbatim) must not become a literal filename. Before the fix the
+    # frontmatter id (slugified by NoteMeta.ensure_slug) and the filename
+    # (built from the raw nid) DIVERGED: shell fragments became names like
+    # `! -f "$KERNELDESTINATION".md`.
+    from hyperresearch.models.note import slugify
+
+    path = write_note(
+        tmp_vault.notes_dir, "Kernel Check", note_id='! -f "$KERNELDESTINATION"'
+    )
+    assert path.parent == tmp_vault.notes_dir
+    assert slugify(path.stem) == path.stem  # fixed point on disk
+    note = read_note(path, tmp_vault.root)
+    assert note.meta.id == path.stem  # filename and frontmatter agree
+
+
+def test_write_note_traversal_id_stays_in_the_vault(tmp_vault):
+    path = write_note(tmp_vault.notes_dir, "Evil", note_id="../../../outside")
+    assert path.resolve().is_relative_to(tmp_vault.notes_dir.resolve())
+
+
+def test_write_note_clean_id_passes_through_unchanged(tmp_vault):
+    path = write_note(tmp_vault.notes_dir, "Whatever Title", note_id="my-note-id")
+    assert path.stem == "my-note-id"

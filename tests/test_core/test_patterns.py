@@ -233,3 +233,38 @@ def test_interior_open_bracket_never_matches():
     assert _targets("[[[x]]") == ["x"]
     # Ordinary links and aliases are untouched.
     assert _targets("[[note-id]] and [[other|Shown]]") == ["note-id", "other"]
+
+
+def test_shell_fragments_rejected():
+    # When a fetcher flattens <pre> content to prose, bash test syntax
+    # reaches this extractor and is lexically a wiki-link; `repair` then
+    # materialises junk notes named after shell fragments. Every shape below
+    # passed the validator before this check. (`"${HOSTID}"`-style refs are
+    # already rejected by the template-placeholder check.)
+    assert not is_valid_wiki_link_target('-n "$kernel"')
+    assert not is_valid_wiki_link_target('! -f "$KERNELDESTINATION"')
+    assert not is_valid_wiki_link_target("$# -lt 1")
+    assert not is_valid_wiki_link_target("-z foo")
+    assert not is_valid_wiki_link_target("a=b")
+    assert not is_valid_wiki_link_target("back`tick")
+    assert not is_valid_wiki_link_target("x < y; rm")
+
+
+def test_path_traversal_rejected():
+    # Never a note reference, whatever downstream writes the file.
+    assert not is_valid_wiki_link_target("../../../tmp/pwned")
+    assert not is_valid_wiki_link_target("a/../../b")
+    assert not is_valid_wiki_link_target("a/..")
+    assert not is_valid_wiki_link_target("..")
+    assert not is_valid_wiki_link_target(".")
+
+
+def test_shell_shaped_but_legitimate_refs_still_accepted():
+    # The net is partial BY DESIGN: shapes indistinguishable from real ids
+    # pass, and titles with mid-string slashes or punctuation stay legal.
+    assert is_valid_wiki_link_target("1-d")
+    assert is_valid_wiki_link_target("hostid-00000000")
+    assert is_valid_wiki_link_target("UEFI/Secure Boot")  # real wiki title shape
+    assert is_valid_wiki_link_target("C. elegans")
+    assert is_valid_wiki_link_target("yahoo! finance")  # '!' mid-string stays legal
+    assert is_valid_wiki_link_target("e.g. v1.2")

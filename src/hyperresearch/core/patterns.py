@@ -76,6 +76,15 @@ _DOC_REF_PREFIX_RE = re.compile(
 # into a note body it must not become a link target (issue #93).
 _TEMPLATE_PLACEHOLDER_RE = re.compile(r"\{[^{}]*\}")
 
+# Shell/code fragments: characters that code in fetched pages carries but no
+# legitimate note id or title does. Bash test syntax ([[ -n "$kernel" ]]) is
+# lexically a wiki-link, so when a fetcher flattens <pre> content to prose,
+# every shell conditional becomes a broken link that `repair` / `graph stub`
+# then materialise as a junk note. Braces are left to the placeholder check
+# above, which already rejects `${VAR}`. This is a PARTIAL net by design:
+# refs shaped like real ids (`1-d`, `hostid-00000000`) pass.
+_SHELL_FRAGMENT_CHARS_RE = re.compile(r'[$"`=\\<>;]')
+
 
 def is_valid_wiki_link_target(ref: str) -> bool:
     """Return True if a ``[[ref]]`` should be treated as a note reference.
@@ -97,6 +106,10 @@ def is_valid_wiki_link_target(ref: str) -> bool:
     - Unsubstituted template placeholders: ``[[{note_id}]]``, ``[[run-{tag}]]``
     - Unbalanced square brackets: ``[[t.IO[t.Any]]`` (a type annotation whose
       closing ``]`` was eaten by the ``]]`` delimiter)
+    - Shell fragments: ``[[-n "$kernel"]]``, ``[[! -f x]]``, ``[[a=b]]`` (bash
+      test syntax from flattened code blocks: a leading ``-`` or ``!``, or a
+      shell metacharacter no note id or title carries)
+    - Path traversal: ``[[../../x]]``, ``[[a/../b]]``, ``[[..]]``
 
     Valid note references starting with digits (e.g. ``[[10-rules-for-X]]``)
     are preserved because they contain non-digit characters.
@@ -117,6 +130,15 @@ def is_valid_wiki_link_target(ref: str) -> bool:
     if _SYMBOL_FOOTNOTE_RE.match(ref):
         return False
     if _TEMPLATE_PLACEHOLDER_RE.search(ref):
+        return False
+    if _SHELL_FRAGMENT_CHARS_RE.search(ref):
+        return False
+    # Leading '-' or '!' is option/negation syntax (`-n "$kernel"`,
+    # `! -f x`), not a reference. Mid-string they stay legal (titles).
+    if ref.startswith(("-", "!")):
+        return False
+    # Path traversal: never a note reference, whatever writes the file.
+    if any(part in ("..", ".") for part in ref.split("/")):
         return False
     if ref.count("[") != ref.count("]"):
         return False

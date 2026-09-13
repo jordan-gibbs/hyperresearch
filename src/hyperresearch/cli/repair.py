@@ -69,8 +69,11 @@ def repair(
                     summary=stub_summary(target),
                 )
                 stubs_created += 1
-            except Exception:
-                pass
+            except Exception as exc:
+                # A visible skip, not a silent one: a bare pass here hides
+                # exactly the malformed-target failures this loop can hit.
+                if not json_output:
+                    console.print(f"  [yellow]stub skipped[/] {target!r}: {exc}")
         if stubs_created:
             plan = compute_sync_plan(vault)
             execute_sync(vault, plan)

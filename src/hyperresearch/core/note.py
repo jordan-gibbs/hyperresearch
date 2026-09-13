@@ -108,7 +108,15 @@ def write_note(
         content_type: Artifact kind — paper|docs|article|blog|forum|dataset|policy|code|book|transcript|review|unknown.
         extra_frontmatter: Additional fields to set on NoteMeta (e.g. source_domain, fetched_at).
     """
-    nid = note_id or slugify(title)
+    # The id must be a fixed point of the slugifier. NoteMeta.ensure_slug
+    # already slugifies the FRONTMATTER id, so an unslugified note_id here
+    # made the filename diverge from the note's own frontmatter: callers that
+    # pass broken-link text verbatim (cli/graph.py stub, cli/repair.py) wrote
+    # literal filenames like `! -f "$KERNELDESTINATION".md`, and a `../`
+    # shaped ref resolved to a path outside the vault. slugify strips path
+    # separators and shell metacharacters and never returns an empty string,
+    # so the filename below is always safe.
+    nid = slugify(note_id) if note_id else slugify(title)
     kwargs: dict = dict(
         title=title,
         id=nid,
