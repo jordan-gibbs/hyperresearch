@@ -113,13 +113,25 @@ class BuiltinProvider:
 
     def _get(self, url: str):
         """Download URL through the SSRF gate in :mod:`hyperresearch.web.safe_http`."""
-        from hyperresearch.web.safe_http import safe_get
+        from hyperresearch.web.pdf import _is_cert_error
+        from hyperresearch.web.safe_http import CertVerificationError, safe_get
 
-        resp = safe_get(
-            url,
-            max_bytes=self._settings.max_html_bytes,
-            allow_private_hosts=self._settings.allow_private_hosts,
-        )
+        try:
+            resp = safe_get(
+                url,
+                max_bytes=self._settings.max_html_bytes,
+                allow_private_hosts=self._settings.allow_private_hosts,
+            )
+        except Exception as exc:
+            # Raise a certificate failure as its own type, the way the PDF lane
+            # and the crawl4ai provider do, instead of letting the raw
+            # httpx.ConnectError through looking like any other failed fetch.
+            # This lane always verifies TLS; pdf_verify_tls covers PDFs only.
+            if _is_cert_error(exc):
+                raise CertVerificationError(
+                    f"certificate verification failed for {url!r}: {exc}"
+                ) from exc
+            raise
         if resp.status_code >= 400:
             raise RuntimeError(f"HTTP {resp.status_code} fetching {url}")
         return resp
