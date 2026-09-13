@@ -7,8 +7,13 @@ Provider-pluggable via `[embeddings] provider`:
     openai  OpenAI     (OPENAI_API_KEY, default model text-embedding-3-small)
 
 Each note is embedded from title + summary + the first `body_chars` of body.
-Vectors are float32 BLOBs in the `embeddings` table; query time is brute-force
-cosine (fine to ~50k notes — no vector-DB dependency).
+Vectors are float32 BLOBs in the `embeddings` table; query time is a brute-
+force scan, but `semantic_search` compares the query against every stored
+vector in one numpy matmul rather than one Python `cosine()` call per note.
+That keeps the scan cheap into the hundreds of thousands of notes — no
+vector-DB dependency needed at the sizes this tool produces (~300 sources
+per run). No dependency cost either: numpy already ships transitively via
+Crawl4AI.
 
 All HTTP goes through `_http_embed`, monkeypatched in tests — the suite never
 calls a paid API.
@@ -161,7 +166,8 @@ def embed_sync(vault, batch_size: int = 32) -> dict:
 
 
 def semantic_search(vault, query: str, limit: int = 20) -> list[dict]:
-    """Brute-force cosine search. Returns [{id, score}] best-first."""
+    """Cosine search against every stored vector, in one matmul. Returns
+    [{id, score}] best-first."""
     cfg = vault.config.embeddings
     if cfg.provider == "none":
         raise EmbeddingError(
@@ -171,10 +177,39 @@ def semantic_search(vault, query: str, limit: int = 20) -> list[dict]:
     [query_vec] = _http_embed(cfg.provider, model, [query])
 
     conn = vault.db
+    rows = conn.execute("SELECT note_id, vector FROM embeddings").fetchall()
+    if not rows:
+        return []
+
+    import numpy as np
+
+    q = np.asarray(query_vec, dtype=np.float32)
+    nbytes = q.shape[0] * 4
+
+    # A note embedded under a different model/dimension (mid-migration,
+    # before the next `embed sync` catches it up) can't share the matrix —
+    # score it 0, same as cosine() did for a length mismatch.
+    ids = []
+    blobs = []
     results = []
-    for row in conn.execute("SELECT note_id, vector FROM embeddings").fetchall():
-        score = cosine(query_vec, _unpack(row["vector"]))
-        results.append({"id": row["note_id"], "score": score})
+    for row in rows:
+        if len(row["vector"]) == nbytes:
+            ids.append(row["note_id"])
+            blobs.append(row["vector"])
+        else:
+            results.append({"id": row["note_id"], "score": 0.0})
+
+    if blobs:
+        mat = np.frombuffer(b"".join(blobs), dtype="<f4").reshape(len(blobs), -1)
+        denom = np.linalg.norm(mat, axis=1) * np.linalg.norm(q)
+        scores = np.divide(
+            mat @ q, denom, out=np.zeros(len(blobs), dtype=np.float32), where=denom != 0
+        )
+        results.extend(
+            {"id": note_id, "score": float(score)}
+            for note_id, score in zip(ids, scores, strict=True)
+        )
+
     results.sort(key=lambda r: r["score"], reverse=True)
     return results[:limit]
 
