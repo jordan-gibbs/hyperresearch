@@ -89,12 +89,65 @@ def test_note_rm_cleans_raw_file_and_assets(vault_with_notes):
 
 def test_note_mv(vault_with_notes):
     result = runner.invoke(
+        app, ["note", "mv", "beta-note", "research/notes/moved/beta-note.md", "--json"]
+    )
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["data"]["new_path"] == "research/notes/moved/beta-note.md"
+    assert (vault_with_notes / "research" / "notes" / "moved" / "beta-note.md").exists()
+
+
+# ---------------------------------------------------------------------------
+# `note mv` destinations must stay where sync can see them. The destination
+# used to be joined onto the vault root verbatim: a bare name landed at the
+# vault root with no .md suffix, outside everything sync scans, so the note
+# silently left the index; and an existing file was overwritten.
+# ---------------------------------------------------------------------------
+
+
+def _indexed_path(note_id: str) -> str | None:
+    from hyperresearch.core.vault import Vault
+
+    row = Vault.discover().db.execute(
+        "SELECT path FROM notes WHERE id = ?", (note_id,)
+    ).fetchone()
+    return row["path"] if row else None
+
+
+def test_note_mv_bare_name_lands_in_notes_dir_with_md_suffix(vault_with_notes):
+    result = runner.invoke(app, ["note", "mv", "beta-note", "beta-renamed", "--json"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["data"]["new_path"] == "research/notes/beta-renamed.md"
+    assert (vault_with_notes / "research" / "notes" / "beta-renamed.md").exists()
+    assert not (vault_with_notes / "beta-renamed").exists()
+    # The id lives in frontmatter, so the note stays indexed under it, at the new path.
+    assert _indexed_path("beta-note") == "research/notes/beta-renamed.md"
+
+
+def test_note_mv_refuses_a_destination_outside_the_synced_tree(vault_with_notes):
+    result = runner.invoke(
         app, ["note", "mv", "beta-note", "notes/moved/beta-note.md", "--json"]
     )
-    assert result.exit_code == 0
+    assert result.exit_code == 1, result.output
     data = json.loads(result.output)
-    assert data["data"]["new_path"] == "notes/moved/beta-note.md"
-    assert (vault_with_notes / "notes" / "moved" / "beta-note.md").exists()
+    assert data["ok"] is False
+    assert data["error_code"] == "OUTSIDE_SYNCED_TREE"
+    assert (vault_with_notes / "research" / "notes" / "beta-note.md").exists()
+    assert not (vault_with_notes / "notes").exists()
+    assert _indexed_path("beta-note") == "research/notes/beta-note.md"
+
+
+@pytest.mark.parametrize("dest", ["research/notes/alpha-note.md", "alpha-note"])
+def test_note_mv_refuses_to_overwrite_an_existing_file(vault_with_notes, dest):
+    result = runner.invoke(app, ["note", "mv", "beta-note", dest, "--json"])
+    assert result.exit_code == 1, result.output
+    data = json.loads(result.output)
+    assert data["error_code"] == "DESTINATION_EXISTS"
+    alpha = (vault_with_notes / "research" / "notes" / "alpha-note.md").read_text(encoding="utf-8")
+    assert "id: alpha-note" in alpha
+    assert _indexed_path("alpha-note") == "research/notes/alpha-note.md"
+    assert _indexed_path("beta-note") == "research/notes/beta-note.md"
 
 
 def test_note_show_raw(vault_with_notes):

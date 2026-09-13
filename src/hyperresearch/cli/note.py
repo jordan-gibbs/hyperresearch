@@ -545,10 +545,24 @@ def note_update(
 @app.command("mv")
 def note_mv(
     note_id: str = typer.Argument(..., help="Note ID to move"),
-    new_path: str = typer.Argument(..., help="New relative path (e.g. notes/python/renamed.md)"),
+    new_path: str = typer.Argument(
+        ...,
+        help=(
+            "Destination relative to the vault root, e.g. research/notes/renamed.md. "
+            "A bare name lands in research/notes/ and a missing .md is added. The note "
+            "keeps its id (it lives in frontmatter, not the filename), so wiki-links to "
+            "it stay valid and nothing else is rewritten."
+        ),
+    ),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
-    """Move/rename a note, updating all references."""
+    """Move a note file within the tree sync scans (research/notes, index or temp).
+
+    The id is unchanged: `mv` moves the file, it does not rename the note.
+    """
+    from pathlib import Path
+
+    from hyperresearch.core.claims import _under
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.core.vault import Vault
 
@@ -564,7 +578,34 @@ def note_mv(
         raise typer.Exit(1)
 
     old_file = vault.root / row["path"]
-    new_file = vault.root / new_path
+
+    # Resolve the destination into something sync will see. Joined verbatim, a
+    # bare name landed at the vault root with no suffix, where sync never
+    # looks, so the note silently left the index; and rename() replaced an
+    # existing note file without a word.
+    dest = Path(new_path)
+    if dest.name and dest.suffix != ".md":
+        dest = dest.with_name(dest.name + ".md")
+    if dest.parent == Path("."):
+        dest = vault.notes_dir.relative_to(vault.root) / dest
+    new_file = vault.root / dest
+    synced_roots = (vault.notes_dir, vault.index_dir, vault.temp_dir)
+    if not any(_under(new_file, r) and new_file.resolve() != r.resolve() for r in synced_roots):
+        allowed = ", ".join(r.relative_to(vault.root).as_posix() + "/" for r in synced_roots)
+        msg = f"Destination {dest.as_posix()} is outside the synced tree ({allowed})"
+        if json_output:
+            output(error(msg, "OUTSIDE_SYNCED_TREE"), json_mode=True)
+        else:
+            console.print(f"[red]{msg}[/]")
+        raise typer.Exit(1)
+    if new_file.exists():
+        msg = f"Destination already exists: {dest.as_posix()}"
+        if json_output:
+            output(error(msg, "DESTINATION_EXISTS"), json_mode=True)
+        else:
+            console.print(f"[red]{msg}[/]")
+        raise typer.Exit(1)
+    rel_new = new_file.resolve().relative_to(vault.root.resolve()).as_posix()
 
     new_file.parent.mkdir(parents=True, exist_ok=True)
     old_file.rename(new_file)
@@ -574,9 +615,9 @@ def note_mv(
     execute_sync(vault, plan)
 
     if json_output:
-        output(success({"old_path": row["path"], "new_path": new_path}, vault=str(vault.root)), json_mode=True)
+        output(success({"old_path": row["path"], "new_path": rel_new}, vault=str(vault.root)), json_mode=True)
     else:
-        console.print(f"[green]Moved:[/] {row['path']} → {new_path}")
+        console.print(f"[green]Moved:[/] {row['path']} → {rel_new}")
 
 
 @app.command("rm")
