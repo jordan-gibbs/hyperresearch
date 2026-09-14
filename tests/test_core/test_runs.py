@@ -13,6 +13,7 @@ from hyperresearch.core.runs import (
     init_run,
     list_runs,
     load_manifest,
+    reconcile_spend_from_disk,
     resume_position,
     set_step,
     status_summary,
@@ -94,6 +95,133 @@ class TestStepsAndResume:
         assert any(json.loads(ln)["type"] == "step" for ln in lines)
 
 
+def _write_tagged_note(vault, note_id: str, vault_tag: str, raw_file: str | None = None) -> None:
+    """Write a notes/*.md with vault_tag (and optional raw_file) and sync."""
+    notes = vault.notes_dir
+    notes.mkdir(parents=True, exist_ok=True)
+    fm = [f"id: {note_id}", f"title: {note_id}", f"tags: [{vault_tag}]"]
+    if raw_file:
+        fm.append(f"raw_file: {raw_file}")
+    (notes / f"{note_id}.md").write_text(
+        "---\n" + "\n".join(fm) + "\n---\n\nbody\n",
+        encoding="utf-8",
+    )
+    from hyperresearch.core.sync import compute_sync_plan, execute_sync
+
+    execute_sync(vault, compute_sync_plan(vault, force=True))
+
+
+class TestReconcileSpend:
+    def test_reconcile_counts_notes_and_raw_sources_by_tag(self, tmp_vault):
+        init_run(tmp_vault, "r-000001", budget_usd=1.0)
+        raw = tmp_vault.research_dir / "raw"
+        raw.mkdir(parents=True, exist_ok=True)
+        (raw / "paper.pdf").write_bytes(b"%PDF-1.4")
+        _write_tagged_note(tmp_vault, "alpha", "r-000001", raw_file="raw/paper.pdf")
+        _write_tagged_note(tmp_vault, "beta", "r-000001")
+        # Untagged note must not count toward this run.
+        notes = tmp_vault.notes_dir
+        (notes / "other.md").write_text(
+            "---\nid: other\ntitle: other\ntags: [other-run]\n---\n\nx\n",
+            encoding="utf-8",
+        )
+        from hyperresearch.core.sync import compute_sync_plan, execute_sync
+
+        execute_sync(tmp_vault, compute_sync_plan(tmp_vault, force=True))
+
+        m = reconcile_spend_from_disk(tmp_vault, "r-000001")
+        assert m["spend"]["notes_written"] == 2
+        assert m["spend"]["sources_fetched"] == 1
+        # No unit prices in this repo — estimated_usd only moves via add_spend.
+        assert m["spend"]["estimated_usd"] == 0.0
+        assert m["status"] == "running"
+
+    def test_reconcile_keeps_agent_estimate(self, tmp_vault):
+        init_run(tmp_vault, "r-000003")
+        add_spend(tmp_vault, "r-000003", estimated_usd=12.5)
+        m = reconcile_spend_from_disk(tmp_vault, "r-000003")
+        assert m["spend"]["estimated_usd"] == 12.5
+
+    def test_init_stores_count_ceilings(self, tmp_vault):
+        m = init_run(tmp_vault, "r-000004", max_sources=10, max_notes=20)
+        assert m["max_sources"] == 10
+        assert m["max_notes"] == 20
+        assert m.get("pid") is None
+        assert m.get("heartbeat_at") is None
+
+    def test_max_notes_blocks_on_step_done(self, tmp_vault):
+        init_run(tmp_vault, "r-000005", max_notes=1)
+        _write_tagged_note(tmp_vault, "n1", "r-000005")
+        _write_tagged_note(tmp_vault, "n2", "r-000005")
+        m = set_step(tmp_vault, "r-000005", "1", "done")
+        assert m["status"] == "blocked"
+        assert m["blocked_on"] == "max_notes"
+
+    def test_max_sources_blocks_on_step_done(self, tmp_vault):
+        init_run(tmp_vault, "r-000006", max_sources=1)
+        raw = tmp_vault.research_dir / "raw"
+        raw.mkdir(parents=True, exist_ok=True)
+        (raw / "a.pdf").write_bytes(b"%PDF")
+        (raw / "b.pdf").write_bytes(b"%PDF")
+        _write_tagged_note(tmp_vault, "s1", "r-000006", raw_file="raw/a.pdf")
+        _write_tagged_note(tmp_vault, "s2", "r-000006", raw_file="raw/b.pdf")
+        m = set_step(tmp_vault, "r-000006", "1", "done")
+        assert m["status"] == "blocked"
+        assert m["blocked_on"] == "max_sources"
+
+    def test_blocked_done_requires_force(self, tmp_vault):
+        init_run(tmp_vault, "r-000007", max_notes=1)
+        _write_tagged_note(tmp_vault, "x1", "r-000007")
+        _write_tagged_note(tmp_vault, "x2", "r-000007")
+        set_step(tmp_vault, "r-000007", "1", "done")
+        with pytest.raises(RunError, match="blocked"):
+            set_step(tmp_vault, "r-000007", "2", "done")
+
+    def test_force_does_not_clear_budget_block(self, tmp_vault):
+        init_run(tmp_vault, "r-000009", budget_usd=5.0)
+        add_spend(tmp_vault, "r-000009", estimated_usd=10.0)
+        assert load_manifest(tmp_vault, "r-000009")["blocked_on"] == "budget"
+        with pytest.raises(RunError, match="cannot be cleared with --force"):
+            set_step(tmp_vault, "r-000009", "1", "done", force=True)
+        m = load_manifest(tmp_vault, "r-000009")
+        assert m["status"] == "blocked"
+        assert m["blocked_on"] == "budget"
+
+    def test_force_clears_block_so_resume_progresses(self, tmp_vault):
+        init_run(tmp_vault, "r-000008", max_notes=1)
+        _write_tagged_note(tmp_vault, "y1", "r-000008")
+        _write_tagged_note(tmp_vault, "y2", "r-000008")
+        set_step(tmp_vault, "r-000008", "1", "done")
+        # Same ceiling, no new files: force must unblock and accept the next done.
+        m = set_step(tmp_vault, "r-000008", "2", "done", force=True)
+        assert m["steps"]["2"]["status"] == "done"
+        assert m["counts_force_cleared"] == 1
+        assert m["status"] == "running"
+        # A ceiling crossed in this done blocks; the *next* done --force clears.
+        m_reblock = set_step(tmp_vault, "r-000008", "10", "done")
+        assert m_reblock["status"] == "blocked"
+        m2 = set_step(tmp_vault, "r-000008", "15", "done", force=True)
+        assert m2["steps"]["15"]["status"] == "done"
+        assert m2["counts_force_cleared"] == 2
+
+    def test_force_clear_cap_leaves_run_blocked(self, tmp_vault):
+        init_run(tmp_vault, "r-000010", max_notes=1)
+        _write_tagged_note(tmp_vault, "z1", "r-000010")
+        _write_tagged_note(tmp_vault, "z2", "r-000010")
+        for step in ("1", "2", "10"):
+            set_step(tmp_vault, "r-000010", step, "done")
+            m = set_step(tmp_vault, "r-000010", step, "done", force=True)
+            assert m["status"] == "running"
+        assert m["counts_force_cleared"] == 3
+        set_step(tmp_vault, "r-000010", "15", "done")
+        m4 = set_step(tmp_vault, "r-000010", "15", "done", force=True)
+        # Cap reached: step still records, run stays blocked on the ceiling.
+        assert m4["steps"]["15"]["status"] == "done"
+        assert m4["status"] == "blocked"
+        assert m4["blocked_on"] == "max_notes"
+        assert m4["counts_force_cleared"] == 3
+
+
 class TestBudgetGovernor:
     def test_spend_accumulates(self, tmp_vault):
         init_run(tmp_vault, "b-000001", budget_usd=100.0)
@@ -135,7 +263,7 @@ class TestStatusSummary:
         init_run(tmp_vault, "s-000001")
         summary = status_summary(tmp_vault, "s-000001")
         assert summary["possibly_stalled"] is False
-        # Backdate the heartbeat
+        # Backdate the last update
         m = load_manifest(tmp_vault, "s-000001")
         m["updated_at"] = "2020-01-01T00:00:00+00:00"
         mpath = runs_mod.manifest_path(tmp_vault, "s-000001")

@@ -46,6 +46,8 @@ def run_init(
     vault_tag: str = typer.Argument(..., help="Collision-safe run tag (mint via `hyperresearch vault-tag <slug>`)"),
     profile: str = typer.Option("full", "--profile", help="Pipeline profile for this run"),
     budget: float | None = typer.Option(None, "--budget", help="Hard ceiling on estimated API-equivalent spend (the run blocks when the estimate crosses it; a value measure, not a bill, on subscription billing)"),
+    max_sources: int | None = typer.Option(None, "--max-sources", help="Observable ceiling on vault_tag-tagged sources with a raw_file; checked at step-done"),
+    max_notes: int | None = typer.Option(None, "--max-notes", help="Observable ceiling on notes tagged with this run's vault_tag; checked at step-done"),
     query_file: str | None = typer.Option(None, "--query-file", help="File whose verbatim contents become runs/<tag>/query.md"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
@@ -59,7 +61,15 @@ def run_init(
     if query_file:
         query = Path(query_file).read_text(encoding="utf-8-sig")
     try:
-        manifest = init_run(vault, vault_tag, profile=profile, budget_usd=budget, query=query)
+        manifest = init_run(
+            vault,
+            vault_tag,
+            profile=profile,
+            budget_usd=budget,
+            query=query,
+            max_sources=max_sources,
+            max_notes=max_notes,
+        )
     except (RunError, VaultError) as e:
         if json_output:
             output(error(str(e), "RUN_ERROR"), json_mode=True)
@@ -73,6 +83,11 @@ def run_init(
     else:
         console.print(f"[green]Run initialized:[/] {data['run_dir']}")
         console.print(f"  profile: {manifest['profile']}  budget: {manifest.get('budget_usd')}")
+        if manifest.get("max_sources") is not None or manifest.get("max_notes") is not None:
+            console.print(
+                f"  ceilings: max_sources={manifest.get('max_sources')} "
+                f"max_notes={manifest.get('max_notes')}"
+            )
 
 
 @app.command("status")
@@ -119,6 +134,16 @@ def run_status(
             )
         if summary.get("possibly_stalled"):
             console.print("  [yellow]possibly stalled — no manifest update recently[/]")
+        if summary.get("status") == "blocked" and summary.get("blocked_on") in (
+            "max_sources",
+            "max_notes",
+        ):
+            spend = summary.get("spend", {})
+            console.print(
+                f"  [yellow]blocked on {summary['blocked_on']} — "
+                f"{spend.get('sources_fetched', 0)} sources / "
+                f"{spend.get('notes_written', 0)} notes[/]"
+            )
         resume = summary["resume"]
         console.print(f"  done: {', '.join(resume['done_steps']) or '-'}")
         console.print(f"  next: {resume['next_step'] or '(complete)'}")
@@ -229,14 +254,19 @@ def run_step(
     step: str = typer.Argument(..., help='Step id ("1", "1.5", "11g", ...)'),
     status: str = typer.Option(..., "--status", "-s", help="pending|running|done|skipped|failed"),
     chapter: str | None = typer.Option(None, "--chapter", help="Chapter id for chaptered steps (e.g. ch3)"),
+    force: bool = typer.Option(False, "--force", help="Clear a max_sources/max_notes block so this done can proceed"),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
-    """Record a step-status transition in the manifest."""
+    """Record a step-status transition in the manifest.
+
+    On --status done, reconciles vault_tag-filtered counts and applies
+    --max-sources / --max-notes. A blocked run needs --force to accept done.
+    """
     from hyperresearch.core.runs import RunError, set_step
 
     vault = _vault_or_exit(json_output)
     try:
-        manifest = set_step(vault, vault_tag, step, status, chapter=chapter)
+        manifest = set_step(vault, vault_tag, step, status, chapter=chapter, force=force)
     except (RunError, VaultError) as e:
         if json_output:
             output(error(str(e), "RUN_ERROR"), json_mode=True)
@@ -279,6 +309,37 @@ def run_spend(
         output(success(data, vault=str(vault.root)), json_mode=True)
     else:
         console.print(f"  spend: {data['spend']}  status: {data['status']}")
+
+
+@app.command("reconcile")
+def run_reconcile(
+    vault_tag: str | None = typer.Argument(None, help="Run tag (default: newest run)"),
+    json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
+) -> None:
+    """Fold vault_tag-filtered notes/raw sources into spend counters (issue #92)."""
+    from hyperresearch.core.runs import RunError, reconcile_spend_from_disk
+
+    vault = _vault_or_exit(json_output)
+    tag = _resolve_tag(vault, vault_tag, json_output)
+    try:
+        manifest = reconcile_spend_from_disk(vault, tag)
+    except RunError as e:
+        if json_output:
+            output(error(str(e), "RUN_ERROR"), json_mode=True)
+        else:
+            console.print(f"[red]Error:[/] {e}")
+        raise typer.Exit(1)
+    data = {
+        "vault_tag": tag,
+        "spend": manifest["spend"],
+        "status": manifest["status"],
+        "blocked_on": manifest.get("blocked_on"),
+    }
+    if json_output:
+        output(success(data, vault=str(vault.root)), json_mode=True)
+    else:
+        console.print(f"[green]Reconciled spend for {tag}[/]")
+        console.print(f"  {data['spend']}  status: {data['status']}")
 
 
 @app.command("event")
