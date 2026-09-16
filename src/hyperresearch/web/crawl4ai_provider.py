@@ -13,9 +13,9 @@ import logging
 import os
 import pathlib
 import sys
-import threading
 from datetime import UTC, datetime
 
+import anyio
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, DefaultMarkdownGenerator
 from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
 from crawl4ai.browser_adapter import UndetectedAdapter
@@ -34,33 +34,6 @@ if sys.platform == "win32":
                 _stream.reconfigure(encoding="utf-8", errors="replace")
             except Exception:
                 pass
-
-
-def _run_coro(coro):
-    """Run ``coro`` to completion, whether or not this thread already has a running
-    event loop (the MCP server dispatches sync tools on its own loop's thread; the
-    CLI does not). A plain ``asyncio.run(coro)`` only works in the second case, so
-    fall back to a dedicated thread, which has no running loop of its own.
-    """
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-
-    box: dict = {}
-
-    def _target() -> None:
-        try:
-            box["result"] = asyncio.run(coro)
-        except BaseException as exc:  # re-raised on the caller's thread below
-            box["error"] = exc
-
-    thread = threading.Thread(target=_target)
-    thread.start()
-    thread.join()
-    if "error" in box:
-        raise box["error"]
-    return box["result"]
 
 
 def _is_pdf_url(url: str) -> bool:
@@ -403,6 +376,17 @@ class Crawl4AIProvider:
         return AsyncWebCrawler(crawler_strategy=strategy, config=self._browser_config)
 
     def fetch(self, url: str) -> WebResult:
+        """Sync ``WebProvider`` entry for CLI callers (no running event loop)."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.fetch_url(url))
+        raise RuntimeError(
+            "Crawl4AIProvider.fetch() cannot be called from a running event loop; "
+            "use await fetch_url() instead."
+        )
+
+    async def fetch_url(self, url: str) -> WebResult:
         # SSRF gate: reject private/loopback/etc. before any browser or http
         # call. PDF redirects are re-checked hop by hop via safe_get; the
         # browser lanes drive their own navigation, so they get the
@@ -414,21 +398,21 @@ class Crawl4AIProvider:
 
         # PDF detection: fetch directly with httpx, extract text with pymupdf
         if _is_pdf_url(url):
-            result = _fetch_pdf(url, self._settings)
+            result = await anyio.to_thread.run_sync(_fetch_pdf, url, self._settings)
             if result is not None:
                 return result
             # Fallback to browser if PDF fetch failed (might be a landing page, not actual PDF)
 
         # When visible + profile: use Playwright directly (crawl4ai managed browser ignores headless=False)
         if not self._headless and self._data_dir:
-            return _run_coro(self._fetch_visible(url))
+            return await self._fetch_visible(url)
 
-        result = _run_coro(self._fetch_async(url))
+        result = await self._fetch_async(url)
 
         # Post-fetch PDF detection: if the browser got binary garbage (PDF served
         # inline without proper content-type handling), re-fetch as a direct PDF download.
         if result.content and _looks_like_binary(result.content, self._gates):
-            pdf_result = _fetch_pdf(url, self._settings)
+            pdf_result = await anyio.to_thread.run_sync(_fetch_pdf, url, self._settings)
             if pdf_result is not None:
                 return pdf_result
 
@@ -546,11 +530,8 @@ class Crawl4AIProvider:
                 screenshot=screenshot_bytes,
             )
 
-    def fetch_many(self, urls: list[str]) -> list[WebResult]:
+    async def fetch_many(self, urls: list[str]) -> list[WebResult]:
         """Fetch multiple URLs concurrently using crawl4ai's arun_many."""
-        return _run_coro(self._fetch_many_async(urls))
-
-    async def _fetch_many_async(self, urls: list[str]) -> list[WebResult]:
         # SSRF gate: same entry-point check as fetch(). Refused URLs are
         # skipped (logged), not fatal — one hostile URL must not kill the
         # whole batch.
@@ -582,7 +563,7 @@ class Crawl4AIProvider:
         failed_pdf_urls = []
         for url in pdf_urls:
             try:
-                pdf_result = _fetch_pdf(url, self._settings)
+                pdf_result = await anyio.to_thread.run_sync(_fetch_pdf, url, self._settings)
             except CertVerificationError as exc:
                 log.warning(
                     "SKIPPED (TLS certificate invalid): %s -- a potentially "
@@ -626,7 +607,9 @@ class Crawl4AIProvider:
                     # Post-fetch binary check — browser may have fetched a PDF inline
                     if content and _looks_like_binary(content, self._gates):
                         try:
-                            pdf_result = _fetch_pdf(url, self._settings)
+                            pdf_result = await anyio.to_thread.run_sync(
+                                _fetch_pdf, url, self._settings
+                            )
                         except CertVerificationError as exc:
                             # Keep the batch alive, but don't store the binary
                             # garbage the browser got either.
@@ -659,6 +642,10 @@ class Crawl4AIProvider:
                         screenshot=screenshot_bytes,
                     ))
         return web_results
+
+    async def _fetch_many_async(self, urls: list[str]) -> list[WebResult]:
+        """Backward-compatible alias for tests and internal callers."""
+        return await self.fetch_many(urls)
 
     def search(self, query: str, max_results: int = 5) -> list[WebResult]:
         raise NotImplementedError(

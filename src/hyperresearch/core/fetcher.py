@@ -50,55 +50,7 @@ def reclaim_orphaned_source_row(
     )
 
 
-def fetch_and_save(
-    vault,
-    url: str,
-    tags: list[str] | None = None,
-    title: str | None = None,
-    parent: str | None = None,
-    provider_name: str | None = None,
-    save_assets: bool = False,
-    visible: bool = False,
-) -> dict:
-    """Fetch a URL and save as a research note. Returns result dict.
-
-    Raises:
-        ValueError: If URL is already fetched.
-        RuntimeError: If fetch fails.
-    """
-    from hyperresearch.core.note import write_note
-    from hyperresearch.core.sync import compute_sync_plan, execute_sync
-    from hyperresearch.web.base import get_provider
-
-    tags = tags or []
-    conn = vault.db
-
-    # Check if URL already fetched (an orphaned row — note deleted — is not a duplicate)
-    existing = existing_live_note_for_url(conn, url)
-    if existing:
-        raise ValueError(f"URL already fetched as note '{existing['note_id']}'")
-
-    # Auto-visible for sites that kill headless sessions on first contact
-    if not visible and vault.config.web_profile:
-        from urllib.parse import urlparse as _urlparse
-
-        domain = _urlparse(url).netloc.lower()
-        if any(d in domain for d in vault.config.fetch.visible_browser_domains):
-            visible = True
-
-    # Fetch content
-    prov = get_provider(
-        provider_name or vault.config.web_provider,
-        profile=vault.config.web_profile,
-        magic=vault.config.web_magic,
-        headless=not visible,
-        settings=vault.config.fetch,
-        gates=vault.config.junk,
-    )
-
-    result = prov.fetch(url)
-
-    # Detect login redirects — abort, but escalate to the browser lane
+def _validate_fetched_result(result, url: str, vault, tags: list[str]) -> None:
     if result.looks_like_login_wall(url, vault.config.junk):
         from hyperresearch.core.escalation import maybe_enqueue_blocked_fetch
 
@@ -114,7 +66,6 @@ def fetch_and_save(
             f"Run 'hyperresearch setup' and create a new login profile.{escalated}"
         )
 
-    # Detect junk pages — captcha, error pages, binary garbage, empty content
     junk_reason = result.looks_like_junk(vault.config.junk)
     if junk_reason:
         escalated = ""
@@ -131,7 +82,21 @@ def fetch_and_save(
                 escalated = f" Queued for browser-lane escalation (#{item_id})."
         raise RuntimeError(f"Skipped junk content: {junk_reason}.{escalated}")
 
-    # Write note
+
+def _persist_fetched_result(
+    vault,
+    url: str,
+    tags: list[str],
+    title: str | None,
+    parent: str | None,
+    prov,
+    result,
+    save_assets: bool,
+) -> dict:
+    from hyperresearch.core.note import write_note
+    from hyperresearch.core.sync import compute_sync_plan, execute_sync
+
+    conn = vault.db
     note_title = title or result.title or urlparse(url).path.split("/")[-1] or "Untitled"
     domain = result.domain
 
@@ -161,7 +126,6 @@ def fetch_and_save(
         extra_frontmatter=extra_meta,
     )
 
-    # Save raw file (PDF, etc.) if present
     raw_file_path = None
     if result.raw_bytes and result.raw_content_type:
         ext_map = {
@@ -180,9 +144,6 @@ def fetch_and_save(
             raw_file.write_bytes(result.raw_bytes)
             raw_file_path = f"raw/{raw_filename}"
 
-    # Note: tagging and summarization is the agent's job, not an automatic process.
-
-    # Add raw_file reference to frontmatter AFTER enrich (enrich rewrites frontmatter)
     if raw_file_path:
         note_text = note_path.read_text(encoding="utf-8")
         if note_text.startswith("---") and "raw_file:" not in note_text:
@@ -195,13 +156,11 @@ def fetch_and_save(
                 )
                 note_path.write_text(note_text, encoding="utf-8")
 
-    # Sync
     note_id = note_path.stem
     plan = compute_sync_plan(vault)
     if plan.to_add or plan.to_update:
         execute_sync(vault, plan)
 
-    # Record source (upsert: an orphaned row for this url may already exist)
     content_hash = hashlib.sha256(result.content.encode("utf-8")).hexdigest()[:16]
     conn.execute(
         """INSERT INTO sources (url, note_id, domain, fetched_at, provider, content_hash)
@@ -217,7 +176,6 @@ def fetch_and_save(
     )
     conn.commit()
 
-    # Save assets if requested
     saved_assets: list[dict] = []
     if save_assets:
         from hyperresearch.cli.fetch import _save_assets
@@ -241,3 +199,85 @@ def fetch_and_save(
         "assets": saved_assets,
         "raw_file": raw_file_path,
     }
+
+
+def _prepare_fetch(vault, url: str, provider_name: str | None, visible: bool):
+    from hyperresearch.web.base import get_provider
+
+    conn = vault.db
+    existing = existing_live_note_for_url(conn, url)
+    if existing:
+        raise ValueError(f"URL already fetched as note '{existing['note_id']}'")
+
+    if not visible and vault.config.web_profile:
+        from urllib.parse import urlparse as _urlparse
+
+        domain = _urlparse(url).netloc.lower()
+        if any(d in domain for d in vault.config.fetch.visible_browser_domains):
+            visible = True
+
+    prov = get_provider(
+        provider_name or vault.config.web_provider,
+        profile=vault.config.web_profile,
+        magic=vault.config.web_magic,
+        headless=not visible,
+        settings=vault.config.fetch,
+        gates=vault.config.junk,
+    )
+    return prov, visible
+
+
+async def _fetch_from_provider(prov, url: str):
+    import asyncio
+
+    import anyio
+
+    fetch_url_fn = getattr(prov, "fetch_url", None)
+    if fetch_url_fn is not None and asyncio.iscoroutinefunction(fetch_url_fn):
+        return await fetch_url_fn(url)
+    return await anyio.to_thread.run_sync(prov.fetch, url)
+
+
+def fetch_and_save(
+    vault,
+    url: str,
+    tags: list[str] | None = None,
+    title: str | None = None,
+    parent: str | None = None,
+    provider_name: str | None = None,
+    save_assets: bool = False,
+    visible: bool = False,
+) -> dict:
+    """Fetch a URL and save as a research note. Returns result dict.
+
+    Raises:
+        ValueError: If URL is already fetched.
+        RuntimeError: If fetch fails.
+    """
+    tags = tags or []
+    prov, _visible = _prepare_fetch(vault, url, provider_name, visible)
+    result = prov.fetch(url)
+    _validate_fetched_result(result, url, vault, tags)
+    return _persist_fetched_result(
+        vault, url, tags, title, parent, prov, result, save_assets
+    )
+
+
+async def fetch_and_save_async(
+    vault,
+    url: str,
+    tags: list[str] | None = None,
+    title: str | None = None,
+    parent: str | None = None,
+    provider_name: str | None = None,
+    save_assets: bool = False,
+    visible: bool = False,
+) -> dict:
+    """Async fetch path for MCP — does not block the server event loop during I/O."""
+    tags = tags or []
+    prov, _visible = _prepare_fetch(vault, url, provider_name, visible)
+    result = await _fetch_from_provider(prov, url)
+    _validate_fetched_result(result, url, vault, tags)
+    return _persist_fetched_result(
+        vault, url, tags, title, parent, prov, result, save_assets
+    )

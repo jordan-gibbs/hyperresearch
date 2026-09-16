@@ -1,11 +1,9 @@
-"""fetch() must work when called on a thread that already has a running event loop.
+"""Crawl4AI fetch async/sync entry points and event-loop behavior (#118).
 
-The MCP server's fastmcp tool dispatch calls synchronous tool functions directly on
-its own running event-loop thread (it does not offload them to a worker thread), so
-fetch_url's call chain into Crawl4AIProvider.fetch() lands there too. A plain
-asyncio.run() inside fetch() would raise "cannot be called from a running event
-loop" in that case; the CLI's plain synchronous invocation has no such loop and must
-keep working exactly as before.
+Sync ``Crawl4AIProvider.fetch()`` is for CLI callers with no running loop; it
+delegates via ``asyncio.run(fetch_url(...))``. Async callers (including the MCP
+server) must ``await provider.fetch_url(...)`` — calling ``fetch()`` on a thread
+that already has a running event loop raises ``RuntimeError``.
 """
 
 from __future__ import annotations
@@ -48,7 +46,8 @@ def _run_on_a_fresh_thread(coro):
     return box["result"]
 
 
-def test_fetch_succeeds_when_called_from_a_running_event_loop(monkeypatch) -> None:
+def test_fetch_url_succeeds_when_awaited_on_running_event_loop(monkeypatch) -> None:
+    """Async entry point for callers on the MCP server's event loop."""
     async def fake_fetch_async(self, url):
         return WebResult(url=url, title="ok", content="fetched content")
 
@@ -56,12 +55,27 @@ def test_fetch_succeeds_when_called_from_a_running_event_loop(monkeypatch) -> No
     provider = Crawl4AIProvider(headless=True)
 
     async def call_fetch_on_the_running_loop():
-        return provider.fetch("https://example.com")
+        return await provider.fetch_url("https://example.com")
 
     result = _run_on_a_fresh_thread(call_fetch_on_the_running_loop())
 
     assert result.title == "ok"
     assert result.content == "fetched content"
+
+
+def test_fetch_raises_when_called_sync_from_running_event_loop(monkeypatch) -> None:
+    """Sync fetch() must not be used on a running loop; use ``await fetch_url()`` instead."""
+    async def fake_fetch_async(self, url):
+        return WebResult(url=url, title="ok", content="fetched content")
+
+    monkeypatch.setattr(Crawl4AIProvider, "_fetch_async", fake_fetch_async)
+    provider = Crawl4AIProvider(headless=True)
+
+    async def call_sync_fetch_on_the_running_loop() -> None:
+        with pytest.raises(RuntimeError, match="running event loop"):
+            provider.fetch("https://example.com")
+
+    _run_on_a_fresh_thread(call_sync_fetch_on_the_running_loop())
 
 
 def test_fetch_still_succeeds_with_no_running_loop(monkeypatch) -> None:
@@ -79,19 +93,54 @@ def test_fetch_still_succeeds_with_no_running_loop(monkeypatch) -> None:
 
 
 def test_fetch_many_succeeds_when_called_from_a_running_event_loop(monkeypatch) -> None:
-    """fetch_many() shares fetch()'s wrapper; a bare asyncio.run() here would
-    fail the same way on the MCP server's loop thread."""
+    """fetch_many() is async; MCP callers await it on the server loop."""
     async def fake_fetch_many_async(self, urls):
         return [WebResult(url=u, title="ok", content="fetched content") for u in urls]
 
-    monkeypatch.setattr(Crawl4AIProvider, "_fetch_many_async", fake_fetch_many_async)
+    monkeypatch.setattr(Crawl4AIProvider, "fetch_many", fake_fetch_many_async)
     provider = Crawl4AIProvider(headless=True)
     urls = ["https://example.com/a", "https://example.com/b"]
 
     async def call_fetch_many_on_the_running_loop():
-        return provider.fetch_many(urls)
+        return await provider.fetch_many(urls)
 
     results = _run_on_a_fresh_thread(call_fetch_many_on_the_running_loop())
 
     assert [r.url for r in results] == urls
     assert all(r.content == "fetched content" for r in results)
+
+
+def test_fetch_url_yields_to_event_loop_while_waiting(monkeypatch) -> None:
+    """Regression for #118: fetch_url must not block the loop with thread.join()."""
+    proceed = asyncio.Event()
+
+    async def fake_fetch_async(self, url):
+        await proceed.wait()
+        return WebResult(url=url, title="ok", content="fetched content")
+
+    monkeypatch.setattr(Crawl4AIProvider, "_fetch_async", fake_fetch_async)
+    monkeypatch.setattr(
+        "hyperresearch.web.safe_http.check_url",
+        lambda *args, **kwargs: None,
+    )
+    provider = Crawl4AIProvider(headless=True)
+
+    async def run() -> None:
+        tick = asyncio.Event()
+
+        async def ticker() -> None:
+            await asyncio.sleep(0)
+            tick.set()
+
+        fetch_task = asyncio.create_task(provider.fetch_url("https://example.com"))
+        ticker_task = asyncio.create_task(ticker())
+        for _ in range(20):
+            await asyncio.sleep(0)
+            if tick.is_set():
+                break
+        assert tick.is_set(), "event loop must stay responsive while fetch_url awaits"
+        proceed.set()
+        await fetch_task
+        await ticker_task
+
+    _run_on_a_fresh_thread(run())

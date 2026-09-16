@@ -117,7 +117,13 @@ def fetch_batch(
     if normal_urls:
         if hasattr(prov, "fetch_many"):
             try:
-                results.extend(prov.fetch_many(normal_urls))
+                import asyncio
+                import inspect
+
+                batch = prov.fetch_many(normal_urls)
+                if inspect.iscoroutine(batch):
+                    batch = asyncio.run(batch)
+                results.extend(batch)
             except Exception as e:
                 # fetch_many can return zero results on a single bad URL
                 # inside the batch comprehension. Fall back to per-URL so we

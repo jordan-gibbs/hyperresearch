@@ -280,7 +280,7 @@ def list_sources(domain: str = "", limit: int = 50) -> str:
 
 
 @server.tool()
-def fetch_url(url: str, tags: str = "", provider: str = "") -> str:
+async def fetch_url(url: str, tags: str = "", provider: str = "") -> str:
     """Fetch a URL and save it as a research note.
 
     Args:
@@ -288,14 +288,14 @@ def fetch_url(url: str, tags: str = "", provider: str = "") -> str:
         tags: Comma-separated tags (e.g. "ml,transformers")
         provider: Web provider override (leave empty for default)
     """
-    from hyperresearch.core.fetcher import fetch_and_save
+    from hyperresearch.core.fetcher import fetch_and_save_async
 
     vault = _get_vault()
     vault.auto_sync()
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
     try:
-        result = fetch_and_save(
+        result = await fetch_and_save_async(
             vault, url, tags=tag_list,
             provider_name=provider or None,
         )
