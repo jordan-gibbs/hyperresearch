@@ -133,6 +133,52 @@ class TestScoreSources:
         assert any("semanticscholar.org" in c for c in calls)
         assert not any("openalex.org" in c for c in calls)
 
+    @pytest.mark.parametrize("doi", ["arXiv:2501.01234", "10.1/fallback"])
+    def test_semantic_scholar_retraction_stays_unchecked(
+        self, tmp_vault, monkeypatch, no_sleep, doi,
+    ):
+        from hyperresearch.core.frontmatter import parse_frontmatter
+        from hyperresearch.core.note import write_note
+        from hyperresearch.core.sync import compute_sync_plan, execute_sync
+        from hyperresearch.search.filters import SearchFilters
+        from hyperresearch.search.fts import search_fts
+
+        write_note(
+            tmp_vault.notes_dir, "Unchecked Paper", body="Research evidence.",
+            extra_frontmatter={"doi": doi, "is_retracted": False, "citation_count": 1},
+        )
+        execute_sync(tmp_vault, compute_sync_plan(tmp_vault))
+        _stub_openalex(monkeypatch, {
+            "semanticscholar": {"citationCount": 7, "venue": "arXiv"},
+        })
+
+        result = scholar.score_sources(tmp_vault, fresh=True)
+        assert result["scored"] == 1
+        assert result["retracted"] == []
+        row = tmp_vault.db.execute(
+            "SELECT citation_count, venue, is_retracted FROM notes WHERE id = 'unchecked-paper'"
+        ).fetchone()
+        assert row["citation_count"] == 7
+        assert row["venue"] == "arXiv"
+        assert row["is_retracted"] is None
+
+        text = (tmp_vault.notes_dir / "unchecked-paper.md").read_text(encoding="utf-8")
+        meta, _ = parse_frontmatter(text)
+        assert meta.is_retracted is None
+        assert meta.citation_count == 7
+
+        for resync in (False, True):
+            if resync:
+                execute_sync(tmp_vault, compute_sync_plan(tmp_vault, force=True))
+            unchecked = search_fts(
+                tmp_vault.db, "", filters=SearchFilters(retraction="unchecked"),
+            )
+            assert [r["id"] for r in unchecked] == ["unchecked-paper"]
+            assert unchecked[0]["is_retracted"] is None
+            assert search_fts(
+                tmp_vault.db, "", filters=SearchFilters(retraction="not-retracted"),
+            ) == []
+
     def test_authority_is_vault_relative_percentile(self, doi_vault, monkeypatch):
         _stub_openalex(monkeypatch, {
             "10.1%2Fcited": OPENALEX_CITED,        # 512 citations
@@ -206,6 +252,15 @@ class TestApiCache:
             "SELECT body FROM api_cache WHERE url = 'https://api.openalex.org/works/z'"
         ).fetchone()
         assert json.loads(row["body"]) == {"a": 1}
+
+
+@pytest.mark.parametrize("doi", ["arXiv:2501.01234", "10.1/fallback"])
+def test_semantic_scholar_metadata_has_unknown_retraction(tmp_vault, monkeypatch, no_sleep, doi):
+    _stub_openalex(monkeypatch, {
+        "semanticscholar": {"citationCount": 7, "venue": "arXiv"},
+    })
+    metadata = scholar.lookup_metadata(tmp_vault.db, doi, ttl_days=30)
+    assert metadata == {"citation_count": 7, "venue": "arXiv", "is_retracted": None}
 
 
 # ---------------------------------------------------------------------------

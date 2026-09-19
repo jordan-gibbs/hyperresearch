@@ -300,7 +300,7 @@ def lookup_metadata(conn, doi: str, ttl_days: int, fresh: bool = False) -> dict 
         return {
             "citation_count": data.get("citationCount"),
             "venue": data.get("venue") or None,
-            "is_retracted": False,  # S2 has no retraction flag
+            "is_retracted": None,  # S2 has no retraction flag
         }
 
     data = _fetch_json(
@@ -334,7 +334,7 @@ def lookup_metadata(conn, doi: str, ttl_days: int, fresh: bool = False) -> dict 
     return {
         "citation_count": data.get("citationCount"),
         "venue": data.get("venue") or None,
-        "is_retracted": False,
+        "is_retracted": None,
     }
 
 
@@ -453,7 +453,7 @@ def score_sources(
             (
                 meta_result["citation_count"],
                 meta_result["venue"],
-                1 if meta_result["is_retracted"] else 0,
+                None if meta_result["is_retracted"] is None else int(meta_result["is_retracted"]),
                 row["id"],
             ),
         )
@@ -465,7 +465,7 @@ def score_sources(
             fm, body = parse_frontmatter(text)
             fm.citation_count = meta_result["citation_count"]
             fm.venue = meta_result["venue"]
-            fm.is_retracted = bool(meta_result["is_retracted"])
+            fm.is_retracted = meta_result["is_retracted"]
             note_path.write_text(render_note(fm, body), encoding="utf-8")
 
         scored += 1

@@ -29,6 +29,8 @@ hpr search --retraction unchecked -j
 `not-retracted` matches explicit `is_retracted: false` metadata; an absent status
 is **unchecked**, not an assurance. Similarly, `--min-citations 0` excludes notes
 without a known citation count. Citation counts do not establish evidence quality.
+The Semantic Scholar integration does not fetch retraction data, so its arXiv
+and DOI fallback results remain unchecked.
 
 `oa_version` describes the **retrieved text**, not necessarily the current
 publication status of the paper. A submitted manuscript may later have been
@@ -53,3 +55,7 @@ unknown and invalidates their sync fingerprints. The next normal sync restores
 the exact states from Markdown without modifying the source files. If automatic
 sync is disabled, run `hpr sync` before relying on the filters. Related claims,
 embeddings, and links are retained during the upgrade.
+
+Earlier enrichment also wrote `false` for Semantic Scholar results. Run
+`hpr sources score --fresh` to refresh already-scored notes and replace those
+inferred states with unknown; the cache upgrade alone cannot correct frontmatter.
