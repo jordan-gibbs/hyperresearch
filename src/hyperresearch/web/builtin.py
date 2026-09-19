@@ -1,4 +1,10 @@
-"""Builtin web provider — SSRF-gated fetching via safe_http, beautifulsoup4 extraction if available."""
+"""Builtin web provider — SSRF-gated fetching via safe_http, beautifulsoup4 extraction if available.
+
+PDFs go through the shared lane in :mod:`hyperresearch.web.pdf`, the same one
+the crawl4ai provider uses. Before that, a vault on this provider had no PDF
+handling at all: the bytes were decoded as HTML and every PDF on every host
+was rejected by the junk gate with the same generic message (#82).
+"""
 
 from __future__ import annotations
 
@@ -7,6 +13,13 @@ from datetime import UTC, datetime
 from html.parser import HTMLParser
 
 from hyperresearch.web.base import WebResult
+from hyperresearch.web.pdf import (
+    PDF_FAILURE_KEY,
+    extract_pdf,
+    failure_reason,
+    fetch_pdf,
+    is_pdf_url,
+)
 
 
 class _TextExtractor(HTMLParser):
@@ -58,15 +71,39 @@ class BuiltinProvider:
         self._settings = settings or FetchSettings()
 
     def fetch(self, url: str) -> WebResult:
-        html, final_url = self._download(url)
+        # PDF detection by URL shape: download directly, extract with pymupdf.
+        # A miss falls through to the HTML lane (the URL may be a landing page)
+        # and the reason travels with the result for the junk gate to report.
+        pdf_failure: str | None = None
+        if is_pdf_url(url):
+            result = fetch_pdf(url, self._settings)
+            if result is not None:
+                return result
+            pdf_failure = failure_reason(url)
+
+        resp = self._get(url)
+        # Post-download PDF detection: a PDF behind a URL that does not look
+        # like one (download?id=…, a redirect) is decoded here as text and
+        # would otherwise be reported as binary garbage.
+        if resp.content.startswith(b"%PDF-") or "application/pdf" in resp.headers.get("content-type", "").lower():
+            result, pdf_failure = extract_pdf(
+                resp.url, resp.content, self._settings, resp.headers.get("content-type", "")
+            )
+            if result is not None:
+                return result
+
+        html = resp.text
         title, content = self._extract(html)
-        return WebResult(
-            url=final_url,
+        result = WebResult(
+            url=resp.url,
             title=title,
             content=content,
             raw_html=html,
             fetched_at=datetime.now(UTC),
         )
+        if pdf_failure:
+            result.metadata[PDF_FAILURE_KEY] = pdf_failure
+        return result
 
     def search(self, query: str, max_results: int = 5) -> list[WebResult]:
         raise NotImplementedError(
@@ -74,9 +111,8 @@ class BuiltinProvider:
             "Use your agent's built-in search, then pipe URLs into 'hyperresearch fetch'."
         )
 
-    def _download(self, url: str) -> tuple[str, str]:
-        """Download URL, return (html, final_url). All requests go through the
-        SSRF gate in :mod:`hyperresearch.web.safe_http`."""
+    def _get(self, url: str):
+        """Download URL through the SSRF gate in :mod:`hyperresearch.web.safe_http`."""
         from hyperresearch.web.safe_http import safe_get
 
         resp = safe_get(
@@ -86,6 +122,11 @@ class BuiltinProvider:
         )
         if resp.status_code >= 400:
             raise RuntimeError(f"HTTP {resp.status_code} fetching {url}")
+        return resp
+
+    def _download(self, url: str) -> tuple[str, str]:
+        """Download URL, return (html, final_url)."""
+        resp = self._get(url)
         return resp.text, resp.url
 
     def _extract(self, html: str) -> tuple[str, str]:

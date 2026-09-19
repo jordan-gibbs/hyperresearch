@@ -86,7 +86,7 @@ def vault_dir(tmp_path: Path, monkeypatch) -> Path:
     )
 
     from hyperresearch.core import oa, scholar
-    from hyperresearch.web import crawl4ai_provider
+    from hyperresearch.web import pdf as pdf_lane
 
     monkeypatch.setattr("hyperresearch.web.base.get_provider", lambda *a, **k: _AbstractOnlyProvider())
     monkeypatch.setattr(
@@ -94,8 +94,8 @@ def vault_dir(tmp_path: Path, monkeypatch) -> Path:
     )
     monkeypatch.setattr(oa.socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("93.184.216.34", 0))])
     monkeypatch.setattr(
-        crawl4ai_provider,
-        "_fetch_pdf",
+        pdf_lane,
+        "fetch_pdf",
         lambda url, settings: WebResult(url=url, title="Widget Paper", content=FULL_TEXT),
     )
     return root

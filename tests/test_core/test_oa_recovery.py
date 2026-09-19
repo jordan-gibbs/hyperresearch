@@ -310,9 +310,9 @@ class TestRecoverFullText:
         return tmp_vault
 
     def _stub_pdf(self, monkeypatch, returned):
-        from hyperresearch.web import crawl4ai_provider
+        from hyperresearch.web import pdf as pdf_lane
 
-        monkeypatch.setattr(crawl4ai_provider, "_fetch_pdf", lambda url, settings: returned)
+        monkeypatch.setattr(pdf_lane, "fetch_pdf", lambda url, settings: returned)
 
     def test_happy_path_swaps_the_body(self, vault, monkeypatch, public_dns):
         _stub_http(monkeypatch, {"unpaywall": UNPAYWALL_PDF})
@@ -368,7 +368,7 @@ class TestRecoverFullText:
         }
         _stub_http(monkeypatch, {"unpaywall": payload})
 
-        from hyperresearch.web import crawl4ai_provider
+        from hyperresearch.web import pdf as pdf_lane
 
         tried: list[str] = []
 
@@ -376,7 +376,7 @@ class TestRecoverFullText:
             tried.append(url)
             return None if "blocked" in url else _result(FULL_TEXT, url=url)
 
-        monkeypatch.setattr(crawl4ai_provider, "_fetch_pdf", flaky)
+        monkeypatch.setattr(pdf_lane, "fetch_pdf", flaky)
         out, loc = oa.recover_full_text(vault, None, "https://p/x", "10.1/x", _result(ABSTRACT))
         assert tried == ["https://blocked.example.org/a.pdf", "https://mirror.example.org/b.pdf"]
         assert loc.url == "https://mirror.example.org/b.pdf"
@@ -393,11 +393,11 @@ class TestRecoverFullText:
         }
         _stub_http(monkeypatch, {"unpaywall": payload})
 
-        from hyperresearch.web import crawl4ai_provider
+        from hyperresearch.web import pdf as pdf_lane
 
         tried: list[str] = []
         monkeypatch.setattr(
-            crawl4ai_provider, "_fetch_pdf", lambda url, s: tried.append(url) or None
+            pdf_lane, "fetch_pdf", lambda url, s: tried.append(url) or None
         )
         original = _result(ABSTRACT)
         out, loc = oa.recover_full_text(vault, None, "https://p/x", "10.1/x", original)
@@ -426,13 +426,13 @@ class TestRecoverFullText:
         assert out is original and loc is None
 
     def test_raising_fetcher_is_soft(self, vault, monkeypatch, public_dns):
-        from hyperresearch.web import crawl4ai_provider
+        from hyperresearch.web import pdf as pdf_lane
 
         def boom(url, settings):
             raise RuntimeError("connection reset")
 
         _stub_http(monkeypatch, {"unpaywall": UNPAYWALL_PDF})
-        monkeypatch.setattr(crawl4ai_provider, "_fetch_pdf", boom)
+        monkeypatch.setattr(pdf_lane, "fetch_pdf", boom)
         original = _result(ABSTRACT)
         out, loc = oa.recover_full_text(vault, None, "https://p/x", "10.1/x", original)
         assert out is original and loc is None
@@ -542,9 +542,9 @@ class TestRescueFullText:
         return tmp_vault
 
     def _stub_pdf(self, monkeypatch, returned):
-        from hyperresearch.web import crawl4ai_provider
+        from hyperresearch.web import pdf as pdf_lane
 
-        monkeypatch.setattr(crawl4ai_provider, "_fetch_pdf", lambda url, settings: returned)
+        monkeypatch.setattr(pdf_lane, "fetch_pdf", lambda url, settings: returned)
 
     def test_recovers_with_no_original_to_beat(self, vault, monkeypatch, public_dns):
         _stub_http(monkeypatch, {"unpaywall": UNPAYWALL_PDF})

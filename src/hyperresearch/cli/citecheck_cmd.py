@@ -26,13 +26,22 @@ def citecheck_extract(
     runs/<tag>/cite-check-pairs.json for the cite-checker agent.
     """
     from hyperresearch.core.citecheck import write_pairs_file
-    from hyperresearch.core.vault import Vault, VaultError
+    from hyperresearch.core.vault import InvalidRunTagError, Vault, VaultError, validate_run_tag
 
     try:
         vault = Vault.discover()
     except VaultError as e:
         if json_output:
             output(error(str(e), "NO_VAULT"), json_mode=True)
+        else:
+            console.print(f"[red]Error:[/] {e}")
+        raise typer.Exit(1)
+
+    try:
+        validate_run_tag(vault_tag)
+    except InvalidRunTagError as e:
+        if json_output:
+            output(error(str(e), "INVALID_TAG"), json_mode=True)
         else:
             console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(1)

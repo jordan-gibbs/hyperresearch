@@ -5,13 +5,14 @@ from __future__ import annotations
 import typer
 
 from hyperresearch.cli._output import console, output
+from hyperresearch.core.vault import VaultError
 from hyperresearch.models.output import error, success
 
 app = typer.Typer()
 
 
 def _discover(json_output: bool):
-    from hyperresearch.core.vault import Vault, VaultError
+    from hyperresearch.core.vault import Vault
 
     try:
         return Vault.discover()
@@ -49,7 +50,7 @@ def levers_render(
     vault.auto_sync()
     try:
         result = render_shims(vault, vault_tag)
-    except LeverError as e:
+    except (LeverError, VaultError) as e:
         _fail(str(e), "LEVER_ERROR", json_output)
         return
     levers = result["levers"]
@@ -91,7 +92,7 @@ def levers_set(
         result = {"levers": levers, "rerendered": rerender}
         if rerender:
             result = {**render_shims(vault, vault_tag), "rerendered": True}
-    except LeverError as e:
+    except (LeverError, VaultError) as e:
         _fail(str(e), "LEVER_ERROR", json_output)
         return
     if json_output:

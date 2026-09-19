@@ -230,6 +230,7 @@ def fetch(
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.core.vault import Vault, VaultError
     from hyperresearch.web.base import get_provider
+    from hyperresearch.web.pdf import PDF_FAILURE_KEY
 
     try:
         vault = Vault.discover()
@@ -391,7 +392,11 @@ def fetch(
                 item_id = _escalate_blocked(vault, url, reason, tags, suggested_by, utility_score,
                                             detail=junk_reason)
             escalated = f" Queued for browser-lane escalation (#{item_id})." if item_id else ""
-            msg = f"Skipped junk content from {url}: {junk_reason}.{escalated}"
+            # A PDF that failed its own lane lands here as "binary garbage";
+            # say why the PDF lane declined it, or the message is useless (#82).
+            pdf_failure = result.metadata.get(PDF_FAILURE_KEY)
+            pdf_note = f" PDF lane: {pdf_failure}." if pdf_failure else ""
+            msg = f"Skipped junk content from {url}: {junk_reason}.{pdf_note}{escalated}"
             if json_output:
                 output(error(msg, "JUNK_ESCALATED" if item_id else "JUNK_CONTENT"), json_mode=True)
             else:

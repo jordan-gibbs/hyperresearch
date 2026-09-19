@@ -796,9 +796,9 @@ def _try_candidates(vault, prov, doi: str, settings, *, fallback_title, beat_cha
         attempts += 1
         try:
             if loc.kind == "pdf":
-                from hyperresearch.web.crawl4ai_provider import _fetch_pdf
+                from hyperresearch.web.pdf import fetch_pdf
 
-                recovered = _fetch_pdf(loc.url, vault.config.fetch)
+                recovered = fetch_pdf(loc.url, vault.config.fetch)
             elif loc.kind == "jats":
                 recovered = _fetch_jats(loc.url, fallback_title)
             elif loc.kind == "coretext":

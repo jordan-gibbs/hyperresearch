@@ -132,7 +132,7 @@ def _stub_core(monkeypatch, responses: dict[str, object]):
 
 
 def _stub_pdf(monkeypatch, returned):
-    from hyperresearch.web import crawl4ai_provider
+    from hyperresearch.web import pdf as pdf_lane
 
     tried: list[str] = []
 
@@ -140,7 +140,7 @@ def _stub_pdf(monkeypatch, returned):
         tried.append(url)
         return returned(url) if callable(returned) else returned
 
-    monkeypatch.setattr(crawl4ai_provider, "_fetch_pdf", fake)
+    monkeypatch.setattr(pdf_lane, "fetch_pdf", fake)
     return tried
 
 

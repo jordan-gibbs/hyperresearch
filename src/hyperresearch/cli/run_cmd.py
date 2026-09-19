@@ -7,13 +7,14 @@ import json
 import typer
 
 from hyperresearch.cli._output import console, output
+from hyperresearch.core.vault import VaultError
 from hyperresearch.models.output import error, success
 
 app = typer.Typer()
 
 
 def _vault_or_exit(json_output: bool):
-    from hyperresearch.core.vault import Vault, VaultError
+    from hyperresearch.core.vault import Vault
 
     try:
         return Vault.discover()
@@ -59,7 +60,7 @@ def run_init(
         query = Path(query_file).read_text(encoding="utf-8-sig")
     try:
         manifest = init_run(vault, vault_tag, profile=profile, budget_usd=budget, query=query)
-    except RunError as e:
+    except (RunError, VaultError) as e:
         if json_output:
             output(error(str(e), "RUN_ERROR"), json_mode=True)
         else:
@@ -86,7 +87,7 @@ def run_status(
     tag = _resolve_tag(vault, vault_tag, json_output)
     try:
         summary = status_summary(vault, tag)
-    except RunError as e:
+    except (RunError, VaultError) as e:
         if json_output:
             output(error(str(e), "RUN_ERROR"), json_mode=True)
         else:
@@ -168,7 +169,7 @@ def run_resume(
     tag = _resolve_tag(vault, vault_tag, json_output)
     try:
         manifest = load_manifest(vault, tag)
-    except RunError as e:
+    except (RunError, VaultError) as e:
         if json_output:
             output(error(str(e), "RUN_ERROR"), json_mode=True)
         else:
@@ -210,7 +211,7 @@ def run_abort(
     vault = _vault_or_exit(json_output)
     try:
         manifest = set_status(vault, vault_tag, "aborted")
-    except RunError as e:
+    except (RunError, VaultError) as e:
         if json_output:
             output(error(str(e), "RUN_ERROR"), json_mode=True)
         else:
@@ -236,7 +237,7 @@ def run_step(
     vault = _vault_or_exit(json_output)
     try:
         manifest = set_step(vault, vault_tag, step, status, chapter=chapter)
-    except RunError as e:
+    except (RunError, VaultError) as e:
         if json_output:
             output(error(str(e), "RUN_ERROR"), json_mode=True)
         else:
@@ -267,7 +268,7 @@ def run_spend(
             estimated_usd=usd, sources_fetched=sources,
             notes_written=notes, agents_spawned=agents,
         )
-    except RunError as e:
+    except (RunError, VaultError) as e:
         if json_output:
             output(error(str(e), "RUN_ERROR"), json_mode=True)
         else:
@@ -303,7 +304,7 @@ def run_event(
             raise typer.Exit(1)
     try:
         record_event(vault, vault_tag, payload)
-    except RunError as e:
+    except (RunError, VaultError) as e:
         if json_output:
             output(error(str(e), "RUN_ERROR"), json_mode=True)
         else:
@@ -327,7 +328,7 @@ def run_block(
     vault = _vault_or_exit(json_output)
     try:
         manifest = set_status(vault, vault_tag, "blocked", blocked_on=on)
-    except RunError as e:
+    except (RunError, VaultError) as e:
         if json_output:
             output(error(str(e), "RUN_ERROR"), json_mode=True)
         else:
@@ -362,7 +363,7 @@ def run_report(
                 continue
             try:
                 reports.append(run_report_data(vault, tag))
-            except RunError:
+            except (RunError, VaultError):
                 continue
         agg = {
             "runs": len(reports),
@@ -385,7 +386,7 @@ def run_report(
     try:
         load_manifest(vault, tag)
         report = run_report_data(vault, tag)
-    except RunError as e:
+    except (RunError, VaultError) as e:
         if json_output:
             output(error(str(e), "RUN_ERROR"), json_mode=True)
         else:
@@ -424,7 +425,7 @@ def run_verify(
     tag = _resolve_tag(vault, vault_tag, json_output)
     try:
         result = verify_run(vault, tag)
-    except RunError as e:
+    except (RunError, VaultError) as e:
         if json_output:
             output(error(str(e), "RUN_ERROR"), json_mode=True)
         else:
@@ -460,7 +461,7 @@ def run_finish(
     tag = _resolve_tag(vault, vault_tag, json_output)
     try:
         result = finish_run(vault, tag)
-    except RunError as e:
+    except (RunError, VaultError) as e:
         if json_output:
             output(error(str(e), "RUN_ERROR"), json_mode=True)
         else:
