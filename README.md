@@ -1,4 +1,4 @@
-<img width="1536" height="1152" alt="replicate-prediction-x0s9c24tqxrmw0d0j5ktty8nhw" src="https://github.com/user-attachments/assets/816434ad-080e-4165-abbc-af87d009aeb0" />
+<img width="1280" height="400" alt="hyperresearch-readme-hero-1280x400" src="https://github.com/user-attachments/assets/320680fc-bc56-4eac-9ec2-7ec46d4bde98" />
 
 <h3 align="center">The Most Powerful Deep Research Harness</h3>
 
