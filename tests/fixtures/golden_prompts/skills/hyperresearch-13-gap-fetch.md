@@ -34,7 +34,7 @@ Read these inputs:
 
 2. **For each qualifying finding, check whether the vault has evidence.** Run a targeted vault search for the topic the finding names:
    ```bash
-   $HPR search "<finding topic keywords>" --tag <vault_tag> --json
+   {hpr_path} search "<finding topic keywords>" --tag <vault_tag> --json
    ```
    If 2+ relevant notes exist, the patcher can handle it — move on. If 0-1 relevant notes exist, this is a **fetch-worthy gap**.
 

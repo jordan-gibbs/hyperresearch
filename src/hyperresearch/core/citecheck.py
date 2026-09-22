@@ -175,21 +175,24 @@ def triage_pairs(pairs: list[dict], conn) -> dict:
 
 def sample_needs_llm(pairs: list[dict], sample_rate: float = 0.6) -> list[dict]:
     """Deterministic sampling of the LLM tier: 100% of strong (number-bearing)
-    sentences, every k-th of the rest. No RNG — reproducible across resumes."""
+    sentences, `sample_rate` of the rest. No RNG — reproducible across resumes.
+
+    A weak pair is kept whenever floor(seen * rate) steps up, which spreads the
+    kept pairs evenly and hits the rate exactly. The old every-k-th rule
+    rounded 1/rate, so 0.6 became every 2nd and sampled 50%.
+    """
     out = []
-    weak_kept = 0
     weak_seen = 0
-    keep_every = max(1, round(1 / sample_rate)) if sample_rate > 0 else 0
+    rate = min(max(sample_rate, 0.0), 1.0)
     for pair in pairs:
         if pair.get("verdict") != "needs-llm":
             continue
         if pair["strong"]:
             out.append(pair)
-        elif keep_every:
-            weak_seen += 1
-            if weak_seen % keep_every == 0:
-                out.append(pair)
-                weak_kept += 1
+            continue
+        weak_seen += 1
+        if int(weak_seen * rate) > int((weak_seen - 1) * rate):
+            out.append(pair)
     return out
 
 

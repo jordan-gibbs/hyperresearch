@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import socket
+
 import pytest
 
 from hyperresearch.core import oa, scholar
@@ -20,7 +22,7 @@ def _result(content: str, url: str = "https://publisher.example.com/doi/10.1/x",
 def public_dns(monkeypatch):
     """Resolve every hostname to a public address, with no network access."""
     monkeypatch.setattr(
-        oa.socket, "getaddrinfo", lambda host, port: [(2, 1, 6, "", ("93.184.216.34", 0))]
+        socket, "getaddrinfo", lambda host, port: [(2, 1, 6, "", ("93.184.216.34", 0))]
     )
 
 
@@ -82,21 +84,52 @@ class TestCheckOaUrl:
 
     def test_rejects_private_address(self, monkeypatch):
         monkeypatch.setattr(
-            oa.socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("169.254.169.254", 0))]
+            socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("169.254.169.254", 0))]
         )
         ok, reason = oa.check_oa_url("https://metadata.example.org/p.pdf")
         assert ok is False and "non-public address" in reason
 
     def test_rejects_loopback_ip_literal(self, monkeypatch):
-        monkeypatch.setattr(oa.socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("127.0.0.1", 0))])
+        monkeypatch.setattr(socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("127.0.0.1", 0))])
         ok, reason = oa.check_oa_url("https://127.0.0.1/p.pdf")
         assert ok is False and "non-public address" in reason
+
+    @pytest.mark.parametrize("addr", ["::ffff:100.64.0.1", "2002:6440:1::", "::ffff:10.0.0.5"])
+    def test_rejects_wrapped_private_addresses(self, monkeypatch, addr):
+        # Python 3.11 reports the first two as is_global. The fetch gate
+        # unwraps them (#127); the OA gate has to agree with it (#138).
+        monkeypatch.setattr(socket, "getaddrinfo", lambda h, p: [(10, 1, 6, "", (addr, 0, 0, 0))])
+        ok, reason = oa.check_oa_url("https://repo.example.org/p.pdf")
+        assert ok is False and "non-public address" in reason
+
+    def test_jats_fetch_refuses_a_redirect_to_a_private_host(self, monkeypatch):
+        import httpx
+
+        def fake_resolve(host, port):
+            ip = "10.0.0.5" if host == "internal.example.org" else "93.184.216.34"
+            return [(2, 1, 6, "", (ip, 0))]
+
+        monkeypatch.setattr(socket, "getaddrinfo", fake_resolve)
+        hits: list[str] = []
+
+        def handler(request):
+            hits.append(str(request.url))
+            return httpx.Response(302, headers={"location": "http://internal.example.org/x"})
+
+        real_client = httpx.Client
+        monkeypatch.setattr(
+            httpx,
+            "Client",
+            lambda **kw: real_client(**{**kw, "transport": httpx.MockTransport(handler)}),
+        )
+        assert oa._http_get_text("https://repo.example.org/jats.xml") is None
+        assert hits == ["https://repo.example.org/jats.xml"]
 
     def test_rejects_unresolvable_host(self, monkeypatch):
         def boom(host, port):
             raise OSError("nope")
 
-        monkeypatch.setattr(oa.socket, "getaddrinfo", boom)
+        monkeypatch.setattr(socket, "getaddrinfo", boom)
         ok, reason = oa.check_oa_url("https://nowhere.example.org/p.pdf")
         assert ok is False and "DNS resolution failed" in reason
 
@@ -341,7 +374,7 @@ class TestRecoverFullText:
         }
         _stub_http(monkeypatch, {"unpaywall": payload})
         monkeypatch.setattr(
-            oa.socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("169.254.169.254", 0))]
+            socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("169.254.169.254", 0))]
         )
         self._stub_pdf(monkeypatch, _result(FULL_TEXT))
         original = _result(ABSTRACT)
@@ -587,7 +620,7 @@ class TestRescueFullText:
         }
         _stub_http(monkeypatch, {"unpaywall": payload})
         monkeypatch.setattr(
-            oa.socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("169.254.169.254", 0))]
+            socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("169.254.169.254", 0))]
         )
         self._stub_pdf(monkeypatch, _result(FULL_TEXT))
         assert oa.rescue_full_text(vault, None, "https://p/x", "10.1/x") == (None, None)

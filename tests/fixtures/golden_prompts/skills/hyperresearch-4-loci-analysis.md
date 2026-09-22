@@ -25,7 +25,7 @@ Read these inputs:
 - `research/runs/<vault_tag>/temp/contradiction-graph.json` — ranked fight clusters (if step 3 ran)
 - `research/runs/<vault_tag>/temp/coverage-gaps.md` — which atomic items have weak coverage
 
-Survey the corpus: `$HPR note list --tag <vault_tag> --all -j` to confirm width sweep is complete.
+Survey the corpus: `{hpr_path} note list --tag <vault_tag> --all -j` to confirm width sweep is complete.
 
 ---
 
@@ -106,7 +106,7 @@ Survey the corpus: `$HPR note list --tag <vault_tag> --all -j` to confirm width 
 7. **Reconsider `inference_depth` against the actual corpus.** Step 1 set it provisionally from the query alone; you have now seen what the surface web actually holds. Upgrade to `deep` when the corpus shows the load-bearing questions are underdetermined by clearly-published sources — high-uncertainty loci where the missing evidence is gray literature, filings, or unpublished figures rather than papers nobody fetched yet. Downgrade to `surface` only if step 1 chose `deep` and the corpus turned out rich and univocal. To change it:
 
    ```bash
-   $HPR levers set <vault_tag> inference_depth=deep --rerender -j
+   {hpr_path} levers set <vault_tag> inference_depth=deep --rerender -j
    ```
 
    The `--rerender` refreshes the shim files so step 5's investigators inherit the new posture. If the step-1 value still fits, do nothing.

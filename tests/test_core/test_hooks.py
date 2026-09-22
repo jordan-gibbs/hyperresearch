@@ -110,6 +110,30 @@ def test_install_hyperresearch_step_skills_idempotent(tmp_vault):
     assert second is None
 
 
+def test_installed_skills_carry_the_resolved_cli_path(tmp_vault):
+    """Skills must name the CLI by the path install resolved, the way CLAUDE.md
+    and the agent prompts do. `$HPR` shipped for months with nothing defining
+    it, so `$HPR run finish` ran as `run finish` (#133)."""
+    from hyperresearch.core.hooks import (
+        _HYPERRESEARCH_STEP_SKILLS,
+        _install_hyperresearch_step_skills,
+    )
+
+    hpr = r"C:\venv\Scripts\hyperresearch.exe"
+    _install_hyperresearch_skill(tmp_vault.root, hpr)
+    _install_hyperresearch_step_skills(tmp_vault.root, hpr)
+
+    skills_root = tmp_vault.root / ".claude" / "skills"
+    bodies = {
+        name: (skills_root / name / "SKILL.md").read_text(encoding="utf-8")
+        for name in ["hyperresearch", *_HYPERRESEARCH_STEP_SKILLS]
+    }
+    for name, body in bodies.items():
+        assert "$HPR" not in body, name
+        assert "{hpr_path}" not in body, name
+    assert "C:/venv/Scripts/hyperresearch.exe run finish" in bodies["hyperresearch"]
+
+
 # ---------------------------------------------------------------------------
 # Subagent installers — per-agent sanity checks
 # ---------------------------------------------------------------------------

@@ -70,7 +70,7 @@ Step 1 classifies the query into a `pipeline_tier` (`light` / `full`). The tier 
 | `full` | 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14 → 14.5 → 15 → 16 | << p.time_estimate >> |
 | `dissertation` | 1 → 1.5 (chapter partition) → [2 → … → 10 per chapter] → 6g/11 (global) → 12 → 13 → 14 → 14.5 → 15 → 16 | << dissertation.time_estimate >> |
 
-`dissertation` is opt-in only — the user must explicitly request it (or the run was initialized with `--profile dissertation`). Step 1 never auto-classifies into it. On dissertation runs, steps 2–10 loop per chapter (see `hyperresearch-1-5-chapter-partition`), with up to << dissertation.chapter_concurrency >> chapters in flight; each chapter stays within the proven << dissertation.chapter_source_target|dash >>-source envelope while the run totals << dissertation.source_target|dash >> sources.
+`dissertation` is opt-in only — the user must explicitly request it (or the run was initialized with `--profile dissertation`). Step 1 never auto-classifies into it. **It is experimental.** Its length, read-budget and citation targets are configured but nothing reads them yet (#103). Say so to the user before starting one. On dissertation runs, steps 2–10 loop per chapter (see `hyperresearch-1-5-chapter-partition`), with up to << dissertation.chapter_concurrency >> chapters in flight; each chapter stays within the proven << dissertation.chapter_source_target|dash >>-source envelope while the run totals << dissertation.source_target|dash >> sources.
 
 **RESPECT THE TIER GATE.** When step 1 classifies a query as `light`, do NOT run the skipped steps "just to be thorough." The tier classification is a product decision: simple queries should produce fast, right-sized answers. Trust the classification. If you're uncertain, tier up — but never silently upgrade every query to `full`.
 
@@ -157,9 +157,9 @@ After step 1 returns, read `research/runs/<vault_tag>/prompt-decomposition.json`
 
 ## Browser-lane escalations (all tiers)
 
-Blocked fetches (login walls, bot walls, captchas) are queued, not lost: `$HPR escalation list --status queued --tag <vault_tag> -j`. Step 2.8 drains the queue via ONE `hyperresearch-browser-fetcher` subagent driving the user's real Chrome browser. Two standing rules:
+Blocked fetches (login walls, bot walls, captchas) are queued, not lost: `{hpr_path} escalation list --status queued --tag <vault_tag> -j`. Step 2.8 drains the queue via ONE `hyperresearch-browser-fetcher` subagent driving the user's real Chrome browser. Two standing rules:
 
-1. **CAPTCHAs / logins / 2FA are ALWAYS the human's.** The browser-fetcher marks them `needs_human`; you consolidate ALL of them into ONE message to the user at a natural pause point (never one interruption per URL). In non-interactive runs, `$HPR run block <vault_tag> --on human-challenges` and continue with everything else.
+1. **CAPTCHAs / logins / 2FA are ALWAYS the human's.** The browser-fetcher marks them `needs_human`; you consolidate ALL of them into ONE message to the user at a natural pause point (never one interruption per URL). In non-interactive runs, `{hpr_path} run block <vault_tag> --on human-challenges` and continue with everything else.
 2. **One browser-fetcher at a time.** It's the user's actual browser — parallel instances are chaos. Check the queue again after step 13 (gap-fetch) if new fetches got blocked.
 
 ## Subagent spawn contract (applies to every Task call)
@@ -172,7 +172,7 @@ When a step skill instructs you to spawn a subagent, the prompt you pass MUST in
 
 3. **The subagent's specific inputs** (vault_tag, output_path, locus, etc.). Each step skill's spawn template documents the required fields.
 
-4. **The run's shim file, pasted VERBATIM.** Step 1 renders posture shims (register / domain notes / inference depth) to `research/runs/<vault_tag>/shims/{research,drafting,critics,polish}.md`. Each step skill's spawn template names which shim its subagents receive; append that file's FULL contents to the end of the spawn prompt, unedited. You never write, summarize, or trim shim text — the file is the single source of truth. The cite-checker receives NO shim (verification is register-independent). If the shims directory is missing, run `$HPR levers render <vault_tag> -j` before spawning.
+4. **The run's shim file, pasted VERBATIM.** Step 1 renders posture shims (register / domain notes / inference depth) to `research/runs/<vault_tag>/shims/{research,drafting,critics,polish}.md`. Each step skill's spawn template names which shim its subagents receive; append that file's FULL contents to the end of the spawn prompt, unedited. You never write, summarize, or trim shim text — the file is the single source of truth. The cite-checker receives NO shim (verification is register-independent). If the shims directory is missing, run `{hpr_path} levers render <vault_tag> -j` before spawning.
 
 Skipping any of these in a Task prompt is a process violation.
 
@@ -186,10 +186,10 @@ Context compaction may eat parts of this conversation. If you're unsure what ste
 1. **Check the TodoWrite list.** It carries integer step numbers and survives compaction.
 2. **Check disk artifacts (fallback).** Each step writes a canonical artifact:
    - Step 1: `research/runs/<vault_tag>/scaffold.md`, `research/runs/<vault_tag>/prompt-decomposition.json`, `research/runs/<vault_tag>/temp/coverage-matrix.md`
-   - Step 2: vault notes tagged with vault_tag (`$HPR note list --tag <vault_tag> --all -j`)
+   - Step 2: vault notes tagged with vault_tag (`{hpr_path} note list --tag <vault_tag> --all -j`)
    - Step 3: `research/runs/<vault_tag>/temp/contradiction-graph.json`, `research/runs/<vault_tag>/temp/consensus-claims.json`
    - Step 4: `research/runs/<vault_tag>/loci.json`
-   - Step 5: vault notes with `type: interim` (`$HPR note list --tag <vault_tag> --type interim --all -j`)
+   - Step 5: vault notes with `type: interim` (`{hpr_path} note list --tag <vault_tag> --type interim --all -j`)
    - Step 6: `research/runs/<vault_tag>/comparisons.md`
    - Step 7: `research/runs/<vault_tag>/temp/source-tensions.json`
    - Step 8: `research/runs/<vault_tag>/corpus-critic-gaps.json`, `research/runs/<vault_tag>/temp/corpus-critic-results.md`
@@ -227,8 +227,8 @@ done
 
 Then refresh retraction data and run the SHIP GATE:
 ```bash
-$HPR sources retractions --tag <vault_tag> --json   # ship-time retraction re-check (bypasses cache)
-$HPR run finish <vault_tag> --json                  # THE ship gate: verify + manifest flip
+{hpr_path} sources retractions --tag <vault_tag> --json   # ship-time retraction re-check (bypasses cache)
+{hpr_path} run finish <vault_tag> --json                  # THE ship gate: verify + manifest flip
 ```
 
 `run finish` runs the whole verification battery — report exists, required headings, **length within the profile's word target (±20%)**, citation density, tier artifacts, cite-check resolution, **quote-integrity**, and **retracted-citations** — and flips the manifest to `done` only when every check passes. On failure it flips the run to `blocked (verify)` and exits 1.
@@ -240,7 +240,7 @@ $HPR run finish <vault_tag> --json                  # THE ship gate: verify + ma
 - `retracted-citations` → acknowledge the retraction in the sentence or remove the citation.
 - Anything else → fix the specific artifact the check names.
 
-Re-run `$HPR run finish <vault_tag> --json` after each fix round. Maximum 3 rounds; if the gate still fails, leave the run `blocked` and report the failing checks to the user honestly — a blocked run with a true manifest beats a shipped report that lies. Optional advisory: `$HPR lint --rule numeric-consistency --json` (warnings only, never blocks).
+Re-run `{hpr_path} run finish <vault_tag> --json` after each fix round. Maximum 3 rounds; if the gate still fails, leave the run `blocked` and report the failing checks to the user honestly — a blocked run with a true manifest beats a shipped report that lies. Optional advisory: `{hpr_path} lint --rule numeric-consistency --json` (warnings only, never blocks).
 
 Ship only after `run finish` reports `"passed": true`: the final report lives at `research/notes/final_report_<vault_tag>.md`.
 

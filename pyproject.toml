@@ -8,7 +8,7 @@ version = "0.11.1"
 description = "Claude Code harness for disciplined, adversarially-audited deep research with full provenance."
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 authors = [{name = "Jordan Gibbs", email = "jordan@jordangibbs.xyz"}]
 keywords = ["research", "knowledge-base", "wiki", "llm", "markdown", "cli", "agent", "zettelkasten"]
 classifiers = [
@@ -19,6 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Text Processing :: Markup :: Markdown",
 ]
 dependencies = [

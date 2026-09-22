@@ -29,7 +29,7 @@ Read these inputs:
 ## Step 14.5.1 — Extract + mechanical triage
 
 ```bash
-$HPR citecheck extract <vault_tag> -j
+{hpr_path} citecheck extract <vault_tag> -j
 ```
 
 This parses every (sentence, citation) pair from the report — `[N]` markers (including grouped `[7, 12]`, one pair per source number) and `[[note-id]]` styles — and auto-passes pairs whose numbers or wording the cited note's extracted claims already confirm. Output: `research/runs/<vault_tag>/cite-check-pairs.json` with:
@@ -39,7 +39,7 @@ This parses every (sentence, citation) pair from the report — `[N]` markers (i
 
 **Dangling citations are findings immediately** — no agent needed. Each one becomes a `critical` finding (fabricated or mangled citation).
 
-**If `sampled_for_llm` is empty and there are no dangling citations:** write an empty findings file `[]` to `research/runs/<vault_tag>/cite-check-findings.json`, record `$HPR run step <vault_tag> 14.5 --status done -j`, and proceed to step 15. Done.
+**If `sampled_for_llm` is empty and there are no dangling citations:** write an empty findings file `[]` to `research/runs/<vault_tag>/cite-check-findings.json`, record `{hpr_path} run step <vault_tag> 14.5 --status done -j`, and proceed to step 15. Done.
 
 ---
 
@@ -90,7 +90,7 @@ Fix repertoire (in the findings' `suggested_fix`): swap to `correct_note_id`, so
 - `research/runs/<vault_tag>/cite-check-pairs.json` exists
 - `research/runs/<vault_tag>/cite-check-findings.json` exists (possibly `[]`)
 - If findings were non-empty: `cite-check-patch-log.json` shows every `critical` finding applied or escalated
-- Manifest: `$HPR run step <vault_tag> 14.5 --status done -j`
+- Manifest: `{hpr_path} run step <vault_tag> 14.5 --status done -j`
 
 ## Next step
 

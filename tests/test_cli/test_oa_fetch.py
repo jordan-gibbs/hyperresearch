@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 from pathlib import Path
 
 import pytest
@@ -85,14 +86,14 @@ def vault_dir(tmp_path: Path, monkeypatch) -> Path:
         encoding="utf-8",
     )
 
-    from hyperresearch.core import oa, scholar
+    from hyperresearch.core import scholar
     from hyperresearch.web import pdf as pdf_lane
 
     monkeypatch.setattr("hyperresearch.web.base.get_provider", lambda *a, **k: _AbstractOnlyProvider())
     monkeypatch.setattr(
         scholar, "_http_get_json", lambda url: UNPAYWALL if "unpaywall" in url else None
     )
-    monkeypatch.setattr(oa.socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("93.184.216.34", 0))])
+    monkeypatch.setattr(socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("93.184.216.34", 0))])
     monkeypatch.setattr(
         pdf_lane,
         "fetch_pdf",
@@ -290,11 +291,11 @@ def test_recovery_is_off_without_an_email(tmp_path: Path, monkeypatch):
     runner.invoke(app, ["init", str(tmp_path / "kb2"), "--name", "No Email"])
     os.chdir(tmp_path / "kb2")
 
-    from hyperresearch.core import oa, scholar
+    from hyperresearch.core import scholar
 
     seen: list[str] = []
     monkeypatch.setattr("hyperresearch.web.base.get_provider", lambda *a, **k: _AbstractOnlyProvider())
-    monkeypatch.setattr(oa.socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("93.184.216.34", 0))])
+    monkeypatch.setattr(socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("93.184.216.34", 0))])
 
     def track(url):
         seen.append(url)

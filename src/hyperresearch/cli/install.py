@@ -78,7 +78,9 @@ def install(
         steps_profile = _default_profile(steps_config_path)
         _check_profile(steps_profile, steps_config_path)
         _set_render_state(steps_profile, steps_config_path)
-        result = _install_hyperresearch_step_skills(target)
+        from hyperresearch.core.agent_docs import _resolve_executable
+
+        result = _install_hyperresearch_step_skills(target, _resolve_executable())
         if json_output:
             output(
                 success({"steps_installed": result, "target": str(target)}, vault=None),

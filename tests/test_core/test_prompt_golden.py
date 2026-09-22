@@ -104,6 +104,12 @@ Deliberate deviations already folded into the goldens (2026-07-19):
     word boundaries — against `p.citation_density_min` per 1000 WORDS (9,
     the old 1.5-per-1000-characters floor expressed in English words)
     instead of per 1000 characters.
+  - CLI path in skills (2026-09-22, #133): the skills spelled the CLI
+    `$HPR`, which nothing defined, so `$HPR run finish` expanded to
+    `run finish` and failed in the shell. They now carry `{hpr_path}`,
+    the agent prompts' placeholder, which install resolves to the CLI's
+    absolute path. These goldens pin the pre-install render, so they hold
+    the placeholder.
 """
 
 from __future__ import annotations

@@ -65,7 +65,6 @@ network.
 from __future__ import annotations
 
 import ipaddress
-import socket
 import sqlite3
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -135,14 +134,15 @@ def check_oa_url(url: str) -> tuple[bool, str]:
     """Gate a resolver-supplied URL before fetching it. Returns (ok, reason).
 
     The URL comes out of a third-party API response, so a poisoned DOI record
-    can steer the fetcher at internal infrastructure. This is a deliberately
-    narrow SSRF check: scheme, no credentials in the netloc, and every address
-    the host resolves to must be publicly routable.
-
-    NOTE: this duplicates the intent of `web.safe_http.check_url` (PR #53).
-    When that lands, collapse this into a call to it — the version there does
-    redirect revalidation too, which this one cannot.
+    can steer the fetcher at internal infrastructure. Address classification
+    is `web.safe_http.check_url`'s, so this refuses whatever the fetch gate
+    refuses (mapped and 6to4-wrapped private ranges included, #138). On top
+    of that it refuses embedded credentials and bare hostnames, and it
+    ignores `allow_private_hosts`: a user's intranet mirror is never a
+    legitimate open-access location.
     """
+    from hyperresearch.web.safe_http import SafeHTTPError, check_url
+
     try:
         parsed = urlparse(url)
     except ValueError:
@@ -162,18 +162,11 @@ def check_oa_url(url: str) -> tuple[bool, str]:
         return False, f"non-public hostname {host!r}"
 
     try:
-        infos = socket.getaddrinfo(host, None)
+        check_url(url)
+    except SafeHTTPError as exc:
+        return False, str(exc)
     except OSError as exc:
         return False, f"DNS resolution failed: {exc}"
-
-    for info in infos:
-        addr = info[4][0]
-        try:
-            ip = ipaddress.ip_address(addr.split("%")[0])
-        except ValueError:
-            return False, f"unparseable address {addr!r}"
-        if not ip.is_global or ip.is_multicast:
-            return False, f"host resolves to non-public address {ip}"
 
     return True, ""
 
@@ -532,12 +525,14 @@ def _http_get_text(url: str) -> str | None:
     Deliberately NOT routed through `api_cache`: that table is for small JSON
     metadata, and the note itself is the cache for full text.
     """
-    import httpx
+    from hyperresearch.web.safe_http import MAX_BYTES_PDF, safe_get
 
+    # safe_get re-checks every redirect hop; `check_oa_url` only saw the
+    # first URL, and a repository redirect is the easy way past it.
     try:
-        resp = httpx.get(
+        resp = safe_get(
             url,
-            follow_redirects=True,
+            max_bytes=MAX_BYTES_PDF,
             timeout=60,
             headers={"User-Agent": "hyperresearch (mailto:research@example.com)"},
         )

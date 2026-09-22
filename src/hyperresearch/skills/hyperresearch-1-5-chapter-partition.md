@@ -55,13 +55,13 @@ Read these inputs:
 
 4. **Register chapters in the manifest.** For each chapter in the plan:
    ```bash
-   $HPR run event <vault_tag> --type chapter-plan --data '{"chapter": "<id>", "title": "<title>"}' -j
+   {hpr_path} run event <vault_tag> --type chapter-plan --data '{"chapter": "<id>", "title": "<title>"}' -j
    ```
    The `chapter-plan` event is the registration: `run event` folds it into the manifest's `chapters` table (status `planned`), which is what `run status` / `run resume` read as `chapters_pending`. A chapter stays pending until its step 10 is recorded done with `--chapter <id>`. Then close the step:
    ```bash
-   $HPR run step <vault_tag> 1.5 --status done -j
+   {hpr_path} run step <vault_tag> 1.5 --status done -j
    ```
-   Verify before moving on: `$HPR run resume <vault_tag> -j` must list every chapter id under `chapters_pending`. An empty list here means the chapters were never registered and a resumed run would think there is nothing left to do.
+   Verify before moving on: `{hpr_path} run resume <vault_tag> -j` must list every chapter id under `chapters_pending`. An empty list here means the chapters were never registered and a resumed run would think there is nothing left to do.
 
 5. **Chapter tagging convention.** Every note fetched or written for a chapter carries BOTH tags: `<vault_tag>` and `<vault_tag>-<id>` (e.g. `china-rail-x9f2a1-ch3`). Whole-run queries use the first; per-chapter queries use the second. Cross-chapter source reuse is free — dedup is by URL, and a chapter's coverage check searches the whole `<vault_tag>` corpus before fetching.
 
@@ -76,10 +76,10 @@ For each chapter (respecting `depends_on`, up to << dissertation.chapter_concurr
    - Artifact paths swap `research/runs/<vault_tag>/` for `research/runs/<vault_tag>/chapters/<id>/` (each chapter has its own loci.json, comparisons.md, temp/).
    - Source targets come from `chapter_source_target`, not the global `source_target`.
    - Step 10 writes ONE draft per chapter to `research/runs/<vault_tag>/chapters/<id>/draft.md` (draft_count is 1 for chaptered profiles — angle diversity comes from the chapters themselves).
-2. Record progress: `$HPR run step <vault_tag> <N> --status done --chapter <id> -j` after each chapter-step completes.
+2. Record progress: `{hpr_path} run step <vault_tag> <N> --status done --chapter <id> -j` after each chapter-step completes.
 3. After ALL chapters finish step 10, proceed to the global layers: step 6 re-runs GLOBALLY (cross-CHAPTER tensions from the chapters' comparisons.md files → `research/runs/<vault_tag>/comparisons.md`), then step 11 synthesizes the chapter drafts into the final document (chapter titles become H1s), then steps 12-16 run once against the whole document.
 
-**Budget check at every chapter boundary:** `$HPR run status <vault_tag> -j`. If `status` is `blocked` with `blocked_on: "budget"`, STOP spawning and surface to the user. Never silently skip profile-mandated steps — shrink the NEXT chapter's fan-out (fewer wave-2 fetchers, lower depth budgets) when `budget_remaining_usd` is under ~30% instead.
+**Budget check at every chapter boundary:** `{hpr_path} run status <vault_tag> -j`. If `status` is `blocked` with `blocked_on: "budget"`, STOP spawning and surface to the user. Never silently skip profile-mandated steps — shrink the NEXT chapter's fan-out (fewer wave-2 fetchers, lower depth budgets) when `budget_remaining_usd` is under ~30% instead.
 
 ---
 

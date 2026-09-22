@@ -104,6 +104,15 @@ class TestCiteCheckExtraction:
         assert len(strong) == 5      # 100% of number-bearing
         assert len(weak) == 5        # every 2nd weak pair
 
+    @pytest.mark.parametrize(("rate", "expected"), [(0.6, 6), (0.3, 3), (1.0, 10), (0.0, 0)])
+    def test_sampling_hits_the_configured_rate(self, rate, expected):
+        # round(1 / 0.6) is 2, so the every-k-th rule sampled 0.6 as 50%.
+        pairs = [
+            {"verdict": "needs-llm", "strong": False, "sentence": f"w{i}", "numbers": []}
+            for i in range(10)
+        ]
+        assert len(sample_needs_llm(pairs, sample_rate=rate)) == expected
+
     def test_citecheck_cli(self, cited_vault, monkeypatch):
         from typer.testing import CliRunner
 

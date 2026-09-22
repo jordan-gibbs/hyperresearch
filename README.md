@@ -29,7 +29,7 @@
 - **Paywalled papers get read, not skimmed.** A closed paper normally enters a vault as a 1,500-character abstract that the report then cites as though it had been read. Hyperresearch asks Unpaywall, Europe PMC and CORE for a legal open-access copy and stores the full text instead, even when the publisher blocks the fetch outright. Every substitution is disclosed in the note, the frontmatter, and the CLI output.
 - **Nothing is thrown away.** Every source lands in a searchable markdown-plus-SQLite vault that your next session reuses before it fetches anything new.
 - **Crashed runs resume.** Each run keeps a manifest; `run resume` picks up at the exact step where it died.
-- **Scales from 30 minutes to a dissertation.** Bounded queries auto-route to a 5-step fast path. Opt-in dissertation runs write 25K–80K words across chapters, from 300–450 sources.
+- **Scales from 30 minutes to a dissertation.** Bounded queries auto-route to a 5-step fast path. Opt-in dissertation runs (experimental) write 25K–80K words across chapters, from 300–450 sources.
 
 ## Install
 
@@ -40,7 +40,7 @@ pip install hyperresearch && hyperresearch install
 
 Then `/hyperresearch <anything>` in Claude Code.
 
-> Python 3.11–3.13. (3.14 not yet supported. Use `pyenv install 3.13`, `uv venv -p 3.13`, or `py -3.13 -m venv .venv`.)
+> Python 3.11–3.14.
 >
 > Power users: `hyperresearch install --global` makes `/hyperresearch` reachable from every Claude Code session anywhere, at the cost of ~15 lines in every session's system reminder. Per-project install (above) keeps unrelated CC sessions clean.
 
@@ -73,13 +73,13 @@ The entry skill is a thin router. It pins down the canonical research query, the
 
 ### Tiers and gears: the two scale levers
 
-**Tiers** route per query. Step 1 auto-classifies `light` vs `full`. `dissertation` is opt-in only; ask for it in your prompt.
+**Tiers** route per query. Step 1 auto-classifies `light` vs `full`. `dissertation` is opt-in only; ask for it in your prompt. It is experimental: its length, read-budget and citation targets are configured but not yet wired in ([#103](https://github.com/jordan-gibbs/hyperresearch/issues/103)).
 
 | Tier | What runs | Typical time |
 |---|---|---|
 | `light` | bounded factual queries, surveys, comparisons: 1 → 2 → 10 → 15 → 16 | ~30–40 min |
 | `full` (default) | deep argumentative analysis with adversarial review: all 16 steps + cite-check | ~1.5–2.5 h at `full` gear |
-| `dissertation` | chaptered mega-runs: 300–450 sources across 4–10 chapters, 25K–80K words | ~4–8 hours |
+| `dissertation` (experimental) | chaptered mega-runs: 300–450 sources across 4–10 chapters, 25K–80K words | ~4–8 hours |
 
 **Gears** set the scale of the standard pipeline: the source targets, depth budgets, and word targets rendered into the step skills.
 

@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
         include:
           # The maintainer develops on Windows; socket, path and signal
           # semantics differ enough (#104) that ubuntu-only checks cannot

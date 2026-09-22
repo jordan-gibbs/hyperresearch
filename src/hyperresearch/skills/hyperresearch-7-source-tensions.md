@@ -26,7 +26,7 @@ Read these inputs:
 - `research/runs/<vault_tag>/scaffold.md` — vault_tag
 - `research/runs/<vault_tag>/comparisons.md` — cross-locus tensions
 - `research/runs/<vault_tag>/temp/contradiction-graph.json` (if step 3 ran)
-- Survey vault: `$HPR note list --tag <vault_tag> --all -j` for the << p.tension_survey|dash >> highest-quality non-deprecated sources
+- Survey vault: `{hpr_path} note list --tag <vault_tag> --all -j` for the << p.tension_survey|dash >> highest-quality non-deprecated sources
 
 ---
 
@@ -34,7 +34,7 @@ Read these inputs:
 
 1. **Re-read `comparisons.md`.** Each tension there is already a candidate source tension. Extract: the two positions, the strongest evidence for each, your preliminary reading of which side has the better case.
 
-2. **Scan the width corpus for orphan tensions.** For the << p.tension_survey|dash >> highest-quality non-deprecated sources, then **read the full body** of the top << p.tension_full_reads|dash >> sources most likely to contain disagreements — use `$HPR note show <id1> <id2> ... -j` in batches. **Tensions hide in nuance that summaries flatten:** a source's "however" clause, a footnote caveat, a methodological critique buried in a discussion section. You cannot extract tensions you haven't read. Look for:
+2. **Scan the width corpus for orphan tensions.** For the << p.tension_survey|dash >> highest-quality non-deprecated sources, then **read the full body** of the top << p.tension_full_reads|dash >> sources most likely to contain disagreements — use `{hpr_path} note show <id1> <id2> ... -j` in batches. **Tensions hide in nuance that summaries flatten:** a source's "however" clause, a footnote caveat, a methodological critique buried in a discussion section. You cannot extract tensions you haven't read. Look for:
    - Sources that explicitly disagree with each other (different conclusions from similar evidence)
    - Sources that use competing theoretical frameworks to explain the same phenomenon
    - Sources where one side cites data the other side ignores

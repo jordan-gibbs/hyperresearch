@@ -25,7 +25,7 @@ description: >
 Read these inputs:
 - `research/runs/<vault_tag>/scaffold.md` — vault_tag
 - `research/runs/<vault_tag>/loci.json` — scored loci
-- All interim notes: `$HPR note list --tag <vault_tag> --type interim --all --json` then `$HPR note show <id1> <id2> ... -j`
+- All interim notes: `{hpr_path} note list --tag <vault_tag> --type interim --all --json` then `{hpr_path} note show <id1> <id2> ... -j`
 
 You need the `## Committed position` section from every interim note in your context.
 

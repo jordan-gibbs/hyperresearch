@@ -39,13 +39,19 @@ def _get_render_state() -> dict:
     return _RENDER_STATE
 
 
-def _render_installed(content: str) -> str:
-    """Render a prompt template and stamp the provenance header."""
+def _render_installed(content: str, hpr_path: str = "hyperresearch") -> str:
+    """Render a prompt template, resolve `{hpr_path}`, and stamp the provenance header.
+
+    Skills spell the CLI `{hpr_path}`, the placeholder the agent prompts fill
+    with `.format()`. Skills carry literal braces elsewhere, so this is a plain
+    replace rather than a format call.
+    """
     from hyperresearch import __version__
     from hyperresearch.core.render import insert_after_frontmatter, render_header, render_prompt
 
     state = _get_render_state()
     rendered = render_prompt(content, state["context"])
+    rendered = rendered.replace("{hpr_path}", hpr_path.replace("\\", "/"))
     header = render_header(state["profile_name"], __version__)
     return insert_after_frontmatter(rendered, header)
 
@@ -3587,8 +3593,8 @@ def install_hooks(
 
     for installer in (
         lambda: _install_claude_hook(vault_root, hpr_path),
-        lambda: _install_hyperresearch_skill(vault_root),
-        lambda: _install_hyperresearch_step_skills(vault_root),
+        lambda: _install_hyperresearch_skill(vault_root, hpr_path),
+        lambda: _install_hyperresearch_step_skills(vault_root, hpr_path),
         lambda: _install_researcher_agent(vault_root, hpr_path),
         lambda: _install_loci_analyst_agent(vault_root, hpr_path),
         lambda: _install_depth_investigator_agent(vault_root, hpr_path),
@@ -3649,7 +3655,7 @@ def install_global_hooks(
     actions = []
 
     for installer in (
-        lambda: _install_hyperresearch_skill(home),
+        lambda: _install_hyperresearch_skill(home, hpr_path),
         lambda: _install_researcher_agent(home, hpr_path),
         lambda: _install_loci_analyst_agent(home, hpr_path),
         lambda: _install_depth_investigator_agent(home, hpr_path),
@@ -4096,7 +4102,7 @@ def _read_skill_source(src_name: str) -> str | None:
         return None
 
 
-def _install_hyperresearch_skill(vault_root: Path) -> str | None:
+def _install_hyperresearch_skill(vault_root: Path, hpr_path: str = "hyperresearch") -> str | None:
     """Install the entry skill at .claude/skills/hyperresearch/SKILL.md.
 
     Claude Code registers `/hyperresearch` as the slash-command trigger via
@@ -4106,7 +4112,7 @@ def _install_hyperresearch_skill(vault_root: Path) -> str | None:
     content = _read_skill_source("hyperresearch.md")
     if content is None:
         return None
-    content = _render_installed(content)
+    content = _render_installed(content, hpr_path)
 
     skill_dir = vault_root / ".claude" / "skills" / "hyperresearch"
     skill_dir.mkdir(parents=True, exist_ok=True)
@@ -4169,7 +4175,9 @@ def step_skill_slug(step: str | None) -> str | None:
     return STEP_SKILL_BY_ID.get(str(step))
 
 
-def _install_hyperresearch_step_skills(vault_root: Path) -> str | None:
+def _install_hyperresearch_step_skills(
+    vault_root: Path, hpr_path: str = "hyperresearch"
+) -> str | None:
     """Install the 16 V8 step skills, each as its own Claude Code skill directory.
 
     Each step skill lives at `.claude/skills/hyperresearch-N-name/SKILL.md` and is
@@ -4194,7 +4202,7 @@ def _install_hyperresearch_step_skills(vault_root: Path) -> str | None:
         content = _read_skill_source(src_name)
         if content is None:
             continue
-        content = _render_installed(content)
+        content = _render_installed(content, hpr_path)
 
         skill_dir = skills_root / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)

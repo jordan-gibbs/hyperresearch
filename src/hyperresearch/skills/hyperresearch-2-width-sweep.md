@@ -121,7 +121,7 @@ Before batching URLs, score each candidate URL on six dimensions (0–3 each, ma
 
 Write to `research/runs/<vault_tag>/temp/scored-urls.md`.
 
-**Scores travel with the URLs.** When you assign batches (step 2.4), include each URL's composite utility score next to it. Fetchers pass it to `$HPR fetch --utility-score <N>` so the score persists into note frontmatter — it becomes one input to the vault's composite `quality_score`, which step 10 uses for ranked curation.
+**Scores travel with the URLs.** When you assign batches (step 2.4), include each URL's composite utility score next to it. Fetchers pass it to `{hpr_path} fetch --utility-score <N>` so the score persists into note frontmatter — it becomes one input to the vault's composite `quality_score`, which step 10 uses for ranked curation.
 
 ---
 
@@ -169,7 +169,7 @@ Append a few lines with `Edit` or `Write` every 30-60 seconds. Productive thinki
 
 **Vault count check** — once every << p.vault_check_interval_s >> seconds max:
 ```bash
-PYTHONIOENCODING=utf-8 $HPR note list --tag <vault_tag> --all --json | python -c "import sys,json; d=json.load(sys.stdin); print(f'Notes in vault: {len(d.get(\"data\",[]))}')"
+PYTHONIOENCODING=utf-8 {hpr_path} note list --tag <vault_tag> --all --json | python -c "import sys,json; d=json.load(sys.stdin); print(f'Notes in vault: {len(d.get(\"data\",[]))}')"
 ```
 
 The wave is done when the vault note count is ≥<< (p.wave_done_ratio * 100)|int >>% of total URLs queued.
@@ -180,7 +180,7 @@ The wave is done when the vault note count is ≥<< (p.wave_done_ratio * 100)|in
 
 After Wave 1 returns, run the coverage check before proceeding:
 
-1. **List fetched sources:** `$HPR note list --tag <vault_tag> --all --json` — count substantive (non-deprecated) notes.
+1. **List fetched sources:** `{hpr_path} note list --tag <vault_tag> --all --json` — count substantive (non-deprecated) notes.
 
 2. **Map sources → atomic items.** For each atomic item in the decomposition, identify which fetched sources serve it. Mark each item as:
    - **Well-covered** (4+ relevant sources)
@@ -226,10 +226,10 @@ After Wave 1 returns, run the coverage check before proceeding:
 Four commands that turn the corpus into a *ranked* corpus. Run them once, in order, after fetching completes:
 
 ```bash
-$HPR claims ingest --tag <vault_tag> -j          # claims JSONs -> queryable claims table
-$HPR sources backfill-doi --tag <vault_tag> -j   # catch DOIs the fetchers missed
-$HPR sources score --tag <vault_tag> -j          # citation counts + retraction check (cached APIs)
-$HPR graph rank -j                               # vault centrality + composite quality_score
+{hpr_path} claims ingest --tag <vault_tag> -j          # claims JSONs -> queryable claims table
+{hpr_path} sources backfill-doi --tag <vault_tag> -j   # catch DOIs the fetchers missed
+{hpr_path} sources score --tag <vault_tag> -j          # citation counts + retraction check (cached APIs)
+{hpr_path} graph rank -j                               # vault centrality + composite quality_score
 ```
 
 **If `sources score` reports RETRACTED sources:** flag them in `research/runs/<vault_tag>/temp/coverage-gaps.md` immediately — a retracted source must never anchor a locus or survive into drafting as unqualified evidence. The retraction floor also crushes its `quality_score`, so ranked curation (step 10) buries it automatically.
@@ -243,7 +243,7 @@ These commands are local/cached and cost seconds. Skipping them leaves step 10's
 Blocked fetches (login walls, bot walls, captchas) were NOT lost — the fetch gate queued them:
 
 ```bash
-$HPR escalation list --status queued --tag <vault_tag> -j
+{hpr_path} escalation list --status queued --tag <vault_tag> -j
 ```
 
 **If queued items exist**, spawn EXACTLY ONE `hyperresearch-browser-fetcher` subagent to drain them (serial, one browser — never spawn two):
@@ -264,7 +264,7 @@ prompt: |
 
   YOUR INPUTS:
   - vault_tag: <vault_tag>
-  - drain up to 10 items (claim via `$HPR escalation claim --tag <vault_tag>`)
+  - drain up to 10 items (claim via `{hpr_path} escalation claim --tag <vault_tag>`)
 
   RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/research.md here, verbatim.
 ```
@@ -273,8 +273,8 @@ prompt: |
 
 1. **Consolidate into ONE message to the user** — never one interruption per URL:
    > "3 sources need you: [site A: solve the CAPTCHA], [site B: log in], [site C: approve 2FA]. Open them in Chrome, complete the challenges, then tell me 'done' (or 'skip')."
-2. In non-interactive (`-p`) runs where no user can answer: record `$HPR run block <vault_tag> --on human-challenges -j` and CONTINUE the pipeline with everything else — the queue drains on the next `hpr run resume`.
-3. After the user says done: `$HPR escalation retry <id>` each item, re-spawn the browser-fetcher once, then re-run step 2.7's ranking commands so the new sources are scored.
+2. In non-interactive (`-p`) runs where no user can answer: record `{hpr_path} run block <vault_tag> --on human-challenges -j` and CONTINUE the pipeline with everything else — the queue drains on the next `hpr run resume`.
+3. After the user says done: `{hpr_path} escalation retry <id>` each item, re-spawn the browser-fetcher once, then re-run step 2.7's ranking commands so the new sources are scored.
 
 **If the Claude-in-Chrome extension is unavailable**, the queue simply accumulates — report the queued count in your wave summary and move on. Abandoned/queued items are exactly the pre-4.0 status quo (lost sources), never worse.
 
@@ -296,7 +296,7 @@ Substantive (non-deprecated) note counts. The `full` row reflects the installed 
 When a single long source (><< p.source_analyst_word_trigger >> words) is load-bearing, delegate end-to-end analysis to `hyperresearch-source-analyst` (full-source deep read):
 
 Trigger conditions (ALL three must hold):
-1. **Length:** source's `word_count` (visible on `$HPR note show <id> -j`) exceeds ~<< p.source_analyst_word_trigger >> words
+1. **Length:** source's `word_count` (visible on `{hpr_path} note show <id> -j`) exceeds ~<< p.source_analyst_word_trigger >> words
 2. **Relevance:** source is relevant to the research_query
 3. **No existing analysis:** no `type: source-analysis` note already exists for this source
 

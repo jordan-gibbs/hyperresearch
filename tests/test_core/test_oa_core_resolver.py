@@ -8,6 +8,7 @@ CORE, which needs a bearer header that the older layer cannot send.
 from __future__ import annotations
 
 import json
+import socket
 from typing import ClassVar
 
 import pytest
@@ -74,7 +75,7 @@ def _result(content: str, url: str = "https://publisher.example.com/doi/10.1/x",
 @pytest.fixture
 def public_dns(monkeypatch):
     monkeypatch.setattr(
-        oa.socket, "getaddrinfo", lambda host, port: [(2, 1, 6, "", ("93.184.216.34", 0))]
+        socket, "getaddrinfo", lambda host, port: [(2, 1, 6, "", ("93.184.216.34", 0))]
     )
 
 
@@ -470,7 +471,7 @@ class TestUrlGate:
         _stub_legacy(monkeypatch, {})
         _stub_core(monkeypatch, {"search/works": _search_hit(rec)})
         monkeypatch.setattr(
-            oa.socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("169.254.169.254", 0))]
+            socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("169.254.169.254", 0))]
         )
         tried = _stub_pdf(monkeypatch, _result(FULL_TEXT))
         original = _result(ABSTRACT)
@@ -483,7 +484,7 @@ class TestUrlGate:
         id is theirs, and the gate is cheap."""
         _stub_legacy(monkeypatch, {})
         core_calls = _stub_core(monkeypatch, {"search/works": _search_hit(), "/works/": _work()})
-        monkeypatch.setattr(oa.socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("10.0.0.5", 0))])
+        monkeypatch.setattr(socket, "getaddrinfo", lambda h, p: [(2, 1, 6, "", ("10.0.0.5", 0))])
         _stub_pdf(monkeypatch, None)
         original = _result(ABSTRACT)
         out, loc = oa.recover_full_text(vault, None, "https://p/x", DOI, original)
@@ -500,7 +501,7 @@ class TestUrlGate:
             addr = "169.254.169.254" if host.startswith("169.") else "93.184.216.34"
             return [(2, 1, 6, "", (addr, 0))]
 
-        monkeypatch.setattr(oa.socket, "getaddrinfo", dns)
+        monkeypatch.setattr(socket, "getaddrinfo", dns)
         tried = _stub_pdf(monkeypatch, lambda url: _result(PDF_TEXT, url=url))
         _, loc = oa.recover_full_text(vault, None, "https://p/x", DOI, _result(ABSTRACT))
         assert tried == [SOURCE_PDF]

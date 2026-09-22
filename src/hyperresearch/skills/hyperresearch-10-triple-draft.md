@@ -30,7 +30,7 @@ Read these inputs:
 - `research/runs/<vault_tag>/comparisons.md` (full tier) — cross-locus tensions
 - `research/runs/<vault_tag>/temp/source-tensions.json` (full tier) — expert disagreements
 - `research/runs/<vault_tag>/temp/coverage-gaps.md` (if exists) — items with weak source coverage
-- Survey vault: `$HPR note list --tag <vault_tag> --all -j` for the evidence landscape
+- Survey vault: `{hpr_path} note list --tag <vault_tag> --all -j` for the evidence landscape
 - Modality calibration (from the scaffold's `modality` field):
   - **collect** — enumerative coverage, per-entity sections with named fields
   - **synthesize** — defended thesis with evidence chains, interpretive density
@@ -59,7 +59,7 @@ If `pipeline_tier == "light"`: SKIP step 10.1 — 10.3 below and follow this sec
 
 **Light tier writes a single draft directly to `research/notes/final_report_<vault_tag>.md`.** No subagents, no triple-draft ensemble, no synthesizer.
 
-1. **Read the vault directly.** Light tier has no `evidence-digest.md` (step 9 was skipped). Survey the vault: `$HPR note list --tag <vault_tag> --all -j` and pick the << p.single_draft_reads|dash >> most relevant non-deprecated notes. Read each one (`$HPR note show <id1> <id2> ... -j`) before writing.
+1. **Read the vault directly.** Light tier has no `evidence-digest.md` (step 9 was skipped). Survey the vault: `{hpr_path} note list --tag <vault_tag> --all -j` and pick the << p.single_draft_reads|dash >> most relevant non-deprecated notes. Read each one (`{hpr_path} note show <id1> <id2> ... -j`) before writing.
 
 2. **Honor the structural contract.**
    - Use the literal H2 headings from `required_section_headings` in `research/runs/<vault_tag>/prompt-decomposition.json`, in order.
@@ -101,13 +101,13 @@ Write the 3 angle assignments to `research/runs/<vault_tag>/temp/draft-angles.md
 
 1. **List all substantive vault notes:**
    ```bash
-   $HPR note list --tag <vault_tag> --all --json
+   {hpr_path} note list --tag <vault_tag> --all --json
    ```
    Filter to non-deprecated notes. You should have 50-100 candidates.
 
    **Rank the pool before picking.** For each atomic item, run a quality-ranked search to surface the best-evidence sources first:
    ```bash
-   $HPR search "<atomic item keywords>" --tag <vault_tag> --ranked -j
+   {hpr_path} search "<atomic item keywords>" --tag <vault_tag> --ranked -j
    ```
    `--ranked` folds the composite `quality_score` (tier + utility + citation authority + vault centrality, retractions floored) into relevance. Prefer high-quality sources when two candidates cover the same ground; a note with `quality_score` near the retraction floor should not appear in any must_read list unless the draft explicitly discusses its retraction.
 
