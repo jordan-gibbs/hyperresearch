@@ -46,6 +46,8 @@ def research(
         provider_name or vault.config.web_provider,
         profile=vault.config.web_profile,
         magic=vault.config.web_magic,
+        settings=vault.config.fetch,
+        gates=vault.config.junk,
     )
 
     # Step 1: Search
@@ -70,6 +72,13 @@ def research(
                 f"[red]Provider '{prov.name}' cannot search.[/] "
                 "Use your agent's built-in search, then pipe URLs into 'hyperresearch fetch'."
             )
+        raise typer.Exit(1)
+
+    except (RuntimeError, ValueError) as e:
+        if json_output:
+            output(error(str(e), "SEARCH_FAILED"), json_mode=True)
+        else:
+            console.print(f"Search failed: {e}", markup=False)
         raise typer.Exit(1)
 
     if not search_results:
@@ -220,10 +229,9 @@ def research(
     if json_output:
         output(success(data, count=len(created_notes), vault=str(vault.root)), json_mode=True)
     else:
-        console.print(
-            f"\n[bold]Done:[/] {len(created_notes)} notes created. "
-            f"Start with: hyperresearch note show {created_notes[-1]['note_id']} -j"
-        )
+        console.print(f"\n[bold]Done:[/] {len(created_notes)} notes created.")
+        if created_notes:
+            console.print(f"Start with: hyperresearch note show {created_notes[-1]['note_id']} -j")
 
 
 def _save_result(vault, conn, prov, result, tags, parent) -> dict | None:
@@ -233,7 +241,7 @@ def _save_result(vault, conn, prov, result, tags, parent) -> dict | None:
     url = result.url
 
     # Skip login redirects
-    if result.looks_like_login_wall(url):
+    if result.looks_like_login_wall(url, vault.config.junk):
         return None
 
     # Skip if already fetched (an orphaned row — note deleted — is not a duplicate)

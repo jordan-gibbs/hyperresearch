@@ -236,7 +236,12 @@ def get_provider(
 
         return SerplyProvider()
 
+    if name == "anysearch":
+        from hyperresearch.web.anysearch_provider import AnySearchProvider
+
+        return AnySearchProvider(settings=settings, gates=gates)
+
     raise ValueError(
         f"Unknown web provider: {name!r}. "
-        "Available: builtin, crawl4ai, exa, tavily, parallel, serply"
+        "Available: builtin, crawl4ai, exa, tavily, parallel, serply, anysearch"
     )

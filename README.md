@@ -266,6 +266,7 @@ The `[web] provider` setting in `.hyperresearch/config.toml` picks how pages are
 - **`tavily`** — search and extraction built for agents. Needs an API key. `pip install "hyperresearch[tavily]"`.
 - **`parallel`** — [Parallel](https://parallel.ai/)'s Search MCP endpoint, which needs no account or key. Search only — bulk fetch waves degrade to per-URL, so it is a good search provider rather than a replacement for the crawl4ai fetch path. Every request from one process carries a random session ID that Parallel uses for correlation and rate limiting on its side. `pip install "hyperresearch[parallel]"`.
 - **`serply`** — [Serply](https://serply.io)'s Google search API, with page fetch through the same key ([API docs](https://serply.io/docs)). Search results are fetched to full page text, falling back to the snippet when a page cannot be fetched. Needs an API key; no extra install.
+- **`anysearch`** — [AnySearch](https://anysearch.com)'s search and web-page extraction through the existing `research` and `fetch` commands. Research fetches result pages and falls back to search excerpts when a page is unavailable or blocked. Extracted text is capped at 8,000 characters by default. Works anonymously; optional `ANYSEARCH_API_KEY` for higher limits. No extra install. The provider's Python interface also supports vertical capability discovery and concurrent batch search. See the [AnySearch guide](docs/anysearch.md) for setup and development notes.
 
 ```toml
 # .hyperresearch/config.toml

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 
+import httpx
 import pytest
 from typer.testing import CliRunner
 
@@ -270,3 +271,141 @@ def test_export_json(vault_dir: Path):
     result = runner.invoke(app, ["export", "json", "--output", "exports/test.json"])
     assert result.exit_code == 0
     assert (vault_dir / "exports" / "test.json").exists()
+
+
+@pytest.fixture
+def anysearch_api(monkeypatch):
+    """Use the real AnySearch provider while keeping its HTTP calls offline."""
+    page_text = "# Reliable source\n\n" + "Evidence with full text and preserved provenance. " * 12
+    monkeypatch.delenv("ANYSEARCH_API_KEY", raising=False)
+
+    def handler(_transport, request):
+        assert request.url.host == "api.anysearch.com"
+        if request.url.path == "/v1/search":
+            if json.loads(request.content)["query"] == "fail":
+                return httpx.Response(429, json={"code": -1, "message": "Rate limited"})
+            data = {"results": [{
+                "url": "https://example.com/research", "title": "Research",
+                "content": "A short search excerpt.",
+            }]}
+        elif request.url.path == "/v1/extract":
+            data = {"url": json.loads(request.content)["url"], "title": "Research", "content": page_text}
+        else:
+            pytest.fail(f"unexpected HTTP path: {request.url.path}")
+        return httpx.Response(200, json={"code": 0, "data": data})
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", handler)
+    return page_text
+
+
+@pytest.mark.parametrize("command", ["fetch", "research"])
+def test_commands_persist_anysearch_sources(anysearch_api, tmp_vault, monkeypatch, command):
+    monkeypatch.chdir(tmp_vault.root)
+    value = "https://example.com/research" if command == "fetch" else "research query"
+    result = runner.invoke(app, [command, value, "--provider", "anysearch", "--json"])
+    assert result.exit_code == 0, result.output
+    row = tmp_vault.db.execute(
+        "SELECT note_id, provider FROM sources WHERE url = ?", ("https://example.com/research",)
+    ).fetchone()
+    assert row is not None
+    assert row["provider"] == "anysearch"
+    note = tmp_vault.notes_dir / f"{row['note_id']}.md"
+    assert anysearch_api in note.read_text(encoding="utf-8")
+
+
+def test_research_anysearch_api_failure_is_structured(anysearch_api, tmp_vault, monkeypatch):
+    monkeypatch.chdir(tmp_vault.root)
+    result = runner.invoke(app, ["research", "fail", "--provider", "anysearch", "--json"])
+    assert result.exit_code == 1
+    envelope = json.loads(result.output)
+    assert envelope["ok"] is False
+    assert "Rate limited" in envelope["error"]
+
+
+def test_research_passes_configured_timeout_to_search_and_extract(anysearch_api, tmp_vault, monkeypatch):
+    from dataclasses import replace
+
+    tmp_vault.config.fetch = replace(tmp_vault.config.fetch, page_timeout_ms=1750)
+    tmp_vault.config.save(tmp_vault.config_path)
+    monkeypatch.chdir(tmp_vault.root)
+    handle_request = httpx.HTTPTransport.handle_request
+    seen = []
+
+    def capture(transport, request):
+        seen.append((request.url.path, request.extensions["timeout"]))
+        return handle_request(transport, request)
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", capture)
+    result = runner.invoke(app, ["research", "query", "--provider", "anysearch", "--max", "1", "--json"])
+    assert result.exit_code == 0, result.output
+    assert seen == [
+        ("/v1/search", {"connect": 1.75, "read": 1.75, "write": 1.75, "pool": 1.75}),
+        ("/v1/extract", {"connect": 1.75, "read": 1.75, "write": 1.75, "pool": 1.75}),
+    ]
+
+
+@pytest.mark.parametrize("gate", ["junk", "login"])
+def test_research_uses_custom_gates_for_extraction(tmp_vault, monkeypatch, gate):
+    from dataclasses import replace
+
+    field = "extra_junk_signals" if gate == "junk" else "extra_login_signals"
+    tmp_vault.config.junk = replace(tmp_vault.config.junk, **{field: ("custom restriction",)})
+    tmp_vault.config.save(tmp_vault.config_path)
+    monkeypatch.chdir(tmp_vault.root)
+    snippet = "Search summary available."
+
+    def handler(_transport, request):
+        if request.url.path == "/v1/search":
+            data = {"results": [{"url": "https://example.com/research", "title": "Research", "content": snippet}]}
+        else:
+            data = {"url": "https://example.com/research", "title": "Page",
+                    "content": "custom restriction " + "Restricted content. " * 30}
+        return httpx.Response(200, json={"code": 0, "data": data})
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", handler)
+    result = runner.invoke(app, ["research", "q", "--provider", "anysearch", "--json"])
+    assert result.exit_code == 0, result.output
+    row = tmp_vault.db.execute("SELECT note_id FROM sources").fetchone()
+    assert row is not None
+    body = (tmp_vault.notes_dir / f"{row['note_id']}.md").read_text(encoding="utf-8")
+    assert snippet in body
+    assert "Restricted content." not in body
+
+
+def test_research_save_respects_relaxed_login_threshold(tmp_vault, monkeypatch):
+    from dataclasses import replace
+
+    tmp_vault.config.junk = replace(tmp_vault.config.junk, login_wall_max_chars=0)
+    tmp_vault.config.save(tmp_vault.config_path)
+    monkeypatch.chdir(tmp_vault.root)
+    page_text = "This tutorial explains authentication. " + "Implementation details. " * 25
+
+    def handler(_transport, request):
+        item = {"url": "https://example.com/article", "title": "Tutorial", "content": page_text}
+        data = {"results": [item]} if request.url.path == "/v1/search" else item
+        return httpx.Response(200, json={"code": 0, "data": data})
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", handler)
+    result = runner.invoke(app, ["research", "q", "--provider", "anysearch", "--json"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["data"]["total_fetched"] == 1
+
+
+def test_research_reports_zero_notes_when_custom_login_gate_filters_all(tmp_vault, monkeypatch):
+    from dataclasses import replace
+
+    tmp_vault.config.junk = replace(tmp_vault.config.junk, extra_login_signals=("members only",))
+    tmp_vault.config.save(tmp_vault.config_path)
+    monkeypatch.chdir(tmp_vault.root)
+
+    def handler(_transport, request):
+        item = {"url": "https://example.com/article", "title": "Article",
+                "content": "Members only. " + "Source evidence. " * 25}
+        data = {"results": [item]} if request.url.path == "/v1/search" else item
+        return httpx.Response(200, json={"code": 0, "data": data})
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", handler)
+    result = runner.invoke(app, ["research", "q", "--provider", "anysearch"])
+    assert result.exit_code == 0, result.output
+    assert "0 notes created" in result.output
+    assert tmp_vault.db.execute("SELECT COUNT(*) FROM sources").fetchone()[0] == 0
