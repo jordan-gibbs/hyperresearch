@@ -104,7 +104,7 @@ CREATE VIRTUAL TABLE claims_fts USING fts5(claim, quoted_support, content='claim
 
 ### WS6 — Embeddings revival: semantic search (L)
 
-**Design.** Populate the dormant `embeddings` table (`core/db.py:88-94`). Pluggable provider via config `[embeddings]`: `provider = "none" | "voyage" | "openai" | "local"` (voyage-3-lite-class API models are cheap and good; `local` via sentence-transformers stays an optional extra to avoid a heavy default dependency). Embed title + summary + first ~1500 body chars per note; store float32 BLOBs; brute-force cosine at query time (fine to ~50k notes; no vector-DB dependency).
+**Design.** Populate the dormant `embeddings` table (`core/db.py:88-94`). Pluggable provider via config `[embeddings]`: `provider = "none" | "voyage" | "openai" | "local"` (voyage-3-lite-class API models are cheap and good; `local` via sentence-transformers stays an optional extra to avoid a heavy default dependency). Embed title + summary + first ~1500 body chars per note; store float32 BLOBs; brute-force cosine at query time, vectorized as one numpy matmul against every stored vector rather than a Python call per note (see #59; no vector-DB dependency needed at the sizes this tool produces).
 
 **Surface.** `hpr embed sync` (embed new/changed notes), `hpr search --semantic "<q>"`, and hybrid `--ranked --semantic` (reciprocal-rank-fusion of FTS and cosine lists). Pipeline use: step-10 curation and step-13 gap-check ("does the vault already cover X?") — semantic match catches conceptually-relevant sources FTS keyword match misses, which matters at 300+ sources.
 
