@@ -1,6 +1,6 @@
 """Tests for link parsing and graph operations."""
 
-from hyperresearch.core.note import CODE_BLOCK_RE, INLINE_CODE_RE, WIKI_LINK_RE
+from hyperresearch.core.patterns import WIKI_LINK_RE, strip_code
 
 
 def test_wiki_link_regex_simple():
@@ -25,7 +25,7 @@ def test_wiki_link_regex_multiple():
 
 def test_wiki_link_not_in_code_block():
     text = "```python\n[[not-a-link]]\n```\n\n[[real-link]]"
-    cleaned = CODE_BLOCK_RE.sub("", text)
+    cleaned = strip_code(text)
     matches = WIKI_LINK_RE.findall(cleaned)
     assert len(matches) == 1
     assert "real-link" in matches[0]
@@ -33,11 +33,89 @@ def test_wiki_link_not_in_code_block():
 
 def test_wiki_link_not_in_inline_code():
     text = "Use `[[not-a-link]]` but also [[real-link]]"
-    cleaned = INLINE_CODE_RE.sub("", text)
+    cleaned = strip_code(text)
     matches = WIKI_LINK_RE.findall(cleaned)
     assert len(matches) == 1
     assert "real-link" in matches[0]
 
+
+def _links(text: str) -> list[str]:
+    return WIKI_LINK_RE.findall(strip_code(text))
+
+
+# --- Fence length is honoured (#140) ------------------------------------------
+
+
+def test_issue_140_odd_inner_fence_does_not_leak():
+    # The #129 builtin provider fences a <pre> holding ``` with ````.
+    text = "````\n```\n[[ -n y ]]\n````\n\n[[real-link]]"
+    assert _links(text) == ["real-link"]
+
+
+def test_longer_outer_fence_holds_inner_fenced_block():
+    text = (
+        "`````markdown\n"
+        "```bash\n[[ -f x ]]\n```\n"
+        "````\n[[inside-too]]\n"
+        "`````\n"
+        "after [[real-link]]"
+    )
+    assert _links(text) == ["real-link"]
+
+
+def test_closing_fence_may_be_longer_than_opening():
+    text = "```\n[[code]]\n`````\n[[real-link]]"
+    assert _links(text) == ["real-link"]
+
+
+def test_fence_line_with_trailing_text_does_not_close():
+    text = "```\n``` not a closer [[code]]\n```\n[[real-link]]"
+    assert _links(text) == ["real-link"]
+
+
+def test_indented_fence_in_list_item():
+    text = "- step:\n    ```bash\n    [[ -n y ]]\n    ```\n- see [[real-link]]"
+    assert _links(text) == ["real-link"]
+
+
+def test_unclosed_fence_runs_to_end_of_text():
+    # CommonMark: an unclosed fence runs to the end of the document. Losing
+    # the links after a broken fence beats parsing the code as links.
+    text = "[[before]]\n```\n[[ -n y ]]\n[[swallowed]]"
+    assert _links(text) == ["before"]
+
+
+def test_double_backtick_span_holding_single_backtick():
+    text = "Run `` echo `x` [[x]] `` then read [[real-link]]"
+    assert _links(text) == ["real-link"]
+
+
+def test_inline_span_closes_only_on_equal_length_run():
+    text = "`a``[[x]]` and ``b`[[y]]`` and [[real-link]]"
+    assert _links(text) == ["real-link"]
+
+
+def test_mid_line_triple_backticks_are_an_inline_span():
+    # Not a fence (not at line start), so it is an inline span of length 3,
+    # stripped as the old regex did.
+    text = "Use ```[[x]]``` or [[real-link]]"
+    assert _links(text) == ["real-link"]
+
+
+def test_unmatched_backtick_run_is_literal():
+    text = "a stray ` backtick, then [[real-link]] and ``` more [[other]]"
+    assert _links(text) == ["real-link", "other"]
+
+
+def test_stripped_span_cannot_fuse_brackets():
+    assert _links("[`x`[y]]") == []
+
+
+def test_strip_keeps_line_numbers():
+    text = "a\n```\none\ntwo\n```\n`multi\nline`\n[[real-link]]"
+    cleaned = strip_code(text)
+    assert cleaned.count("\n") == text.count("\n")
+    assert cleaned.split("\n")[7] == "[[real-link]]"
 
 def test_backlinks_populated(seeded_vault):
     """Concurrency links to python-async-patterns, so python-async-patterns should have a backlink."""

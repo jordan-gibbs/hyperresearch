@@ -12,10 +12,9 @@ from pathlib import Path
 
 from hyperresearch.core.note import read_note, strip_markdown
 from hyperresearch.core.patterns import (
-    CODE_BLOCK_RE,
-    INLINE_CODE_RE,
     WIKI_LINK_RE,
     is_valid_wiki_link_target,
+    strip_code,
 )
 
 
@@ -316,8 +315,7 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
     # Update links — extract from original body (not stripped)
     # Uses the shared filter so this path stays in sync with core.note.read_note
     conn.execute("DELETE FROM links WHERE source_id = ?", (meta.id,))
-    cleaned = CODE_BLOCK_RE.sub("", note.body)
-    cleaned = INLINE_CODE_RE.sub("", cleaned)
+    cleaned = strip_code(note.body)
     for line_num, line in enumerate(cleaned.split("\n"), 1):
         for m in WIKI_LINK_RE.finditer(line):
             target_ref = m.group(1).strip().rstrip("\\")  # Strip trailing backslash (shell escaping artifact)

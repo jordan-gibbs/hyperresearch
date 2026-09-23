@@ -11,10 +11,9 @@ and the stdlib fallback.
 import pytest
 
 from hyperresearch.core.patterns import (
-    CODE_BLOCK_RE,
-    INLINE_CODE_RE,
     WIKI_LINK_RE,
     is_valid_wiki_link_target,
+    strip_code,
 )
 from hyperresearch.web.builtin import BuiltinProvider, _TextExtractor
 from hyperresearch.web.pdf import PDF_FAILURE_KEY
@@ -39,8 +38,7 @@ kernel="$1"
 
 def _surviving_links(text: str) -> list[str]:
     """The exact strip-then-extract sequence core/note.py runs on a note body."""
-    cleaned = CODE_BLOCK_RE.sub("", text)
-    cleaned = INLINE_CODE_RE.sub("", cleaned)
+    cleaned = strip_code(text)
     raw = (m.group(1).strip().rstrip("\\") for m in WIKI_LINK_RE.finditer(cleaned))
     return [ref for ref in raw if is_valid_wiki_link_target(ref)]
 
@@ -76,6 +74,21 @@ class _BranchContract:
         _, text = self.extract(html)
         assert "````" in text
         assert _surviving_links(text) == []
+
+    def test_odd_backtick_fence_inside_pre_does_not_leak(self):
+        # #140: the fence outgrows the ``` inside, and the strip must honour
+        # that length instead of closing at the inner ```. The second target
+        # passes the link validator, so only the strip stands in its way.
+        html = "<html><body><pre>```\n[[ -n y ]]\n[[looks-like-a-note]]</pre></body></html>"
+        _, text = self.extract(html)
+        assert "````" in text
+        assert WIKI_LINK_RE.findall(strip_code(text)) == []
+
+    def test_inline_code_holding_double_backticks_does_not_leak(self):
+        html = "<html><body><p>Try <code>a``b [[looks-like-a-note]]</code> now.</p></body></html>"
+        _, text = self.extract(html)
+        assert "``` a``b [[looks-like-a-note]] ```" in text
+        assert WIKI_LINK_RE.findall(strip_code(text)) == []
 
     def test_title_and_noise_removal_unchanged(self):
         html = (

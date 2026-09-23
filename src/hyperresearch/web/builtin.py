@@ -29,10 +29,13 @@ from hyperresearch.web.pdf import (
 # Both extraction branches below share these helpers.
 
 
+def _longest_backtick_run(text: str) -> int:
+    return max((len(m.group(0)) for m in re.finditer(r"`+", text)), default=0)
+
+
 def _fence_for(code: str) -> str:
     """Return a backtick fence longer than any backtick run inside the code."""
-    longest = max((len(m.group(0)) for m in re.finditer(r"`+", code)), default=0)
-    return "`" * max(3, longest + 1)
+    return "`" * max(3, _longest_backtick_run(code) + 1)
 
 
 def _fenced(code: str) -> str:
@@ -43,9 +46,15 @@ def _fenced(code: str) -> str:
 
 
 def _inline_code(text: str) -> str:
-    """Wrap inline code in backticks (doubled when the text contains one)."""
+    """Wrap inline code in a backtick run no run inside the text can close.
+
+    A span of N backticks closes at the next run of exactly N, so the
+    delimiter must outrun every run inside; a fixed ```` `` ```` let text
+    holding ```` `` ```` end the span early and leak what followed (#140).
+    """
     if "`" in text:
-        return f"`` {text} ``"
+        ticks = "`" * (_longest_backtick_run(text) + 1)
+        return f"{ticks} {text} {ticks}"
     return f"`{text}`"
 
 
