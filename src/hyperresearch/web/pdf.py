@@ -118,9 +118,10 @@ def safe_get_pdf(url: str, settings: FetchSettings):
     except Exception as exc:
         if settings.pdf_verify_tls and _is_cert_error(exc):
             # Refuse, but say how to opt out for a trusted cert-broken mirror.
-            # Raised as its own type: the browser lane runs with TLS errors
-            # ignored, so treating this like any failed PDF would hand the
-            # URL to a lane that amounts to an automatic unverified retry.
+            # Raised as its own type: the browser lane can run with TLS errors
+            # ignored (browser_verify_tls = false, or the visible lane), so
+            # treating this like any failed PDF would hand the URL to a lane
+            # that amounts to an automatic unverified retry.
             raise CertVerificationError(
                 f"certificate verification failed for {url!r}: {exc}. "
                 "If this host is a known cert-broken mirror you trust, set "
@@ -235,7 +236,7 @@ def fetch_pdf_ex(
 
     A certificate refusal propagates as ``CertVerificationError``: callers
     must not fold it into the generic failure, whose fallback is the
-    TLS-ignoring browser lane.
+    browser lane, which may be configured to ignore TLS errors.
     """
     from hyperresearch.web.safe_http import CertVerificationError, SafeHTTPError
 

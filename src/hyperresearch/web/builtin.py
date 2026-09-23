@@ -218,7 +218,8 @@ class BuiltinProvider:
             # Raise a certificate failure as its own type, the way the PDF lane
             # and the crawl4ai provider do, instead of letting the raw
             # httpx.ConnectError through looking like any other failed fetch.
-            # This lane always verifies TLS; pdf_verify_tls covers PDFs only.
+            # This lane always verifies TLS; pdf_verify_tls covers PDFs only,
+            # and browser_verify_tls the crawl4ai headless browser only.
             if _is_cert_error(exc):
                 raise CertVerificationError(
                     f"certificate verification failed for {url!r}: {exc}"

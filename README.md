@@ -273,6 +273,8 @@ The `[web] provider` setting in `.hyperresearch/config.toml` picks how pages are
 provider = "crawl4ai"
 ```
 
+Every fetch lane verifies TLS certificates by default: `builtin`, the PDF downloads, and crawl4ai's headless browser. A bad certificate fails the fetch with `CertVerificationError`; nothing retries it unverified. For a cert-broken site you trust, set the opt-out for the lane that refused it under `[fetch]`: `browser_verify_tls = false` for crawl4ai's headless browser, `pdf_verify_tls = false` for PDFs. The builtin provider has no opt-out. The visible-window browser used with a login profile (`--visible`, and the LinkedIn / Twitter-style domains) still accepts bad certificates, because some of the walled sites it exists for serve broken chains.
+
 ---
 
 ## Authenticated crawling + the browser lane

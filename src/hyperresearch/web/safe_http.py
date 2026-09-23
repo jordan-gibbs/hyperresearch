@@ -57,7 +57,8 @@ class CertVerificationError(SafeHTTPError):
     """TLS certificate verification failed and verification is required.
 
     Raised distinctly so callers can surface the refusal (and its
-    ``pdf_verify_tls = false`` opt-out) instead of treating it like any
+    ``pdf_verify_tls = false`` or ``browser_verify_tls = false`` opt-out,
+    depending on the lane) instead of treating it like any
     other failed fetch — in particular, a cert-refused URL must never be
     retried through a lane that ignores TLS errors.
     """

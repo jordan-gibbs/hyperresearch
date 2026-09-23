@@ -12,6 +12,7 @@ import asyncio
 import logging
 import os
 import pathlib
+import re
 import sys
 import threading
 from datetime import UTC, datetime
@@ -110,6 +111,90 @@ def _smart_wait_js(settings: FetchSettings) -> str:
     )
 
 
+# Chromium switches crawl4ai adds to EVERY launch, unconditionally
+# (browser_manager.py: BrowserManager._build_browser_args for the plain launch,
+# ManagedBrowser.build_browser_flags for the profile / managed-browser launch).
+# They make the browser process accept any certificate, so
+# BrowserConfig(ignore_https_errors=False) alone verifies nothing: checked
+# against a self-signed server on crawl4ai 0.8.6, the page loads either way
+# until these are removed as well.
+_CERT_IGNORE_FLAGS = frozenset({
+    "--ignore-certificate-errors",
+    "--ignore-certificate-errors-spki-list",
+})
+
+# Chromium's certificate failures: net::ERR_CERT_* (authority, name, date,
+# revoked, weak key, ...), ERR_CERTIFICATE_TRANSPARENCY_REQUIRED, and pinning.
+_CERT_ERROR_RE = re.compile(
+    r"net::(ERR_CERT[A-Z_]*|ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN)\b"
+)
+
+BROWSER_TLS_HINT = (
+    "If this host is a known cert-broken site you trust, set "
+    "browser_verify_tls = false under [fetch] in config.toml."
+)
+
+
+def _cert_error_code(error_message: str | None) -> str | None:
+    """The Chromium cert error code in a failed crawl4ai result, or None.
+
+    crawl4ai does not raise on a navigation failure: ``arun`` returns
+    ``success=False`` with the Playwright error text (``Page.goto:
+    net::ERR_CERT_AUTHORITY_INVALID at https://...``) in ``error_message``.
+    """
+    if not error_message:
+        return None
+    m = _CERT_ERROR_RE.search(error_message)
+    return m.group(1) if m else None
+
+
+def _browser_cert_refusal(url: str, code: str):
+    from hyperresearch.web.safe_http import CertVerificationError
+
+    return CertVerificationError(
+        f"certificate verification failed for {url!r}: {code} (browser lane). "
+        + BROWSER_TLS_HINT
+    )
+
+
+def _strip_cert_ignore_flags(strategy: AsyncPlaywrightCrawlerStrategy) -> None:
+    """Keep crawl4ai from launching Chromium with certificate errors ignored.
+
+    Overrides the two flag builders on THIS strategy's browser manager only
+    (instance attributes, not a patch of the crawl4ai classes). If a crawl4ai
+    upgrade moves either builder, this raises instead of fetching with
+    verification silently off.
+    """
+    bm = strategy.browser_manager
+    build_args = getattr(bm, "_build_browser_args", None)
+    if not callable(build_args):
+        raise RuntimeError(
+            "crawl4ai's BrowserManager._build_browser_args is missing; cannot "
+            "turn off its --ignore-certificate-errors launch flag. "
+            + BROWSER_TLS_HINT
+        )
+
+    def _verified_args() -> dict:
+        args = build_args()
+        args["args"] = [a for a in args.get("args", []) if a not in _CERT_IGNORE_FLAGS]
+        return args
+
+    bm._build_browser_args = _verified_args
+
+    managed = getattr(bm, "managed_browser", None)
+    if managed is not None:
+        build_flags = getattr(type(managed), "build_browser_flags", None)
+        if not callable(build_flags):
+            raise RuntimeError(
+                "crawl4ai's ManagedBrowser.build_browser_flags is missing; cannot "
+                "turn off its --ignore-certificate-errors launch flag. "
+                + BROWSER_TLS_HINT
+            )
+        managed.build_browser_flags = lambda config: [
+            f for f in build_flags(config) if f not in _CERT_IGNORE_FLAGS
+        ]
+
+
 def _check_final_url(entry_url: str, final_url: str | None, settings: FetchSettings) -> None:
     """Re-validate the URL the browser actually ended up on.
 
@@ -168,6 +253,10 @@ class Crawl4AIProvider:
             browser_kwargs["user_data_dir"] = data_dir
         if cookies:
             browser_kwargs["cookies"] = cookies
+        # crawl4ai defaults ignore_https_errors to True; verify unless the
+        # operator opted out (#137). _make_crawler also strips the launch
+        # flags that would otherwise override this.
+        browser_kwargs["ignore_https_errors"] = not self._settings.browser_verify_tls
 
         self._browser_config = BrowserConfig(**browser_kwargs)
 
@@ -201,6 +290,8 @@ class Crawl4AIProvider:
             browser_config=self._browser_config,
             browser_adapter=UndetectedAdapter(),
         )
+        if self._settings.browser_verify_tls:
+            _strip_cert_ignore_flags(strategy)
         return AsyncWebCrawler(crawler_strategy=strategy, config=self._browser_config)
 
     def fetch(self, url: str) -> WebResult:
@@ -251,6 +342,10 @@ class Crawl4AIProvider:
         from playwright.async_api import async_playwright
 
         async with async_playwright() as pw:
+            # Certificate errors stay ignored here, whatever browser_verify_tls
+            # says (#137): this lane exists for login- and bot-walled sites
+            # reached through the user's own profile, and some of those serve
+            # broken chains. The final-URL recheck below still applies.
             context = await pw.chromium.launch_persistent_context(
                 user_data_dir=self._data_dir,
                 headless=False,
@@ -298,6 +393,12 @@ class Crawl4AIProvider:
     async def _fetch_async(self, url: str) -> WebResult:
         async with self._make_crawler() as crawler:
             result = await crawler.arun(url=url, config=self._run_config)
+            # A refused certificate is final, like on the builtin and PDF
+            # lanes: no unverified retry, no escalation. Without this it came
+            # back as an empty page and was reported as junk.
+            code = _cert_error_code(getattr(result, "error_message", None))
+            if code and not getattr(result, "success", True):
+                raise _browser_cert_refusal(url, code)
             # crawl4ai's result.url is the REQUESTED url even after the
             # browser followed redirects; the landing url is redirected_url
             # (hermetic-tier proven — rechecking result.url alone is blind).
@@ -384,7 +485,8 @@ class Crawl4AIProvider:
         # back to the browser path — mirrors the single-fetch behaviour in
         # fetch() so batch callers don't silently lose academic PDFs that
         # need JS-rendered landing pages. Cert refusals are the exception:
-        # the browser lane ignores TLS errors, so falling back would be an
+        # the browser lane may run with TLS errors ignored
+        # (browser_verify_tls = false), so falling back would be an
         # automatic unverified retry. A batch has no per-URL failure
         # channel, so the skip is logged loudly instead.
         failed_pdf_urls = []
@@ -410,8 +512,22 @@ class Crawl4AIProvider:
         if browser_urls:
             async with self._make_crawler() as crawler:
                 results = await crawler.arun_many(urls=browser_urls, config=self._run_config)
-                for cr, url in zip(results, browser_urls, strict=False):
+                requested = set(browser_urls)
+                for cr, zipped_url in zip(results, browser_urls, strict=False):
+                    # arun_many yields results in COMPLETION order, not input
+                    # order, so zip() alone mislabels them. A result's .url is
+                    # the URL it was asked for; trust that when it is one of ours.
+                    cr_url = getattr(cr, "url", None)
+                    url = cr_url if cr_url in requested else zipped_url
                     if not cr.success:
+                        code = _cert_error_code(getattr(cr, "error_message", None))
+                        if code:
+                            log.warning(
+                                "SKIPPED (TLS certificate invalid): %s -- a potentially "
+                                "valuable source was not fetched. To include it, set "
+                                "browser_verify_tls = false under [fetch] in config.toml. (%s)",
+                                url, code,
+                            )
                         continue
                     try:
                         _check_final_url(

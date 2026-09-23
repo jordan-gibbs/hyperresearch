@@ -17,6 +17,11 @@ class FetchSettings:
     # disabled TLS verification for PDF downloads. Set to false only for
     # cert-broken mirrors you explicitly trust.
     pdf_verify_tls: bool = True
+    # TLS verification for the crawl4ai headless browser lane (#137). Default
+    # on; set false only for cert-broken sites you explicitly trust. The
+    # visible-window lane (profile + visible browser) still ignores
+    # certificate errors regardless of this setting.
+    browser_verify_tls: bool = True
     min_pdf_bytes: int = 100
     # Response-size caps enforced by the SSRF gate (web/safe_http.py).
     # Defaults mirror the MAX_BYTES_* constants there.
