@@ -237,6 +237,8 @@ def test_code_strip_is_linear_on_backtick_floods():
         "`a": "`a" * 150_000,
         "``` ": "``` " * 75_000,
         "unclosed ````": "````\n" + "```\n" * 75_000,
+        "never-closed openers": "```x\n" * 75_000,
+        "descending openers": "".join("`" * n + "\n" for n in range(1500, 2, -1)),
         "staircase": "".join("`" * n + "a" for n in range(1500, 0, -1)),
     }
     for name, flood in floods.items():

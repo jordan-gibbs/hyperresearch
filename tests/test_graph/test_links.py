@@ -78,11 +78,21 @@ def test_indented_fence_in_list_item():
     assert _links(text) == ["real-link"]
 
 
-def test_unclosed_fence_runs_to_end_of_text():
-    # CommonMark: an unclosed fence runs to the end of the document. Losing
-    # the links after a broken fence beats parsing the code as links.
-    text = "[[before]]\n```\n[[ -n y ]]\n[[swallowed]]"
-    assert _links(text) == ["before"]
+def test_unclosed_fence_is_literal_text():
+    # An opener nothing later can close is text, not a block to the end of
+    # the note: a prose line starting with ``` must not drop what follows.
+    text = "[[before]]\n```\n[[kept]]\n[[also-kept]]"
+    assert _links(text) == ["before", "kept", "also-kept"]
+
+
+def test_prose_line_starting_with_backticks_keeps_the_rest():
+    text = "Use\n``` to open a fence\nand then [[real-link]] later"
+    assert _links(text) == ["real-link"]
+
+
+def test_unclosed_long_fence_does_not_hide_a_later_block():
+    text = "`````\n[[shown]]\n```\n[[hidden]]\n```\n[[after]]"
+    assert _links(text) == ["shown", "after"]
 
 
 def test_double_backtick_span_holding_single_backtick():

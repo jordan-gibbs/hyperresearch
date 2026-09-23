@@ -36,9 +36,12 @@ WIKI_LINK_RE = re.compile(r"\[\[([^\]\[|]+)(?:\|[^\]\[]+)?\]\](?!\()")
 #
 # - A fenced block opens on a line whose first non-blank characters are 3+
 #   backticks with no backtick after them, and closes on a line holding
-#   only a run of AT LEAST that many backticks. Unclosed, it runs to the end
-#   of the text: better to lose links after a broken fence than to parse
-#   code as links. Any indentation is accepted (fences inside list items).
+#   only a run of AT LEAST that many backticks. An opener with no such line
+#   after it is literal text, not a block to the end of the note: CommonMark
+#   would run it to the end, but a prose line that happens to start with ```
+#   would then drop the rest of the note from links and search. The builtin
+#   provider always closes its fences, so #140 does not depend on the
+#   unclosed case. Any indentation is accepted (fences inside list items).
 #   Tilde fences are not recognised, as before.
 # - An inline span opened by N backticks closes at the next run of EXACTLY
 #   N backticks; an unmatched run is literal text. Spans may cross lines,
@@ -58,16 +61,36 @@ _BACKTICK_RUN_RE = re.compile(r"`+")
 
 
 def _strip_fenced_blocks(text: str) -> str:
-    out: list[str] = []
-    fence = 0  # length of the open fence's backtick run; 0 = not in a block
-    for line in text.split("\n"):
+    lines = text.split("\n")
+    runs: list[int] = []
+    closers: list[int] = []  # run length if the line could close a fence, else 0
+    for line in lines:
         s = line.lstrip(" \t")
         run = len(s) - len(s.lstrip("`"))
+        runs.append(run)
+        closers.append(run if run >= 3 and not s[run:].strip(" \t\r") else 0)
+    # longest_after[i]: the longest closer on any line after line i. An opener
+    # whose run nothing after it can match stays literal text, so each check
+    # is O(1) and the pass stays linear.
+    longest_after = [0] * len(lines)
+    best = 0
+    for i in range(len(lines) - 1, -1, -1):
+        longest_after[i] = best
+        best = max(best, closers[i])
+
+    out: list[str] = []
+    fence = 0  # length of the open fence's backtick run; 0 = not in a block
+    for i, line in enumerate(lines):
+        run = runs[i]
         if fence:
-            if run >= fence and not s[run:].strip(" \t\r"):
+            if closers[i] >= fence:
                 fence = 0
             out.append("")
-        elif run >= 3 and "`" not in s[run:]:
+        elif (
+            run >= 3
+            and "`" not in line.lstrip(" \t")[run:]
+            and longest_after[i] >= run
+        ):
             fence = run
             out.append("")
         else:
