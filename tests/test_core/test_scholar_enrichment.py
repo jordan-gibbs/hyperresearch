@@ -179,6 +179,36 @@ class TestScoreSources:
                 tmp_vault.db, "", filters=SearchFilters(retraction="not-retracted"),
             ) == []
 
+    def test_openalex_outage_keeps_a_known_retraction(self, doi_vault, monkeypatch, no_sleep):
+        from hyperresearch.core.frontmatter import parse_frontmatter
+        from hyperresearch.core.sync import compute_sync_plan, execute_sync
+
+        _stub_openalex(monkeypatch, {"10.1%2Fretracted": OPENALEX_RETRACTED})
+        scholar.score_sources(doi_vault)
+
+        # OpenAlex down on the fresh sweep: the lookup falls through to S2,
+        # which has no retraction data.
+        calls = _stub_openalex(monkeypatch, {
+            "semanticscholar": {"citationCount": 31, "venue": "BadJournal"},
+        })
+        result = scholar.score_sources(doi_vault, fresh=True)
+        assert any("semanticscholar.org" in c for c in calls)
+        assert "retracted-paper" in result["retracted"]
+
+        row = doi_vault.db.execute(
+            "SELECT citation_count, is_retracted FROM notes WHERE id = 'retracted-paper'"
+        ).fetchone()
+        assert row["citation_count"] == 31
+        assert row["is_retracted"] == 1
+        text = (doi_vault.notes_dir / "retracted-paper.md").read_text(encoding="utf-8")
+        assert parse_frontmatter(text)[0].is_retracted is True
+
+        execute_sync(doi_vault, compute_sync_plan(doi_vault, force=True))
+        row = doi_vault.db.execute(
+            "SELECT is_retracted FROM notes WHERE id = 'retracted-paper'"
+        ).fetchone()
+        assert row["is_retracted"] == 1
+
     def test_authority_is_vault_relative_percentile(self, doi_vault, monkeypatch):
         _stub_openalex(monkeypatch, {
             "10.1%2Fcited": OPENALEX_CITED,        # 512 citations
