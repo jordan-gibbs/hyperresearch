@@ -1,0 +1,13 @@
+{
+  "name": "hyperresearch",
+  "version": "0.11.1",
+  "description": "Deep research skill for Claude Code. Bootstraps the hyperresearch CLI and hands off to its 16-step research pipeline with a persistent, searchable source vault.",
+  "author": {
+    "name": "Jordan Gibbs",
+    "url": "https://github.com/jordan-gibbs"
+  },
+  "homepage": "https://github.com/jordan-gibbs/hyperresearch",
+  "repository": "https://github.com/jordan-gibbs/hyperresearch",
+  "license": "MIT",
+  "keywords": ["deep-research", "research", "claude-code", "skill", "citations", "research-agent"]
+}

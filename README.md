@@ -1,6 +1,6 @@
 <img width="1280" height="400" alt="hyperresearch-readme-hero-1280x400" src="https://github.com/user-attachments/assets/320680fc-bc56-4eac-9ec2-7ec46d4bde98" />
 
-<h3 align="center">The Most Powerful Deep Research Harness</h3>
+<h3 align="center">The Most Powerful Deep Research Harness: a Claude Code deep research skill</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/hyperresearch/"><img src="https://img.shields.io/pypi/v/hyperresearch" alt="PyPI version"></a>
@@ -46,6 +46,17 @@ Then `/hyperresearch <anything>` in Claude Code.
 > Python 3.11–3.14.
 >
 > Power users: `hyperresearch install --global` makes `/hyperresearch` reachable from every Claude Code session anywhere, at the cost of ~15 lines in every session's system reminder. Per-project install (above) keeps unrelated CC sessions clean.
+
+### Install as a Claude Code plugin
+
+The repo is also a Claude Code plugin marketplace. The plugin ships one skill, `deep-research`, which checks for the `hyperresearch` CLI, runs `hyperresearch install` in the current project, and hands off to `/hyperresearch`. The pipeline still comes from the Python package, so you need `pip install hyperresearch` either way.
+
+```
+/plugin marketplace add jordan-gibbs/hyperresearch
+/plugin install hyperresearch@hyperresearch
+```
+
+Then ask for deep research in plain words, or run `/hyperresearch:deep-research <question>`. If Claude Code does not pick up the newly installed skills and subagents, restart it in the same directory and run `/hyperresearch <question>`.
 
 ---
 

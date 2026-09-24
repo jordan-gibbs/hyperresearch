@@ -1,0 +1,17 @@
+{
+  "name": "hyperresearch",
+  "description": "Claude Code marketplace for hyperresearch, a deep research skill and pipeline.",
+  "owner": {
+    "name": "Jordan Gibbs",
+    "url": "https://github.com/jordan-gibbs"
+  },
+  "plugins": [
+    {
+      "name": "hyperresearch",
+      "source": "./",
+      "description": "Deep research skill for Claude Code. Bootstraps the hyperresearch CLI and hands off to its 16-step research pipeline.",
+      "category": "research",
+      "homepage": "https://github.com/jordan-gibbs/hyperresearch"
+    }
+  ]
+}
