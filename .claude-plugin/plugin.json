@@ -1,6 +1,6 @@
 {
   "name": "hyperresearch",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "description": "Deep research skill for Claude Code. Bootstraps the hyperresearch CLI and hands off to its 16-step research pipeline with a persistent, searchable source vault.",
   "author": {
     "name": "Jordan Gibbs",
