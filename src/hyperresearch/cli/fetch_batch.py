@@ -155,7 +155,10 @@ def fetch_batch(
     blocked = [(f["url"], f"fetch failed: {f['error']}", None) for f in failed_urls]
 
     for result in results:
-        url = result.url
+        # Providers may return a canonical/redirected URL. Keep the requested
+        # source for provenance and deduplication; the result's URL still lets
+        # the login-wall check detect redirects into authentication pages.
+        url = result.metadata.get("requested_url") or result.url
         if result.looks_like_login_wall(url, vault.config.junk):
             blocked.append((url, f"login wall: {result.title}", result.raw_html))
             continue
@@ -194,7 +197,7 @@ def fetch_batch(
         # fetches in waves through this command.
         if oa_location is None:
             detected_doi = extract_doi(url, result.raw_html, result.content)
-            original_domain = result.domain
+            original_domain = urlparse(url).netloc.lower()
             original_chars = len(result.content or "")
             result, oa_location = recover_full_text(vault, prov, url, detected_doi, result)
         else:

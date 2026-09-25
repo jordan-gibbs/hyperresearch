@@ -30,6 +30,11 @@ def install(
         "--profile",
         help="Pipeline profile to render skill/agent prompts from (built-in gears: full, premier; plus any [profile.*] defined in .hyperresearch/config.toml). Defaults to the gear persisted by `hyperresearch profile use` (or 'full'). See `hyperresearch profile list`.",
     ),
+    skip_browser: bool = typer.Option(
+        False,
+        "--skip-browser",
+        help="Install the vault and Claude Code integration without setting up Chromium.",
+    ),
 ) -> None:
     """Install hyperresearch: init vault + inject CLAUDE.md + install Claude Code hooks."""
     import sys
@@ -138,7 +143,7 @@ def install(
     # First-time install in an interactive terminal → run the setup TUI instead
     is_new = not (root / ".hyperresearch").exists()
     is_interactive = not json_output and sys.stdin.isatty()
-    if is_new and is_interactive:
+    if is_new and is_interactive and not skip_browser:
         from hyperresearch.cli.setup import setup
 
         setup(path=path, json_output=False)
@@ -175,8 +180,8 @@ def install(
     _check_profile(project_profile, project_config_path)
     hook_actions = install_hooks(root, hpr_path=hpr_path, profile=project_profile)
 
-    # Step 3: Auto-configure crawl4ai if installed
-    crawl4ai_status = _setup_crawl4ai(vault)
+    # API providers can install the research workflow without a local browser.
+    crawl4ai_status = "skipped" if skip_browser else _setup_crawl4ai(vault)
 
     # Step 5: Report
     data = {
@@ -216,6 +221,8 @@ def install(
                 "[dim]crawl4ai:[/] not installed. "
                 "For local headless browsing: pip install hyperresearch[crawl4ai]"
             )
+        elif crawl4ai_status == "skipped":
+            console.print("[dim]Browser setup skipped; keeping the configured web provider.[/]")
 
         console.print("\n[bold]Ready.[/] Agents will now check the research base before web searches.")
         console.print("[dim]Tip: Run 'hyperresearch setup' for interactive configuration (profile, stealth, etc.)[/]")
@@ -225,8 +232,11 @@ def _setup_crawl4ai(vault) -> str:
     """Detect crawl4ai, install browser if needed, set as default provider.
 
     Returns: 'configured' (already ready), 'browser_installed' (just set up),
-             'not_installed' (crawl4ai not available).
+             'not_installed' (crawl4ai not available), 'skipped' (API provider).
     """
+    if vault.config.web_provider not in ("builtin", "crawl4ai"):
+        return "skipped"
+
     try:
         import crawl4ai  # noqa: F401
     except ImportError:
