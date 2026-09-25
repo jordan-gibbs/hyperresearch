@@ -148,9 +148,13 @@ def profile_use(
     vault.config.save(vault.config_path)
 
     from hyperresearch.core.agent_docs import _resolve_executable
-    from hyperresearch.core.hooks import install_hooks
+    from hyperresearch.core.hooks import install_hooks, installed_platforms
 
-    actions = install_hooks(vault.root, hpr_path=_resolve_executable(), profile=name)
+    hpr_path = _resolve_executable()
+    actions = install_hooks(vault.root, hpr_path=hpr_path, profile=name)
+    # A project also installed for Codex gets its Codex files re-rendered too.
+    if "codex" in installed_platforms(vault.root):
+        actions += install_hooks(vault.root, hpr_path=hpr_path, profile=name, platform="codex")
 
     data = {
         "gear": name,

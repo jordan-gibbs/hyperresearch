@@ -5,7 +5,7 @@ description: >
   (breadth / depth / adversarial lenses) followed by parallel fetcher waves.
   Achieves comprehensive topical coverage with << p.source_target|dash >> curated sources for
   full tier. Includes coverage check, evidence redundancy audit,
-  and source count gating. Invoked via Skill tool from the entry skill
+  and source count gating. Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry skill
   after step 1 completes.
 ---
 
@@ -127,13 +127,13 @@ Write to `research/runs/<vault_tag>/temp/scored-urls.md`.
 
 ## Step 2.4 — Parallel fetcher waves
 
-**Wave 1 (main wave):** Spawn **<< p.wave1_fetchers|dash >> fetcher subagents in ONE message** — true parallel execution. Each fetcher gets its own non-overlapping batch.
+**Wave 1 (main wave):** <% if platform == "codex" %>Spawn **<< p.wave1_fetchers|dash >> `hyperresearch-fetcher` custom-agent subagents (`.codex/agents/hyperresearch-fetcher.toml`) — spawn them all now, in parallel, and wait for all of them** — true parallel execution.<% else %>Spawn **<< p.wave1_fetchers|dash >> fetcher subagents in ONE message** — true parallel execution.<% endif %> Each fetcher gets its own non-overlapping batch.
 
-**Subagent type:** `hyperresearch-fetcher`
+**<% if platform == "codex" %>Custom agent<% else %>Subagent type<% endif %>:** `hyperresearch-fetcher`
 
 **Spawn template (use the standard 3-piece contract):**
 ```
-subagent_type: hyperresearch-fetcher
+<% if platform == "codex" %>custom_agent: hyperresearch-fetcher   # spawn the custom agent defined in .codex/agents/hyperresearch-fetcher.toml<% else %>subagent_type: hyperresearch-fetcher<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste contents of research/runs/<vault_tag>/query.md}}
@@ -156,7 +156,7 @@ prompt: |
 
 **CRITICAL: no token waste.** Each fetcher gets ONLY its batch. No fetcher searches for new URLs or duplicates another fetcher's work. If a fetcher finishes early, it's done.
 
-**CRITICAL: never emit bare text while waiting.** In `-p` mode, a text-only response triggers `end_turn`.
+<% if platform == "codex" %>**CRITICAL: do not end your turn while waiting.** Wait for every fetcher to finish; a message with no tool call ends the run in `codex exec`.<% else %>**CRITICAL: never emit bare text while waiting.** In `-p` mode, a text-only response triggers `end_turn`.<% endif %>
 
 **Use wait time to think.** While subagents are working, write evolving thoughts to `research/runs/<vault_tag>/temp/orchestrator-notes.md`:
 - What patterns are emerging from sources?
@@ -165,7 +165,7 @@ prompt: |
 - How will atomic items map to sections?
 - What's the narrative arc?
 
-Append a few lines with `Edit` or `Write` every 30-60 seconds. Productive thinking time AND keeps the turn alive.
+<% if platform == "codex" %>Append a few lines with `apply_patch` between checks. Productive thinking time.<% else %>Append a few lines with `Edit` or `Write` every 30-60 seconds. Productive thinking time AND keeps the turn alive.<% endif %>
 
 **Vault count check** — once every << p.vault_check_interval_s >> seconds max:
 ```bash
@@ -238,7 +238,7 @@ These commands are local/cached and cost seconds. Skipping them leaves step 10's
 
 ---
 
-## Step 2.8 — Drain the browser-lane escalation queue (conditional)
+## Step 2.8 — <% if platform == "codex" %>Record the browser-lane escalation queue (no draining on Codex)<% else %>Drain the browser-lane escalation queue (conditional)<% endif %>
 
 Blocked fetches (login walls, bot walls, captchas) were NOT lost — the fetch gate queued them:
 
@@ -246,7 +246,13 @@ Blocked fetches (login walls, bot walls, captchas) were NOT lost — the fetch g
 {hpr_path} escalation list --status queued --tag <vault_tag> -j
 ```
 
-**If queued items exist**, spawn EXACTLY ONE `hyperresearch-browser-fetcher` subagent to drain them (serial, one browser — never spawn two):
+<% if platform == "codex" %>**On Codex there is no browser-fetcher** — nothing can drive a real browser during the run. Do NOT block the pipeline on these items and do NOT try to fetch them some other way:
+
+1. Leave every item queued. Note the queued count (and the URLs) in `research/runs/<vault_tag>/temp/orchestrator-notes.md` and in your wave summary, then move on.
+2. At the very end of the run, your final message lists every still-queued escalation for this run (URL + reason) in ONE consolidated list, so the human can open them in a browser, complete any CAPTCHA / login / 2FA themselves, and re-run. Never attempt to solve those challenges.
+
+Queued items are exactly the pre-4.0 status quo (lost sources), never worse.
+<% else %>**If queued items exist**, spawn EXACTLY ONE `hyperresearch-browser-fetcher` subagent to drain them (serial, one browser — never spawn two):
 
 ```
 subagent_type: hyperresearch-browser-fetcher
@@ -277,7 +283,7 @@ prompt: |
 3. After the user says done: `{hpr_path} escalation retry <id>` each item, re-spawn the browser-fetcher once, then re-run step 2.7's ranking commands so the new sources are scored.
 
 **If the Claude-in-Chrome extension is unavailable**, the queue simply accumulates — report the queued count in your wave summary and move on. Abandoned/queued items are exactly the pre-4.0 status quo (lost sources), never worse.
-
+<% endif %>
 ---
 
 ## Source count targets
@@ -304,7 +310,7 @@ Trigger conditions (ALL three must hold):
 
 Spawn template:
 ```
-subagent_type: hyperresearch-source-analyst
+<% if platform == "codex" %>custom_agent: hyperresearch-source-analyst   # spawn the custom agent defined in .codex/agents/hyperresearch-source-analyst.toml<% else %>subagent_type: hyperresearch-source-analyst<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -340,5 +346,5 @@ If you fall short after two waves, proceed anyway but ensure `coverage-gaps.md` 
 
 Return to the entry skill (`hyperresearch`). Tier-based routing:
 
-- **light tier:** Skip directly to step 10 — invoke `Skill(skill: "hyperresearch-10-triple-draft")` (light tier writes a single draft, not the ensemble)
-- **full tier:** Invoke `Skill(skill: "hyperresearch-3-contradiction-graph")`
+- **light tier:** Skip directly to step 10 — invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-10-triple-draft.md<% else %>Skill(skill: "hyperresearch-10-triple-draft")<% endif %>` (light tier writes a single draft, not the ensemble)
+- **full tier:** Invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-3-contradiction-graph.md<% else %>Skill(skill: "hyperresearch-3-contradiction-graph")<% endif %>`

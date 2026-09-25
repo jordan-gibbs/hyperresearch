@@ -6,7 +6,7 @@ description: >
   and produces the coverage matrix that downstream steps depend on. The
   required_section_headings field this step produces is the single
   highest-leverage input for instruction-following scores. Invoked via
-  Skill tool from the entry skill (hyperresearch).
+  <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry skill (hyperresearch).
 ---
 
 # Step 1 — Prompt decomposition
@@ -205,7 +205,7 @@ Read both before starting. The vault_tag is in the scaffold's "Run config" secti
 Return to the entry skill (`hyperresearch`). Read `research/runs/<vault_tag>/prompt-decomposition.json` to learn the tier, then invoke step 2:
 
 ```
-Skill(skill: "hyperresearch-2-width-sweep")
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-2-width-sweep.md<% else %>Skill(skill: "hyperresearch-2-width-sweep")<% endif %>
 ```
 
 Step 2 runs for ALL tiers.

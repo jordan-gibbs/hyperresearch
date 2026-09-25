@@ -1,0 +1,20 @@
+{
+  "name": "hyperresearch",
+  "interface": {
+    "displayName": "hyperresearch"
+  },
+  "plugins": [
+    {
+      "name": "hyperresearch",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Research"
+    }
+  ]
+}

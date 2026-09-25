@@ -7,7 +7,7 @@ description: >
   run manifest. Steps 2-10 then loop per chapter, each staying within the
   proven per-chapter source envelope; global reconciliation and synthesis
   integrate across chapters. Skipped entirely when the profile's `chapters`
-  is (0, 0). Invoked via Skill tool from the entry skill.
+  is (0, 0). Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry skill.
 ---
 
 # Step 1.5 — Chapter partition (chaptered profiles only)
@@ -91,4 +91,4 @@ For each chapter (respecting `depends_on`, up to << dissertation.chapter_concurr
 
 ## Next step
 
-Return to the entry skill and begin the chapter execution loop at step 2 for the first chapter(s): `Skill(skill: "hyperresearch-2-width-sweep")`.
+Return to the entry skill and begin the chapter execution loop at step 2 for the first chapter(s): `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-2-width-sweep.md<% else %>Skill(skill: "hyperresearch-2-width-sweep")<% endif %>`.

@@ -137,8 +137,18 @@ class Vault:
         self.close()
 
     @staticmethod
-    def init(root: Path, name: str = "Research Base", research_dir: str = "research") -> Vault:
-        """Initialize a new vault at the given path."""
+    def init(
+        root: Path,
+        name: str = "Research Base",
+        research_dir: str = "research",
+        platforms: tuple[str, ...] = ("claude",),
+    ) -> Vault:
+        """Initialize a new vault at the given path.
+
+        `platforms` are the agent runtimes whose docs file gets the
+        hyperresearch blurb (claude -> CLAUDE.md, codex -> AGENTS.md); a
+        Codex-only install passes ("codex",) so no CLAUDE.md appears.
+        """
         root = root.resolve()
         hyperresearch_dir = root / HYPERRESEARCH_DIR
 
@@ -178,9 +188,10 @@ class Vault:
             "# {{ title }}\n\n"
         )
 
-        # Inject CLAUDE.md at vault root
+        # Inject the agent docs (CLAUDE.md by default) at vault root
         from hyperresearch.core.agent_docs import inject_agent_docs
-        inject_agent_docs(root)
+        for platform in platforms:
+            inject_agent_docs(root, platform=platform)
 
         return vault
 

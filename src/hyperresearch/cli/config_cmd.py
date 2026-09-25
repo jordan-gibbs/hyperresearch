@@ -125,12 +125,15 @@ def config_get(
 def config_agent_docs(
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
-    """Update CLAUDE.md with the latest hyperresearch blurb."""
+    """Update CLAUDE.md (and AGENTS.md on Codex installs) with the latest hyperresearch blurb."""
     from hyperresearch.core.agent_docs import inject_agent_docs
+    from hyperresearch.core.hooks import installed_platforms
     from hyperresearch.core.vault import Vault
 
     vault = Vault.discover()
     modified = inject_agent_docs(vault.root)
+    if "codex" in installed_platforms(vault.root):
+        modified += inject_agent_docs(vault.root, platform="codex")
 
     if json_output:
         output(success({"modified": modified}, vault=str(vault.root)), json_mode=True)

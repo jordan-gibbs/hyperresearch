@@ -7,7 +7,7 @@ description: >
   table, the cite-checker agent judges the sampled remainder, and a second
   small patcher pass applies the findings. Runs AFTER step 14 (the patcher
   moved text and citations; audit what will actually ship) and BEFORE step
-  15 (polish sees the corrected text). Invoked via Skill tool.
+  15 (polish sees the corrected text). Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %>.
 ---
 
 # Step 14.5 — Cite-check (citation-sentence binding verification)
@@ -45,10 +45,10 @@ This parses every (sentence, citation) pair from the report — `[N]` markers (i
 
 ## Step 14.5.2 — Spawn the cite-checker
 
-Spawn ONE `hyperresearch-cite-checker` subagent (two in parallel with split index ranges when `sampled_for_llm` exceeds ~40 pairs):
+Spawn ONE `hyperresearch-cite-checker` subagent<% if platform == "codex" %> (custom agent `.codex/agents/hyperresearch-cite-checker.toml`)<% else %><% endif %> (two in parallel with split index ranges when `sampled_for_llm` exceeds ~40 pairs)<% if platform == "codex" %> and wait for it (or both) to finish<% else %><% endif %>:
 
 ```
-subagent_type: hyperresearch-cite-checker
+<% if platform == "codex" %>custom_agent: hyperresearch-cite-checker   # spawn the custom agent defined in .codex/agents/hyperresearch-cite-checker.toml<% else %>subagent_type: hyperresearch-cite-checker<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -73,7 +73,7 @@ When splitting across two checkers, give each its own findings path (`cite-check
 
 ## Step 14.5.3 — Second patcher pass
 
-Append the dangling-citation findings (from 14.5.1) to the findings file, then reuse the step 14 machinery exactly: spawn ONE `hyperresearch-patcher` (tool-locked Read + Edit) with `research/runs/<vault_tag>/cite-check-findings.json` as its findings input and `research/runs/<vault_tag>/cite-check-patch-log.json` pre-stubbed:
+Append the dangling-citation findings (from 14.5.1) to the findings file, then reuse the step 14 machinery exactly: spawn ONE `hyperresearch-patcher` (<% if platform == "codex" %>read + patch only<% else %>tool-locked Read + Edit<% endif %>) with `research/runs/<vault_tag>/cite-check-findings.json` as its findings input and `research/runs/<vault_tag>/cite-check-patch-log.json` pre-stubbed:
 
 ```json
 {"total_findings": 0, "applied": [], "skipped": [], "conflicts": [], "orchestrator_escalated": []}
@@ -94,4 +94,4 @@ Fix repertoire (in the findings' `suggested_fix`): swap to `correct_note_id`, so
 
 ## Next step
 
-Return to the entry skill and invoke `Skill(skill: "hyperresearch-15-polish")`.
+Return to the entry skill and invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-15-polish.md<% else %>Skill(skill: "hyperresearch-15-polish")<% endif %>`.

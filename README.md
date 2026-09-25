@@ -58,6 +58,41 @@ The repo is also a Claude Code plugin marketplace. The plugin ships one skill, `
 
 Then ask for deep research in plain words, or run `/hyperresearch:deep-research <question>`. If Claude Code does not pick up the newly installed skills and subagents, restart it in the same directory and run `/hyperresearch <question>`.
 
+### Codex
+
+The same pipeline runs on the [OpenAI Codex CLI](https://github.com/openai/codex).
+
+```bash
+cd your-project
+pip install hyperresearch && hyperresearch install . --target codex
+```
+
+This installs the entry skill at `.agents/skills/hyperresearch/`, the step procedures under `.hyperresearch/codex/steps/`, the subagents as custom agents in `.codex/agents/`, a Stop hook in `.codex/hooks.json`, and a short block in `AGENTS.md`. `--target all` installs the Claude Code and Codex versions side by side. `--global --target codex` puts the entry skill in `~/.agents/skills/` and the agents in `~/.codex/agents/`.
+
+Research needs to write files and reach the network, and Codex allows neither by default. Start the session with both enabled, then invoke the skill:
+
+```bash
+codex --sandbox workspace-write -c sandbox_workspace_write.network_access=true
+# then, in the session:
+$hyperresearch <anything>
+
+# non-interactive:
+codex exec --sandbox workspace-write -c sandbox_workspace_write.network_access=true "\$hyperresearch <anything>"
+```
+
+hyperresearch passes these as flags and never edits your Codex config. What is different on Codex:
+
+- **No browser lane.** Codex has no Claude-in-Chrome equivalent, so fetches blocked by a login wall or bot wall stay in the escalation queue, and the final message lists them for you.
+- **Tool locks are instructions, not enforcement.** Codex custom agents have no per-agent tool allowlist. The patcher and polish auditor are told to make surgical edits only, but nothing stops them from doing more.
+- **A Stop hook guards the pipeline.** `hyperresearch run stop-gate` blocks the session from ending while the newest run is mid-pipeline, so Codex cannot quietly answer inline and stop. Codex runs a project's hooks only after you trust them.
+
+The repo is also a Codex plugin marketplace, with the same `deep-research` bootstrap skill as the Claude Code plugin:
+
+```bash
+codex plugin marketplace add jordan-gibbs/hyperresearch
+codex plugin add hyperresearch@hyperresearch
+```
+
 ---
 
 ## The 16-step research pipeline
@@ -380,7 +415,7 @@ Publishers block their own open-access PDFs often enough that one attempt isn't 
 
 - It doesn't replace your judgment on which sources matter. The agent picks, you steer.
 - It can't fetch what's behind a paywall you haven't logged into. Open-access recovery finds a legal free copy when one exists — even when the publisher blocks the fetch outright — but when none exists you get the abstract, or nothing, and the note says so.
-- It runs on Anthropic models via the subagent roster (per-agent assignments come from the profile's model map). Usage scales with tier, gear, and corpus size. If anyone wants to port this to Codex, put up a PR! 
+- On Claude Code it runs on Anthropic models via the subagent roster (per-agent assignments come from the profile's model map). On Codex, subagents use the session's model unless a Codex override is configured. Usage scales with tier, gear, and corpus size. The Codex port is new and has not been benchmarked yet; the Claude Code pipeline is the one the leaderboard numbers come from.
 - The lint gate catches **structural** failures (missing scaffold, broken provenance, unresolved CRITICALs). It cannot guarantee factual accuracy, that's still your call.
 
 ---
@@ -388,7 +423,7 @@ Publishers block their own open-access PDFs often enough that one attempt isn't 
 ## Requirements
 
 - Python 3.11+
-- [Claude Code](https://claude.com/claude-code)
+- [Claude Code](https://claude.com/claude-code), or the [OpenAI Codex CLI](https://github.com/openai/codex)
 
 ---
 

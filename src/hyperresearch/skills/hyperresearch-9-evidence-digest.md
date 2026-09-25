@@ -5,7 +5,7 @@ description: >
   claims and verbatim quotes from the claims JSONs into
   research/runs/<vault_tag>/temp/evidence-digest.md — a single high-fidelity evidence
   index the draft sub-orchestrators read as primary evidence (higher
-  fidelity than fetcher summaries). Invoked via Skill tool from the
+  fidelity than fetcher summaries). Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the
   entry skill (full tier).
 ---
 
@@ -77,7 +77,7 @@ If fewer claims exist in total, include all of them.
 Return to the entry skill (`hyperresearch`). Invoke step 10:
 
 ```
-Skill(skill: "hyperresearch-10-triple-draft")
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-10-triple-draft.md<% else %>Skill(skill: "hyperresearch-10-triple-draft")<% endif %>
 ```
 
 Step 10 is the most important step in the pipeline. Re-read the entry skill before invoking if needed — the triple-draft ensemble must spawn 3 draft-orchestrators for `full` tier.

@@ -6,7 +6,7 @@ description: >
   including orphan tensions that didn't surface as loci. Reads full source
   bodies of top << p.tension_full_reads|hyphen >> sources (not summaries) to find tensions that hide
   in nuance. The Source Tensions section in step 10's draft is the single
-  highest-leverage move for insight scores. Invoked via Skill tool from
+  highest-leverage move for insight scores. Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from
   the entry skill (full tier only).
 ---
 
@@ -97,5 +97,5 @@ This artifact feeds directly into step 10's mandatory Source Tensions section. E
 Return to the entry skill (`hyperresearch`). Invoke step 8:
 
 ```
-Skill(skill: "hyperresearch-8-corpus-critic")
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-8-corpus-critic.md<% else %>Skill(skill: "hyperresearch-8-corpus-critic")<% endif %>
 ```

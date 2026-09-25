@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deep Research (hyperresearch)"
+  short_description: "Multi-source research reports with verified citations and a persistent source vault"
+  default_prompt: "Use $deep-research to research this question and write a cited report: "
+policy:
+  allow_implicit_invocation: true

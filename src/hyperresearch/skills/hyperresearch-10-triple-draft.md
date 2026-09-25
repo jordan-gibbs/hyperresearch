@@ -8,7 +8,7 @@ description: >
   This step ENDS when all 3 drafts are written and validated. Step 11
   (synthesizer) handles the synthesis-write that produces the final report.
   For light tier: writes a single draft directly to final_report.md and
-  skips ahead to step 15 (polish). Invoked via Skill tool.
+  skips ahead to step 15 (polish). Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %>.
 ---
 
 # Step 10 — Triple-draft ensemble (curated lists, parallel writers)
@@ -73,7 +73,7 @@ If `pipeline_tier == "light"`: SKIP step 10.1 — 10.3 below and follow this sec
 
 4. **Hygiene.** No YAML frontmatter on the final report. No pipeline vocabulary in prose ("hyperresearch", "evidence digest", "comparisons.md", "committed reading", etc.). When `citation_style == "wikilink"`, `[[<source-note-id>]]` markers ARE the citation system and must be preserved — only strip wikilinks that point at workspace artifacts (interim-*, scaffold, comparisons). Step 15 (polish) is a backstop, not a license to leak.
 
-5. **Exit and route.** Once `research/notes/final_report_<vault_tag>.md` is written, return to the entry skill and invoke `Skill(skill: "hyperresearch-15-polish")`. Light tier skips steps 11–14 entirely.
+5. **Exit and route.** Once `research/notes/final_report_<vault_tag>.md` is written, return to the entry skill and invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-15-polish.md<% else %>Skill(skill: "hyperresearch-15-polish")<% endif %>`. Light tier skips steps 11–14 entirely.
 
 ---
 
@@ -141,11 +141,11 @@ Write the 3 angle assignments to `research/runs/<vault_tag>/temp/draft-angles.md
 
 ## Step 10.3 — Spawn << p.draft_count >> draft sub-orchestrators in parallel
 
-**Spawn << p.draft_count >> `hyperresearch-draft-orchestrator` subagents in ONE message.** This is true parallel execution. Each gets a different `draft_id`, `analytical_angle`, and (CRUCIALLY) a different `must_read_note_ids` array.
+**Spawn << p.draft_count >> `hyperresearch-draft-orchestrator` subagents <% if platform == "codex" %>(custom agent `.codex/agents/hyperresearch-draft-orchestrator.toml`) — spawn all << p.draft_count >> now, in parallel, and wait for all of them.**<% else %>in ONE message.**<% endif %> This is true parallel execution. Each gets a different `draft_id`, `analytical_angle`, and (CRUCIALLY) a different `must_read_note_ids` array.
 
 **Spawn template:**
 ```
-subagent_type: hyperresearch-draft-orchestrator
+<% if platform == "codex" %>custom_agent: hyperresearch-draft-orchestrator   # spawn the custom agent defined in .codex/agents/hyperresearch-draft-orchestrator.toml<% else %>subagent_type: hyperresearch-draft-orchestrator<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -180,7 +180,7 @@ prompt: |
   Write your draft from your assigned angle, citing your curated sources.
 ```
 
-**CRITICAL: never emit bare text while the 3 sub-orchestrators are running.** They will take 5-15 minutes each. Use this time to think — append notes to `research/runs/<vault_tag>/temp/orchestrator-notes.md` about the synthesis you'll plan in step 11: what's the strongest thesis emerging across angles? Which atomic items will be contentious? What argumentative beats must the final draft commit to? One vault count check per minute max. Write your thoughts, don't just poll.
+**CRITICAL: <% if platform == "codex" %>do not end your turn while the 3 sub-orchestrators are running — wait for all of them.**<% else %>never emit bare text while the 3 sub-orchestrators are running.**<% endif %> They will take 5-15 minutes each. Use this time to think — append notes to `research/runs/<vault_tag>/temp/orchestrator-notes.md` about the synthesis you'll plan in step 11: what's the strongest thesis emerging across angles? Which atomic items will be contentious? What argumentative beats must the final draft commit to? One vault count check per minute max. Write your thoughts, don't just poll.
 
 ---
 
@@ -222,5 +222,5 @@ When all 3 sub-orchestrators return:
 
 Return to the entry skill (`hyperresearch`). Tier-based routing:
 
-- **light tier:** You already wrote `research/notes/final_report_<vault_tag>.md` directly. Skip steps 11-14 (no synthesis, no critics, no patcher) and invoke `Skill(skill: "hyperresearch-15-polish")`.
-- **full tier:** Invoke `Skill(skill: "hyperresearch-11-synthesize")`.
+- **light tier:** You already wrote `research/notes/final_report_<vault_tag>.md` directly. Skip steps 11-14 (no synthesis, no critics, no patcher) and invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-15-polish.md<% else %>Skill(skill: "hyperresearch-15-polish")<% endif %>`.
+- **full tier:** Invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-11-synthesize.md<% else %>Skill(skill: "hyperresearch-11-synthesize")<% endif %>`.

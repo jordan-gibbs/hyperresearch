@@ -1,0 +1,28 @@
+{
+  "name": "hyperresearch",
+  "version": "0.12.0",
+  "description": "Deep research skill for Codex and Claude Code. Bootstraps the hyperresearch CLI and hands off to its 16-step research pipeline with a persistent, searchable source vault.",
+  "author": {
+    "name": "Jordan Gibbs",
+    "url": "https://github.com/jordan-gibbs"
+  },
+  "homepage": "https://github.com/jordan-gibbs/hyperresearch",
+  "repository": "https://github.com/jordan-gibbs/hyperresearch",
+  "license": "MIT",
+  "keywords": ["deep-research", "research", "codex", "skill", "citations", "research-agent", "literature-review"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "hyperresearch",
+    "shortDescription": "Deep research reports with verified citations",
+    "longDescription": "Installs the hyperresearch pipeline into your project and runs it: a tier-adaptive 16-step process that sweeps sources, investigates the contested points in depth, drafts, runs adversarial critics, patches, and verifies every citation before the report ships. Every source lands in a persistent markdown and SQLite vault that later sessions reuse. Requires Python 3.11+ and `pip install hyperresearch`; the Codex session needs a writable workspace with network access.",
+    "developerName": "Jordan Gibbs",
+    "category": "Research",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "websiteURL": "https://github.com/jordan-gibbs/hyperresearch",
+    "defaultPrompt": [
+      "Research this question in depth and write a cited report: ",
+      "Do a literature review on ",
+      "Compare the evidence for and against "
+    ]
+  }
+}

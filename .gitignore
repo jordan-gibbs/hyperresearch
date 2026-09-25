@@ -13,7 +13,9 @@ build/
 *.egg
 .env
 bench/
-codex_bench/
+codex_bench/*
+!codex_bench/harness.py
+!codex_bench/README.md
 draco-bench/
 
 # Agent install outputs — generated per-user by `hyperresearch install`.

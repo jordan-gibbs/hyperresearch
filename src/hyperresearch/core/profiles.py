@@ -71,6 +71,44 @@ class ModelMap(BaseModel):
         return v.strip()
 
 
+class CodexModelMap(BaseModel):
+    """Per-agent model overrides for the OpenAI Codex install (`--target codex`).
+
+    Same roles as ModelMap. None (the default) omits `model` from the agent's
+    TOML, so the subagent inherits the Codex session's model — the right
+    default, since Codex model names change faster than this package does.
+    Override per agent in a `[profile.<name>]` overlay:
+
+        [profile.full]
+        codex_models = { fetcher = "gpt-5.4-mini" }
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True, protected_namespaces=())
+
+    fetcher: str | None = None
+    source_analyst: str | None = None
+    loci_analyst: str | None = None
+    depth_investigator: str | None = None
+    corpus_critic: str | None = None
+    cite_checker: str | None = None
+    browser_fetcher: str | None = None
+    draft_orchestrator: str | None = None
+    synthesizer: str | None = None
+    critics: str | None = None
+    patcher: str | None = None
+    polish_auditor: str | None = None
+    readability_recommender: str | None = None
+
+    @field_validator("*")
+    @classmethod
+    def _non_empty(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError("codex model override must be a non-empty string (omit it to inherit)")
+        return v.strip()
+
+
 class Profile(BaseModel):
     """One resolved pipeline profile. All ranges are (low, high) inclusive."""
 
@@ -176,6 +214,7 @@ class Profile(BaseModel):
     time_estimate: str
 
     models: ModelMap = Field(default_factory=ModelMap)
+    codex_models: CodexModelMap = Field(default_factory=CodexModelMap)
 
     @field_validator(
         "source_target", "planned_searches", "candidate_urls", "deduped_urls",

@@ -2,14 +2,15 @@
 name: hyperresearch-16-readability-audit
 description: >
   Step 16 (final) of the hyperresearch V8 pipeline. Spawns the
-  hyperresearch-readability-recommender subagent (Read+Write
-  tool-locked) to audit the polished final report and write JSON
+  hyperresearch-readability-recommender subagent (<% if platform == "codex" %>reads the report,
+  writes JSON only<% else %>Read+Write
+  tool-locked<% endif %>) to audit the polished final report and write JSON
   recommendations for paragraph merges, breaks, list/table conversions,
   bold injection, sentence splits, and HR removal. The orchestrator
   reads the recommendations and SELECTIVELY applies them via direct
-  Edit calls (the recommender does NOT modify the report itself).
+  <% if platform == "codex" %>apply_patch hunks<% else %>Edit calls<% endif %> (the recommender does NOT modify the report itself).
   Logs orchestrator decisions to a separate file. Runs for ALL tiers.
-  Invoked via Skill tool from the entry skill.
+  Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry skill.
 ---
 
 # Step 16 — Readability audit & selective apply (FINAL STEP)
@@ -18,7 +19,7 @@ description: >
 
 **Goal:** improve the report's visual structure, paragraph rhythm, and scannability without changing substantive content. The recommender writes a JSON list of suggested changes; YOU (the orchestrator) decide which to apply.
 
-**Why split recommender + orchestrator-applied:** an Edit-based reformatter (V7-style) sometimes makes changes that hurt the argument — converting a flowing paragraph to a bullet list when the prose was load-bearing, or merging paragraphs that addressed distinct sub-topics. By having the recommender produce JSON suggestions and the orchestrator decide what to apply, we get the recommender's pattern-matching speed plus your judgment about which changes serve the research_query.
+**Why split recommender + orchestrator-applied:** an <% if platform == "codex" %>patch<% else %>Edit<% endif %>-based reformatter (V7-style) sometimes makes changes that hurt the argument — converting a flowing paragraph to a bullet list when the prose was load-bearing, or merging paragraphs that addressed distinct sub-topics. By having the recommender produce JSON suggestions and the orchestrator decide what to apply, we get the recommender's pattern-matching speed plus your judgment about which changes serve the research_query.
 
 ---
 
@@ -32,11 +33,11 @@ Read these inputs:
 
 ## Step 16.1 — Spawn the readability recommender
 
-Spawn ONE `hyperresearch-readability-recommender` subagent. Single spawn, runs once.
+Spawn ONE `hyperresearch-readability-recommender` subagent<% if platform == "codex" %> (custom agent `.codex/agents/hyperresearch-readability-recommender.toml`) and wait for it to finish<% else %><% endif %>. Single spawn, runs once.
 
 **Spawn template:**
 ```
-subagent_type: hyperresearch-readability-recommender
+<% if platform == "codex" %>custom_agent: hyperresearch-readability-recommender   # spawn the custom agent defined in .codex/agents/hyperresearch-readability-recommender.toml<% else %>subagent_type: hyperresearch-readability-recommender<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -49,9 +50,12 @@ prompt: |
   synthesized (step 11), critiqued (step 12), gap-filled (step 13),
   patched (step 14), and polish-audited (step 15). Your job: write
   JSON recommendations for paragraph rhythm, list/table conversions,
-  and other structural readability improvements. You are tool-locked
+<% if platform == "codex" %>  and other structural readability improvements. You only read the
+  report and write your recommendations file — you never modify the
+  report. The orchestrator
+<% else %>  and other structural readability improvements. You are tool-locked
   to [Read, Write] — you cannot Edit the report. The orchestrator
-  reads your recommendations and decides which to apply.
+<% endif %>  reads your recommendations and decides which to apply.
 
   YOUR INPUTS:
   - draft_path: research/notes/final_report_<vault_tag>.md
@@ -106,7 +110,15 @@ You are not obligated to apply every recommendation. Use these heuristics:
 
 ---
 
-## Step 16.4 — Apply chosen recommendations via Edit
+<% if platform == "codex" %>## Step 16.4 — Apply chosen recommendations via apply_patch
+
+For each recommendation you decide to apply:
+
+1. Use `apply_patch` on `research/notes/final_report_<vault_tag>.md`
+2. Text to replace = the recommendation's `current` field (exactly as the recommender wrote it)
+3. Replacement text = the recommendation's `recommended` field
+
+**For non-ASCII text (CJK / Arabic / Cyrillic):** the recommender copied `current` verbatim from the report file.<% else %>## Step 16.4 — Apply chosen recommendations via Edit
 
 For each recommendation you decide to apply:
 
@@ -114,7 +126,7 @@ For each recommendation you decide to apply:
 2. `old_string` = the recommendation's `current` field (exactly as the recommender wrote it)
 3. `new_string` = the recommendation's `recommended` field
 
-**For non-ASCII text (CJK / Arabic / Cyrillic):** the recommender copied `current` verbatim from Read output. Trust that. Don't retype.
+**For non-ASCII text (CJK / Arabic / Cyrillic):** the recommender copied `current` verbatim from Read output.<% endif %> Trust that. Don't retype.
 
 **Order of application:**
 1. `remove-hr` first (smallest changes, cleanest baseline)
@@ -124,7 +136,7 @@ For each recommendation you decide to apply:
 5. `split-sentence` (within finalized paragraphs)
 6. `add-whitespace` (final cleanup)
 
-If an Edit fails because `old_string` doesn't match (recommender mis-anchored), skip that recommendation and continue with the rest.
+If <% if platform == "codex" %>a patch fails because the `current` text<% else %>an Edit fails because `old_string`<% endif %> doesn't match (recommender mis-anchored), skip that recommendation and continue with the rest.
 
 ---
 
@@ -161,6 +173,8 @@ This is the audit trail. If a future review finds a readability problem we shoul
 
 ## Pipeline complete
 
-Return to the entry skill (`hyperresearch`). Mark all todos complete. Tell the user the final report path.
+<% if platform == "codex" %>Return to the entry skill (`hyperresearch`) and run its **Final integrity gate** (`run finish`). Mark all plan items complete. Only after `run finish` reports `"passed": true` (or the run is honestly `blocked` after 3 fix rounds), tell the user the final report path and list any still-queued escalations.
 
-You're done.
+The run is not done until the gate has spoken.<% else %>Return to the entry skill (`hyperresearch`). Mark all todos complete. Tell the user the final report path.
+
+You're done.<% endif %>

@@ -4,8 +4,8 @@ description: >
   Step 12 of the hyperresearch V8 pipeline. Spawns 4 adversarial critics
   in parallel against the synthesized final report from step 11. Each
   critic produces an independent findings JSON that the patcher (step 14)
-  consumes. Critics never modify the draft directly. Invoked via Skill
-  tool from the entry skill (full tier only).
+  consumes. Critics never modify the draft directly. Invoked via <% if platform == "codex" %>step-file read<% else %>Skill
+  tool<% endif %> from the entry skill (full tier only).
 ---
 
 # Step 12 — Adversarial critique (parallel critics)
@@ -28,7 +28,7 @@ Read these inputs:
 
 ## Procedure
 
-1. **Spawn all 4 critics in parallel.** In ONE message:
+1. **Spawn all 4 critics in parallel.** <% if platform == "codex" %>Each is a custom agent in `.codex/agents/` — spawn all 4 now, in parallel, and wait for all of them:<% else %>In ONE message:<% endif %>
    - `hyperresearch-dialectic-critic` → `research/runs/<vault_tag>/critic-findings-dialectic.json` (counter-evidence the draft missed or straw-manned)
    - `hyperresearch-depth-critic` → `research/runs/<vault_tag>/critic-findings-depth.json` (shallow spots where interim notes could fill substance)
    - `hyperresearch-width-critic` → `research/runs/<vault_tag>/critic-findings-width.json` (corpus clusters the draft ignores despite evidence)
@@ -36,7 +36,7 @@ Read these inputs:
 
 2. **Pass each critic** (standard 3-piece contract):
    ```
-   subagent_type: hyperresearch-<critic-name>-critic
+   <% if platform == "codex" %>custom_agent: hyperresearch-<critic-name>-critic   # spawn the custom agent defined in .codex/agents/hyperresearch-<critic-name>-critic.toml<% else %>subagent_type: hyperresearch-<critic-name>-critic<% endif %>
    prompt: |
      RESEARCH QUERY (verbatim, gospel):
      > {{paste research/runs/<vault_tag>/query.md body}}
@@ -46,7 +46,7 @@ Read these inputs:
      PIPELINE POSITION: You are step 12 (<critic-name> critic) of the
      hyperresearch V8 pipeline. Step 11 (synthesizer) produced the final report at
      research/notes/final_report_<vault_tag>.md. After you return, step 13 may run a
-     gap-fetch wave, then step 14 (patcher) applies findings as Edit hunks.
+     gap-fetch wave, then step 14 (patcher) applies findings as <% if platform == "codex" %>patch<% else %>Edit<% endif %> hunks.
 
      YOUR INPUTS:
      - draft_path: research/notes/final_report_<vault_tag>.md
@@ -75,5 +75,5 @@ Read these inputs:
 Return to the entry skill (`hyperresearch`). Invoke step 13:
 
 ```
-Skill(skill: "hyperresearch-13-gap-fetch")
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-13-gap-fetch.md<% else %>Skill(skill: "hyperresearch-13-gap-fetch")<% endif %>
 ```

@@ -5,7 +5,7 @@ description: >
   subagents in parallel (one per scored locus), each producing one
   interim note with a Committed Position section. Investigators read
   full source bodies for their locus and may fetch additional sources
-  within their source_budget. Invoked via Skill tool from the entry
+  within their source_budget. Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry
   skill (full tier only).
 ---
 
@@ -29,11 +29,11 @@ Read these inputs:
 
 ## Procedure
 
-1. **Spawn K `hyperresearch-depth-investigator` subagents in parallel** (ONE message, all Task calls). One per locus with `source_budget > 0`, capped at << p.investigator_max >>.
+1. **Spawn K `hyperresearch-depth-investigator` subagents in parallel** (<% if platform == "codex" %>custom agent `.codex/agents/hyperresearch-depth-investigator.toml` — spawn all K now, in parallel, and wait for all of them<% else %>ONE message, all Task calls<% endif %>). One per locus with `source_budget > 0`, capped at << p.investigator_max >>.
 
    **Spawn template:**
    ```
-   subagent_type: hyperresearch-depth-investigator
+   <% if platform == "codex" %>custom_agent: hyperresearch-depth-investigator   # spawn the custom agent defined in .codex/agents/hyperresearch-depth-investigator.toml<% else %>subagent_type: hyperresearch-depth-investigator<% endif %>
    prompt: |
      RESEARCH QUERY (verbatim, gospel):
      > {{paste research/runs/<vault_tag>/query.md body}}
@@ -107,5 +107,5 @@ If >50% of investigators failed: stop and escalate.
 Return to the entry skill (`hyperresearch`). Invoke step 6:
 
 ```
-Skill(skill: "hyperresearch-6-cross-locus-reconcile")
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-6-cross-locus-reconcile.md<% else %>Skill(skill: "hyperresearch-6-cross-locus-reconcile")<% endif %>
 ```

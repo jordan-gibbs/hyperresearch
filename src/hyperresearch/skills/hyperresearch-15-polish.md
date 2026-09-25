@@ -2,11 +2,11 @@
 name: hyperresearch-15-polish
 description: >
   Step 15 (final) of the hyperresearch V8 pipeline. Spawns the
-  hyperresearch-polish-auditor subagent (TOOL-LOCKED to Read + Edit) for
+  hyperresearch-polish-auditor subagent (<% if platform == "codex" %>read + patch only<% else %>TOOL-LOCKED to Read + Edit<% endif %>) for
   the final hygiene + readability pass. Strips pipeline-reference leaks,
   YAML frontmatter, scaffold sections, filler phrases, run-on sentences.
   Escalates structural mismatches rather than fabricating content.
-  Invoked via Skill tool from the entry skill. Followed by step 16
+  Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry skill. Followed by step 16
   (readability audit) which is the actual final step before ship.
 ---
 
@@ -14,7 +14,7 @@ description: >
 
 **Tier gate:** Runs for ALL tiers. Every report gets a polish pass regardless of tier.
 
-**Goal:** final hygiene + readability pass. Tool-locked to `[Read, Edit]`.
+**Goal:** final hygiene + readability pass. <% if platform == "codex" %>The auditor only reads files and applies surgical patches.<% else %>Tool-locked to `[Read, Edit]`.<% endif %>
 
 ---
 
@@ -28,7 +28,7 @@ Read these inputs:
 
 ## Step 15.1 — Pre-create the polish log stub
 
-The polish auditor has `[Read, Edit]` only and cannot create a new file (same tool-lock rule as the step 14 patcher). Stub it first:
+<% if platform == "codex" %>The polish auditor only patches existing files and never creates a new one (same rule as the step 14 patcher). Stub it first:<% else %>The polish auditor has `[Read, Edit]` only and cannot create a new file (same tool-lock rule as the step 14 patcher). Stub it first:<% endif %>
 
 ```bash
 echo '{"applied": [], "escalations": []}' > research/runs/<vault_tag>/polish-log.json
@@ -38,11 +38,11 @@ echo '{"applied": [], "escalations": []}' > research/runs/<vault_tag>/polish-log
 
 ## Step 15.2 — Spawn the polish auditor
 
-Spawn ONCE.
+Spawn ONCE<% if platform == "codex" %> — the `hyperresearch-polish-auditor` custom agent (`.codex/agents/hyperresearch-polish-auditor.toml`) — and wait for it to finish<% else %><% endif %>.
 
 **Spawn template:**
 ```
-subagent_type: hyperresearch-polish-auditor
+<% if platform == "codex" %>custom_agent: hyperresearch-polish-auditor   # spawn the custom agent defined in .codex/agents/hyperresearch-polish-auditor.toml<% else %>subagent_type: hyperresearch-polish-auditor<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -51,10 +51,13 @@ prompt: |
 
   PIPELINE POSITION: You are step 15 (polish auditor) of the
   hyperresearch V8 pipeline — the final step. Step 14 (patcher) applied
-  critic findings as Edit hunks. After you return, the orchestrator
+<% if platform == "codex" %>  critic findings as patch hunks. After you return, the orchestrator
+  runs the final integrity gate and ships. You only read files and
+  apply surgical patches (apply_patch) — never create or rewrite a file.
+<% else %>  critic findings as Edit hunks. After you return, the orchestrator
   runs the final integrity gate and ships. You are TOOL-LOCKED to
   [Read, Edit].
-
+<% endif %>
   YOUR INPUTS:
   - draft_path: research/notes/final_report_<vault_tag>.md
   - polish_log_path: research/runs/<vault_tag>/polish-log.json   (already stubbed)
@@ -67,7 +70,7 @@ The polish auditor strips:
 - Hygiene leaks (YAML frontmatter, scaffold sections, prompt echoes)
 - Filler phrases ("It is worth noting", "Importantly", etc.)
 - Redundant sentences / paragraphs that restate prior content
-- Run-on sentences and over-long paragraphs (breaks into smaller units via Edit)
+- Run-on sentences and over-long paragraphs (breaks into smaller units via <% if platform == "codex" %>apply_patch<% else %>Edit<% endif %>)
 
 ---
 
@@ -75,11 +78,11 @@ The polish auditor strips:
 
 The polish auditor ESCALATES structural mismatches (wrong format for the prompt, missing required sections, etc.) rather than fabricating content to fix them. Read the escalations in the polish log.
 
-If the escalation names a structural issue (e.g., "user asked for a ranked list; draft is unranked prose"), you have one shot to fix it — craft the restructure yourself with hand-written Edits, then ship.
+If the escalation names a structural issue (e.g., "user asked for a ranked list; draft is unranked prose"), you have one shot to fix it — craft the restructure yourself with hand-written <% if platform == "codex" %>`apply_patch` hunks<% else %>Edits<% endif %>, then ship.
 
 **Sanity-check net length.** Polish should have NEGATIVE net char delta. If the polish log shows positive net chars added, something went wrong — polish is for cutting, not expanding.
 
-**Do not apply polish edits yourself in step 15.2.** The polish auditor's tool lock is the mechanism. Calling Edit directly bypasses the hygiene-check and filler-detection logic baked into the auditor's prompt. If the auditor returned empty, re-spawn it; don't do the work yourself unless step 15.3 escalations require it.
+**Do not apply polish edits yourself in step 15.2.** <% if platform == "codex" %>The polish auditor is the mechanism. Patching the report yourself bypasses<% else %>The polish auditor's tool lock is the mechanism. Calling Edit directly bypasses<% endif %> the hygiene-check and filler-detection logic baked into the auditor's prompt. If the auditor returned empty, re-spawn it; don't do the work yourself unless step 15.3 escalations require it.
 
 ---
 
@@ -160,7 +163,7 @@ The final report lives at `research/notes/final_report_<vault_tag>.md`. The wrap
 Return to the entry skill (`hyperresearch`). Invoke step 16:
 
 ```
-Skill(skill: "hyperresearch-16-readability-audit")
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-16-readability-audit.md<% else %>Skill(skill: "hyperresearch-16-readability-audit")<% endif %>
 ```
 
 Step 16 is the final step — readability audit + selective apply. Runs for ALL tiers.

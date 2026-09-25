@@ -3,11 +3,12 @@ name: hyperresearch-11-synthesize
 description: >
   Step 11 of the hyperresearch V8 pipeline. Reads the 3 angle-specific drafts
   from step 10, spot-checks factual conflicts, writes a synthesis plan +
-  outline, then spawns ONE hyperresearch-synthesizer subagent (Read+Write
-  tool-locked) that writes the final report in TWO passes — pass 1 rough
+  outline, then spawns ONE hyperresearch-synthesizer subagent (<% if platform == "codex" %>reads and
+  writes files only<% else %>Read+Write
+  tool-locked<% endif %>) that writes the final report in TWO passes — pass 1 rough
   integrated draft, pass 2 voice/redundancy/length cleanup. Skipped for
   light tier (which writes a single draft directly in step 10). Invoked
-  via Skill tool from the entry skill (full tier).
+  via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry skill (full tier).
 ---
 
 # Step 11 — Synthesize the final report
@@ -16,7 +17,7 @@ description: >
 
 **Goal:** turn the 3 angle-specific drafts from step 10 into ONE integrated final report at `research/notes/final_report_<vault_tag>.md`. The orchestrator preps the strategic brief; the synthesizer subagent writes the report in two passes (rough integrated draft, then voice/redundancy/length cleanup).
 
-**Why split orchestrator + synthesizer:** the orchestrator has been running for 30+ minutes and 200K+ tokens of context. Writing a coherent 5000-10000 word report at this point is the highest cognitive load step in the pipeline, and orchestrator context is full of stale subagent dispatch logic. The synthesizer is a fresh session with `[Read, Write]` tool-lock, focused exclusively on producing the final report. This is the same architectural move that made the patcher and polish-auditor reliable.
+**Why split orchestrator + synthesizer:** the orchestrator has been running for 30+ minutes and 200K+ tokens of context. Writing a coherent 5000-10000 word report at this point is the highest cognitive load step in the pipeline, and orchestrator context is full of stale subagent dispatch logic. The synthesizer is a fresh session <% if platform == "codex" %>that only reads its inputs and writes the report<% else %>with `[Read, Write]` tool-lock<% endif %>, focused exclusively on producing the final report. This is the same architectural move that made the patcher and polish-auditor reliable.
 
 ---
 
@@ -47,7 +48,7 @@ Read these inputs:
 
 ## Step 11.2 — Spot-check factual conflicts (orchestrator only)
 
-The synthesizer is tool-locked to `[Read, Write]` — it cannot run Bash to query the vault. So YOU resolve factual conflicts here, before spawning it.
+<% if platform == "codex" %>The synthesizer only reads its input files and writes the report — it does not run shell commands to query the vault.<% else %>The synthesizer is tool-locked to `[Read, Write]` — it cannot run Bash to query the vault.<% endif %> So YOU resolve factual conflicts here, before spawning it.
 
 For each substantive contradiction between drafts:
 1. Identify the cited source IDs on both sides
@@ -145,11 +146,11 @@ If any are missing or trivial, fix them before proceeding. The synthesizer canno
 
 ## Step 11.6 — Spawn the synthesizer
 
-Spawn ONE `hyperresearch-synthesizer` subagent. Single spawn, runs once.
+Spawn ONE `hyperresearch-synthesizer` subagent<% if platform == "codex" %> (custom agent `.codex/agents/hyperresearch-synthesizer.toml`) and wait for it to finish<% else %><% endif %>. Single spawn, runs once.
 
 **Spawn template:**
 ```
-subagent_type: hyperresearch-synthesizer
+<% if platform == "codex" %>custom_agent: hyperresearch-synthesizer   # spawn the custom agent defined in .codex/agents/hyperresearch-synthesizer.toml<% else %>subagent_type: hyperresearch-synthesizer<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -160,8 +161,9 @@ prompt: |
   Step 10 produced 3 angle-specific drafts. The orchestrator wrote a
   synthesis plan and outline. You read everything and write the final
   report in TWO passes (pass 1 = rough integrated draft, pass 2 = voice/
-  redundancy/length cleanup). You are tool-locked to [Read, Write] — you
-  cannot Bash, cannot spawn subagents. After you return, step 12 (4
+  redundancy/length cleanup). <% if platform == "codex" %>You only read files and write your two
+  output files — no shell commands, no subagents.<% else %>You are tool-locked to [Read, Write] — you
+  cannot Bash, cannot spawn subagents.<% endif %> After you return, step 12 (4
   critics) reads your final report.
 
   YOUR INPUTS:
@@ -201,7 +203,7 @@ prompt: |
     Sources section.
 ```
 
-**CRITICAL: never emit bare text while the synthesizer is running.** It will take 5-15 minutes (two passes). Use the wait time to think — append notes to `research/runs/<vault_tag>/temp/orchestrator-notes.md` about what you'll watch for in step 12 (the critics) based on the synthesis plan you just wrote.
+**CRITICAL: <% if platform == "codex" %>do not end your turn while the synthesizer is running — wait for it.**<% else %>never emit bare text while the synthesizer is running.**<% endif %> It will take 5-15 minutes (two passes). Use the wait time to think — append notes to `research/runs/<vault_tag>/temp/orchestrator-notes.md` about what you'll watch for in step 12 (the critics) based on the synthesis plan you just wrote.
 
 ---
 
@@ -232,13 +234,13 @@ If pass 2 is longer than pass 1 (positive delta), something went wrong — pass 
 
 **If the length gate fails (word count above the target high):** re-spawn the synthesizer ONCE for a compression pass — input is its own final report, directive is "cut to <middle of target range> words: collapse redundant sections, cut the weakest evidence per point, keep every load-bearing claim and citation." This is the ONE permitted regeneration, because the write-once invariant starts only after this step's exit criteria pass; length violations discovered later can only be fixed by exactly this move at higher cost.
 
-If any other sanity check fails, hand-craft an Edit on `research/notes/final_report_<vault_tag>.md` yourself to fix it. Do NOT re-spawn the synthesizer for non-length issues — that's regeneration, which violates the patch-not-regenerate invariant once we have a final draft.
+If any other sanity check fails, hand-craft <% if platform == "codex" %>an `apply_patch` hunk<% else %>an Edit<% endif %> on `research/notes/final_report_<vault_tag>.md` yourself to fix it. Do NOT re-spawn the synthesizer for non-length issues — that's regeneration, which violates the patch-not-regenerate invariant once we have a final draft.
 
 ---
 
 ## Write-once after synthesis
 
-After this step, the final report is only modified by Edit hunks from the patcher (step 14) and polish auditor (step 15). Do NOT re-write or re-synthesize.
+After this step, the final report is only modified by <% if platform == "codex" %>patch<% else %>Edit<% endif %> hunks from the patcher (step 14) and polish auditor (step 15). Do NOT re-write or re-synthesize.
 
 ---
 
@@ -257,5 +259,5 @@ After this step, the final report is only modified by Edit hunks from the patche
 Return to the entry skill (`hyperresearch`). Invoke step 12:
 
 ```
-Skill(skill: "hyperresearch-12-critics")
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-12-critics.md<% else %>Skill(skill: "hyperresearch-12-critics")<% endif %>
 ```

@@ -32,7 +32,7 @@ from typing import Any
 
 from jinja2 import Environment, StrictUndefined
 
-from hyperresearch.core.profiles import Profile, list_profiles, resolve_profile
+from hyperresearch.core.profiles import list_profiles, resolve_profile
 
 EN_DASH = "–"
 

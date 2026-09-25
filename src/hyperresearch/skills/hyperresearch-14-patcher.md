@@ -2,18 +2,21 @@
 name: hyperresearch-14-patcher
 description: >
   Step 14 of the hyperresearch V8 pipeline. Spawns the hyperresearch-patcher
-  subagent (TOOL-LOCKED to Read + Edit) to apply critic findings as
+<% if platform == "codex" %>  subagent (read + patch only) to apply critic findings as
+  surgical patch hunks against the synthesized final report. Zero
+  regeneration. Pre-stubs the patch log because the patcher only patches existing files.
+<% else %>  subagent (TOOL-LOCKED to Read + Edit) to apply critic findings as
   surgical Edit hunks against the synthesized final report. Zero
   regeneration. Pre-stubs the patch log because Edit cannot create files.
-  Handles orchestrator-escalated structural restructures inline. Invoked
-  via Skill tool from the entry skill (full tier).
+<% endif %>  Handles orchestrator-escalated structural restructures inline. Invoked
+  via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry skill (full tier).
 ---
 
 # Step 14 — Patch pass
 
 **Tier gate:** SKIP entirely for `light` tier (no critics = no findings to patch). For `full`: run as documented.
 
-**Goal:** apply critic findings to the draft as surgical Edit hunks. Zero regeneration.
+**Goal:** apply critic findings to the draft as surgical <% if platform == "codex" %>patch<% else %>Edit<% endif %> hunks. Zero regeneration.
 
 ---
 
@@ -49,13 +52,13 @@ Then proceed to step 15. Most runs should not use this gate.
 
 ## Step 14.1 — Pre-create the patch log stub
 
-The patcher is tool-locked to `[Read, Edit]` — it cannot Write. Edit can only modify files that already exist. So you (the orchestrator) MUST write the canonical stub first, which the patcher will then Edit to populate:
+<% if platform == "codex" %>The patcher only reads files and applies surgical patches to files that already exist — it never creates or rewrites a file. So you (the orchestrator) MUST write the canonical stub first, which the patcher will then patch to populate:<% else %>The patcher is tool-locked to `[Read, Edit]` — it cannot Write. Edit can only modify files that already exist. So you (the orchestrator) MUST write the canonical stub first, which the patcher will then Edit to populate:<% endif %>
 
 ```bash
 echo '{"total_findings": 0, "applied": [], "skipped": [], "conflicts": [], "orchestrator_escalated": []}' > research/runs/<vault_tag>/patch-log.json
 ```
 
-The schema above is canonical. The patcher's only job on this file is to Edit the existing keys — `total_findings` becomes an integer, the four arrays get populated. **The patcher MUST NOT invent alternate schemas** — downstream tooling assumes the canonical shape.
+The schema above is canonical. The patcher's only job on this file is to <% if platform == "codex" %>patch<% else %>Edit<% endif %> the existing keys — `total_findings` becomes an integer, the four arrays get populated. **The patcher MUST NOT invent alternate schemas** — downstream tooling assumes the canonical shape.
 
 If you skip this step the patcher will silently have nowhere to write its log, will inline the log in its response instead, and you may mis-capture or drop the data entirely.
 
@@ -63,11 +66,11 @@ If you skip this step the patcher will silently have nowhere to write its log, w
 
 ## Step 14.2 — Spawn the patcher
 
-Spawn ONCE.
+Spawn ONCE<% if platform == "codex" %> — the `hyperresearch-patcher` custom agent (`.codex/agents/hyperresearch-patcher.toml`) — and wait for it to finish<% else %><% endif %>.
 
 **Spawn template:**
 ```
-subagent_type: hyperresearch-patcher
+<% if platform == "codex" %>custom_agent: hyperresearch-patcher   # spawn the custom agent defined in .codex/agents/hyperresearch-patcher.toml<% else %>subagent_type: hyperresearch-patcher<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -77,8 +80,10 @@ prompt: |
   PIPELINE POSITION: You are step 14 (patcher) of the hyperresearch V8
   pipeline. Step 12 produced critic findings; step 13 filled vault gaps.
   After you return, step 15 (polish auditor) does the final hygiene pass.
-  You are TOOL-LOCKED to [Read, Edit] — you cannot Write.
-
+<% if platform == "codex" %>  You only read files and apply surgical patches (apply_patch) to existing
+  files — never create or rewrite a file.
+<% else %>  You are TOOL-LOCKED to [Read, Edit] — you cannot Write.
+<% endif %>
   YOUR INPUTS:
   - draft_path: research/notes/final_report_<vault_tag>.md
   - findings_paths: [
@@ -94,9 +99,11 @@ prompt: |
 ```
 
 The patcher's job:
-- Apply each finding's patch as an Edit on the draft file
+<% if platform == "codex" %>- Apply each finding's patch as a patch hunk on the draft file
+- Populate the pre-stubbed patch log via apply_patch on `research/runs/<vault_tag>/patch-log.json`
+- Each patch hunk stays surgical:<% else %>- Apply each finding's patch as an Edit on the draft file
 - Populate the pre-stubbed patch log via Edit on `research/runs/<vault_tag>/patch-log.json`
-- Each Edit hunk stays surgical: change as little as possible while addressing the issue
+- Each Edit hunk stays surgical:<% endif %> change as little as possible while addressing the issue
 - Reject findings that don't serve the research_query (the patcher checks every finding against the canonical query)
 - Escalate findings that require structural restructure (rather than applying them as oversized patches)
 
@@ -109,23 +116,23 @@ Check the patch log when the patcher returns:
 - **Did the patcher apply all `critical` findings?** If any critical was SKIPPED, that's a pipeline blocker — resolve it yourself before step 15. Options:
   - (a) reject the finding as invalid after re-reading the draft
   - (b) escalate to the user
-  - (c) hand-craft an Edit to address it (you have Write/Edit access; the lock applies only to the patcher subagent)
+<% if platform == "codex" %>  - (c) hand-craft an `apply_patch` hunk to address it (the patch-only discipline binds the patcher subagent, not you)<% else %>  - (c) hand-craft an Edit to address it (you have Write/Edit access; the lock applies only to the patcher subagent)<% endif %>
 
 - **Did any findings CONFLICT?** Look at the conflict log. If two critics disagreed and the patcher picked one, consider whether the discarded one was actually more important.
 
 - **Did the patcher log a "patch too large" skip?** That means a critic proposed regeneration in patch clothing. If the finding was critical, re-spawn the critic with a tighter suggestion, or address it yourself with multiple small hunks.
 
-- **Is the patch log still the empty stub?** If yes, the patcher failed to log — its Task result will contain the real log inline. Read the Task result, parse out the JSON, and write it to `research/runs/<vault_tag>/patch-log.json` yourself via Bash so downstream lint rules see it.
+- **Is the patch log still the empty stub?** If yes, the patcher failed to log — <% if platform == "codex" %>its subagent result (final message) will contain the real log inline. Read that result,<% else %>its Task result will contain the real log inline. Read the Task result,<% endif %> parse out the JSON, and write it to `research/runs/<vault_tag>/patch-log.json` yourself via <% if platform == "codex" %>the shell<% else %>Bash<% endif %> so downstream lint rules see it.
 
 ---
 
 ## Step 14.4 — Handle orchestrator-escalated findings (structural restructures)
 
-The patcher populates `orchestrator_escalated` with findings where `requires_orchestrator_restructure: true` — most commonly, structural-mirror-check findings from the instruction critic (wrong H2 order / missing required heading / extra H2). The patcher's tool-lock cannot safely move / rename H2 sections, so YOU handle them here, before step 15:
+The patcher populates `orchestrator_escalated` with findings where `requires_orchestrator_restructure: true` — most commonly, structural-mirror-check findings from the instruction critic (wrong H2 order / missing required heading / extra H2). The patcher's <% if platform == "codex" %>surgical-patch discipline<% else %>tool-lock<% endif %> cannot safely move / rename H2 sections, so YOU handle them here, before step 15:
 
 For each entry:
 1. Read the `issue` field to understand which H2 in the draft needs to move, be added, or be renamed.
-2. Apply the restructure via hand-written Edit calls on `research/notes/final_report_<vault_tag>.md`. You have Write and Edit access — the tool lock applies only to the patcher and polish auditor subagents.
+<% if platform == "codex" %>2. Apply the restructure via hand-written `apply_patch` hunks on `research/notes/final_report_<vault_tag>.md`. The patch-only discipline applies only to the patcher and polish auditor subagents.<% else %>2. Apply the restructure via hand-written Edit calls on `research/notes/final_report_<vault_tag>.md`. You have Write and Edit access — the tool lock applies only to the patcher and polish auditor subagents.<% endif %>
 3. Preserve the body content within each H2 section — you are moving / renaming / inserting headings, not regenerating prose. If a new heading is added and its body needs fresh content, write a short evidence-grounded paragraph for it.
 4. Log changes in `research/runs/<vault_tag>/orchestrator-restructure-log.md` (plain markdown, one bullet per change) so downstream lint rules can see this step happened.
 5. Never regenerate a whole section or the whole draft. The "patch not regenerate" invariant still binds you — broader tools but not broader license.
@@ -134,7 +141,7 @@ For each entry:
 
 ## Constraints
 
-- **Do not apply revisions yourself in step 14.2.** You MUST spawn the patcher subagent. Do NOT call Edit directly on `research/notes/final_report_<vault_tag>.md` — the patcher has the tool-lock invariants (surgical-edit discipline, conflict resolution, integrate-don't-caveat rule) baked into its prompt. Bypassing it defeats the entire adversarial-review architecture. If the patcher returns empty, re-spawn it once — don't fall back to doing the work yourself unless step 14.4 escalations require it.
+- **Do not apply revisions yourself in step 14.2.** You MUST spawn the patcher subagent. Do NOT <% if platform == "codex" %>patch<% else %>call Edit directly on<% endif %> `research/notes/final_report_<vault_tag>.md`<% if platform == "codex" %> yourself<% else %><% endif %> — the patcher has the <% if platform == "codex" %>surgical-patch<% else %>tool-lock<% endif %> invariants (surgical-edit discipline, conflict resolution, integrate-don't-caveat rule) baked into its prompt. Bypassing it defeats the entire adversarial-review architecture. If the patcher returns empty, re-spawn it once — don't fall back to doing the work yourself unless step 14.4 escalations require it.
 
 - **Do not re-spawn the patcher on the same findings** unless you've modified the findings. The patcher's second run on identical input is a waste.
 
@@ -154,5 +161,5 @@ For each entry:
 Return to the entry skill (`hyperresearch`). Invoke step 14.5 (cite-check):
 
 ```
-Skill(skill: "hyperresearch-14-5-cite-check")
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-14-5-cite-check.md<% else %>Skill(skill: "hyperresearch-14-5-cite-check")<% endif %>
 ```

@@ -189,6 +189,8 @@ def run_resume(
         # string substitution — "2" must come back as the invokable
         # `hyperresearch-2-width-sweep`, never a bare `hyperresearch-2`.
         "skill_to_invoke": step_skill_slug(position["next_step"]),
+        # Codex has no step skills: the orchestrator reads this file instead.
+        "codex_step_file": _codex_step_file(step_skill_slug(position["next_step"])),
     }
     if json_output:
         output(success(data, vault=str(vault.root)), json_mode=True)
@@ -198,6 +200,63 @@ def run_resume(
         else:
             console.print(f"[green]{tag}[/] — resume at step {position['next_step']}")
             console.print(f"  Skill(skill: \"{data['skill_to_invoke']}\")")
+
+
+def _codex_step_file(skill: str | None) -> str | None:
+    """Project-relative path of a step's Codex procedure file, or None."""
+    if skill is None:
+        return None
+    from hyperresearch.core.platforms import CODEX, paths_for
+
+    return f"{paths_for(CODEX).steps_dir}/{skill}.md"
+
+
+@app.command("stop-gate", hidden=True)
+def run_stop_gate() -> None:
+    """Codex Stop hook: block ending the session while the newest run is mid-pipeline.
+
+    Reads the hook's JSON input on stdin. Prints one
+    `{"decision": "block", "reason": ...}` object when the newest run is
+    running, was touched in the last 6 hours, and has a next step; prints
+    nothing otherwise. Always exits 0 and never raises — a broken gate must
+    not wedge the agent. Set HYPERRESEARCH_STOP_GATE=0 to disable.
+    """
+    import os
+    import sys
+
+    try:
+        from hyperresearch.core.codex import STOP_GATE_ENV, stop_gate_decision
+
+        if os.environ.get(STOP_GATE_ENV, "").strip().lower() in ("0", "false", "no", "off"):
+            return
+        try:
+            raw = sys.stdin.read() if sys.stdin is not None else ""
+            payload = json.loads(raw) if raw.strip() else {}
+        except (OSError, ValueError):
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        # Already continuing because of a previous block: let it stop, or a
+        # run that can't advance would loop forever.
+        if payload.get("stop_hook_active"):
+            return
+
+        from pathlib import Path
+
+        from hyperresearch.core.vault import Vault
+
+        cwd = payload.get("cwd")
+        start = Path(cwd) if isinstance(cwd, str) and cwd else None
+        try:
+            vault = Vault.discover(start)
+        except VaultError:
+            return
+        decision = stop_gate_decision(vault)
+        if decision is not None:
+            sys.stdout.write(json.dumps(decision) + "\n")
+            sys.stdout.flush()
+    except Exception:
+        return
 
 
 @app.command("abort")

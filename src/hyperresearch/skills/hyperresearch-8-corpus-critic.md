@@ -6,7 +6,7 @@ description: >
   direction?" gaps, then runs a targeted fetch wave to fill them.
   Highest-leverage intervention point: corrections applied before drafting
   cost nothing; corrections applied after drafting require patches.
-  Invoked via Skill tool from the entry skill (full tier only).
+  Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry skill (full tier only).
 ---
 
 # Step 8 — Pre-draft corpus critic (targeted gap-fill)
@@ -61,11 +61,11 @@ The targeted fetch wave in the next step will pull these filings BEFORE the corp
 
 ## Procedure
 
-1. **Spawn ONE `hyperresearch-corpus-critic` subagent**.
+1. **Spawn ONE `hyperresearch-corpus-critic` subagent**<% if platform == "codex" %> (custom agent `.codex/agents/hyperresearch-corpus-critic.toml`) and wait for it to finish<% else %><% endif %>.
 
    **Spawn template:**
    ```
-   subagent_type: hyperresearch-corpus-critic
+   <% if platform == "codex" %>custom_agent: hyperresearch-corpus-critic   # spawn the custom agent defined in .codex/agents/hyperresearch-corpus-critic.toml<% else %>subagent_type: hyperresearch-corpus-critic<% endif %>
    prompt: |
      RESEARCH QUERY (verbatim, gospel):
      > {{paste research/runs/<vault_tag>/query.md body}}
@@ -87,11 +87,11 @@ The targeted fetch wave in the next step will pull these filings BEFORE the corp
 
 2. **Merge into the step artifact.** Read the subagent's output (`research/runs/<vault_tag>/temp/corpus-critic-gaps-raw.json`; each gap carries an `id` like `cc-1`, a `priority` of critical / high, and a `type` of overturning / strengthening / independent-verification). Write `research/runs/<vault_tag>/corpus-critic-gaps.json` as `{"gaps": [...]}` containing the pre-flight `period-pinned-gaps.json` entries FIRST (they are the critical, period-pinned ones), then the subagent's gaps. Every gap keeps its `id` — the `pp-` / `cc-` prefixes keep the two sets from colliding, and the fetch wave below references gaps by id. If there was no pre-flight file, the merged file is just the subagent's gaps.
 
-3. **Targeted fetch wave.** Spawn **<< p.corpus_critic_fetchers|dash >> fetcher subagents** to search for and fetch the sources identified in the gaps.
+3. **Targeted fetch wave.** Spawn **<< p.corpus_critic_fetchers|dash >> fetcher subagents** to search for and fetch the sources identified in the gaps<% if platform == "codex" %> (custom agent `.codex/agents/hyperresearch-fetcher.toml` — spawn them in parallel and wait for all of them)<% else %><% endif %>.
 
    **Spawn template:**
    ```
-   subagent_type: hyperresearch-fetcher
+   <% if platform == "codex" %>custom_agent: hyperresearch-fetcher   # spawn the custom agent defined in .codex/agents/hyperresearch-fetcher.toml<% else %>subagent_type: hyperresearch-fetcher<% endif %>
    prompt: |
      RESEARCH QUERY (verbatim, gospel):
      > {{paste research/runs/<vault_tag>/query.md body}}
@@ -137,5 +137,5 @@ The targeted fetch wave in the next step will pull these filings BEFORE the corp
 Return to the entry skill (`hyperresearch`). Invoke step 9:
 
 ```
-Skill(skill: "hyperresearch-9-evidence-digest")
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-9-evidence-digest.md<% else %>Skill(skill: "hyperresearch-9-evidence-digest")<% endif %>
 ```

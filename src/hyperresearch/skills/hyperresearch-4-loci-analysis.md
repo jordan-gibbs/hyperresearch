@@ -5,7 +5,7 @@ description: >
   subagents that read the width corpus and identify 1-<< p.loci_max >> specific
   questions where depth investigation will pay off. Deduplicates and
   scores each locus on importance/uncertainty/disagreement/decision_impact,
-  then allocates source budgets dynamically. Invoked via Skill tool from
+  then allocates source budgets dynamically. Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from
   the entry skill (full tier only).
 ---
 
@@ -31,11 +31,11 @@ Survey the corpus: `{hpr_path} note list --tag <vault_tag> --all -j` to confirm 
 
 ## Procedure
 
-1. **Spawn << p.loci_analysts >> `hyperresearch-loci-analyst` subagents in parallel** (ONE message, all << p.loci_analysts >> Task calls). Each analyst gets a letter id in order — `a`, `b`, `c`, ... — and writes to its own output file. All read the same width corpus but return independently.
+1. **Spawn << p.loci_analysts >> `hyperresearch-loci-analyst` subagents in parallel** (<% if platform == "codex" %>custom agent `.codex/agents/hyperresearch-loci-analyst.toml` — spawn all << p.loci_analysts >> now, in parallel, and wait for all of them<% else %>ONE message, all << p.loci_analysts >> Task calls<% endif %>). Each analyst gets a letter id in order — `a`, `b`, `c`, ... — and writes to its own output file. All read the same width corpus but return independently.
 
    **Spawn template:**
    ```
-   subagent_type: hyperresearch-loci-analyst
+   <% if platform == "codex" %>custom_agent: hyperresearch-loci-analyst   # spawn the custom agent defined in .codex/agents/hyperresearch-loci-analyst.toml<% else %>subagent_type: hyperresearch-loci-analyst<% endif %>
    prompt: |
      RESEARCH QUERY (verbatim, gospel):
      > {{paste research/runs/<vault_tag>/query.md body}}
@@ -130,5 +130,5 @@ Survey the corpus: `{hpr_path} note list --tag <vault_tag> --all -j` to confirm 
 Return to the entry skill (`hyperresearch`). Invoke step 5:
 
 ```
-Skill(skill: "hyperresearch-5-depth-investigation")
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-5-depth-investigation.md<% else %>Skill(skill: "hyperresearch-5-depth-investigation")<% endif %>
 ```
