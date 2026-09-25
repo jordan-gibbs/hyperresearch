@@ -8,10 +8,24 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/jordan-gibbs/hyperresearch" alt="License: MIT"></a>
   <a href="https://github.com/jordan-gibbs/hyperresearch"><img src="https://img.shields.io/github/stars/jordan-gibbs/hyperresearch?style=social" alt="GitHub stars"></a>
 </p>
+<p align="center">
+  <a href="#install"><img src="https://img.shields.io/badge/Claude%20Code-supported-D97757" alt="Works in Claude Code"></a>
+  <a href="#codex"><img src="https://img.shields.io/badge/OpenAI%20Codex-supported-10A37F" alt="Works in OpenAI Codex"></a>
+</p>
 
 ---
 
 **Hyperresearch turns Claude Code into a deep research agent: one that currently leads the DeepResearch-Bench RACE leaderboard (benchmarked internally). It runs in OpenAI Codex too.** A tier-adaptive 16-step pipeline takes one prompt and produces an adversarially-audited report with full source provenance. Every source it reads lands in a persistent, searchable vault, so each session starts smarter than the last.
+
+> [!NOTE]
+> **New: hyperresearch runs on OpenAI Codex.** One command installs the full pipeline for Codex: entry skill, step procedures, the subagent roster as Codex custom agents, and a Stop hook that keeps Codex from skipping steps. Same vault, same ship gate as on Claude Code.
+>
+> ```bash
+> pip install hyperresearch && hyperresearch install . --target codex
+> codex --sandbox workspace-write -c sandbox_workspace_write.network_access=true   # then: $hyperresearch <question>
+> ```
+>
+> Codex support ships in the next PyPI release; until then install from GitHub with `pip install git+https://github.com/jordan-gibbs/hyperresearch`. Details and what differs on Codex: [Codex](#codex).
 
 <p align="center">
   <img src="assets/benchmark.png" alt="DeepResearch-Bench top-5 hyperresearch leads the chart ahead of Grep Deep Research, Cellcog Max, nvidia-aiq, Gemini Deep Research, and OpenAI Deep Research" width="780">
