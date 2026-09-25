@@ -385,6 +385,22 @@ def test_stop_gate_blocks_in_progress_run(tmp_vault):
     assert ".hyperresearch/codex/steps/hyperresearch-2-width-sweep.md" in decision["reason"]
 
 
+def test_stop_gate_follows_declared_light_tier(tmp_vault):
+    """Step 1 reclassified a full-gear run as light: the gate must send the
+    orchestrator to step 10, never to a step the tier skips."""
+    from hyperresearch.core.runs import init_run, set_step
+
+    init_run(tmp_vault, "gate-run", profile="full")
+    (tmp_vault.run_dir("gate-run") / "prompt-decomposition.json").write_text(
+        json.dumps({"pipeline_tier": "light"}), encoding="utf-8"
+    )
+    set_step(tmp_vault, "gate-run", "1", "done")
+    set_step(tmp_vault, "gate-run", "2", "done")
+    decision = codex.stop_gate_decision(tmp_vault)
+    assert decision is not None
+    assert "gate-run is at step 10 (hyperresearch-10-triple-draft)" in decision["reason"]
+
+
 @pytest.mark.parametrize("status", ["done", "aborted", "failed", "paused", "blocked"])
 def test_stop_gate_silent_for_inactive_runs(tmp_vault, status):
     from hyperresearch.core.runs import init_run, set_status

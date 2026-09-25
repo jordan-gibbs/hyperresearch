@@ -14,6 +14,7 @@ from hyperresearch.core.runs import (
     list_runs,
     load_manifest,
     resume_position,
+    run_resume_position,
     set_step,
     status_summary,
 )
@@ -80,6 +81,28 @@ class TestStepsAndResume:
         for s in ["1", "2", "10", "15", "16"]:
             set_step(tmp_vault, "t-000003", s, "done")
         assert resume_position(load_manifest(tmp_vault, "t-000003"))["next_step"] is None
+
+    def test_declared_light_tier_resumes_past_skipped_steps(self, tmp_vault):
+        """A full-gear run that step 1 classified `light` resumes at step 10,
+        not at step 3 — the tier's step set wins, as in the ship gate."""
+        init_run(tmp_vault, "t-000006", profile="full")
+        (tmp_vault.run_dir("t-000006") / "prompt-decomposition.json").write_text(
+            json.dumps({"pipeline_tier": "light"}), encoding="utf-8"
+        )
+        set_step(tmp_vault, "t-000006", "1", "done")
+        set_step(tmp_vault, "t-000006", "2", "done")
+        manifest = load_manifest(tmp_vault, "t-000006")
+        pos = run_resume_position(tmp_vault, manifest)
+        assert pos["next_step"] == "10"
+        assert pos["remaining_steps"] == ["10", "15", "16"]
+        assert status_summary(tmp_vault, "t-000006")["resume"]["next_step"] == "10"
+
+    def test_no_declared_tier_keeps_profile_steps(self, tmp_vault):
+        init_run(tmp_vault, "t-000007", profile="full")
+        set_step(tmp_vault, "t-000007", "1", "done")
+        set_step(tmp_vault, "t-000007", "2", "done")
+        pos = run_resume_position(tmp_vault, load_manifest(tmp_vault, "t-000007"))
+        assert pos["next_step"] == "3"
 
     def test_invalid_status_rejected(self, tmp_vault):
         init_run(tmp_vault, "t-000004")

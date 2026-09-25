@@ -299,7 +299,7 @@ def latest_run_tag(vault) -> str | None:
     return runs[0]["vault_tag"] if runs else None
 
 
-def resume_position(manifest: dict) -> dict:
+def resume_position(manifest: dict, required_steps: set[str] | None = None) -> dict:
     """Compute where a run should continue.
 
     Returns {next_step, done_steps, remaining_steps, chapters_pending}.
@@ -307,8 +307,17 @@ def resume_position(manifest: dict) -> dict:
     chapter (see CHAPTER_PLAN_EVENT) stays pending until its last looped
     step is done — `set_step(..., chapter=)` records "step-<N>-done" per
     step, and only step CHAPTER_LAST_STEP closes the chapter.
+
+    `required_steps` narrows the walk to the steps the run's declared tier
+    actually runs (see `run_resume_position`); without it every
+    `profile_steps` entry counts, so a light-tier run would resume at a
+    step its tier skips.
     """
     profile_steps = manifest.get("profile_steps", [])
+    if required_steps is not None:
+        ordered = [s for s in profile_steps if s in required_steps]
+        extra = sorted(required_steps - set(profile_steps), key=_step_sort_key)
+        profile_steps = ordered + extra
     steps = manifest.get("steps", {})
     done = [s for s in profile_steps if steps.get(s, {}).get("status") in ("done", "skipped")]
     remaining = [s for s in profile_steps if s not in done]
@@ -329,11 +338,31 @@ def resume_position(manifest: dict) -> dict:
     }
 
 
+def _step_sort_key(step: str) -> tuple[int, ...]:
+    """"14.5" -> (14, 5), so half-steps order between their neighbours."""
+    try:
+        return tuple(int(part) for part in str(step).split("."))
+    except ValueError:
+        return (10**6,)
+
+
+def run_resume_position(vault, manifest: dict) -> dict:
+    """`resume_position` scoped to the tier step 1 declared for this run.
+
+    Same rule as the ship gate (`_required_step_ids`): the decomposition's
+    `pipeline_tier` wins over the manifest profile, so a run step 1
+    classified `light` resumes at step 10, not step 3.
+    """
+    run_dir = vault.run_dir(manifest["vault_tag"])
+    required = _required_step_ids(manifest, run_dir, vault.config_path)
+    return resume_position(manifest, required)
+
+
 def status_summary(vault, vault_tag: str, stall_minutes: int = STALL_MINUTES) -> dict:
     """Manifest + derived fields (stall detection, resume position, budget)."""
     manifest = load_manifest(vault, vault_tag)
     summary = dict(manifest)
-    summary["resume"] = resume_position(manifest)
+    summary["resume"] = run_resume_position(vault, manifest)
 
     possibly_stalled = False
     if manifest.get("status") == "running":

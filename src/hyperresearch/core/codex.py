@@ -352,7 +352,7 @@ def stop_gate_decision(vault, now: datetime | None = None) -> dict | None:
     """
     from hyperresearch.core.hooks import step_skill_slug
     from hyperresearch.core.platforms import CODEX, paths_for
-    from hyperresearch.core.runs import list_runs, resume_position
+    from hyperresearch.core.runs import list_runs, run_resume_position
 
     runs = list_runs(vault)
     if not runs:
@@ -370,7 +370,7 @@ def stop_gate_decision(vault, now: datetime | None = None) -> dict | None:
     if now - updated > STOP_GATE_WINDOW:
         return None
 
-    next_step = resume_position(manifest)["next_step"]
+    next_step = run_resume_position(vault, manifest)["next_step"]
     if next_step is None:
         return None
     skill = step_skill_slug(next_step) or f"step {next_step}"

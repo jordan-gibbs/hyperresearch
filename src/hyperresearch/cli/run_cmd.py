@@ -163,7 +163,7 @@ def run_resume(
 ) -> None:
     """Print the exact position a recovering orchestrator should continue from."""
     from hyperresearch.core.hooks import step_skill_slug
-    from hyperresearch.core.runs import RunError, load_manifest, resume_position, set_status
+    from hyperresearch.core.runs import RunError, load_manifest, run_resume_position, set_status
 
     vault = _vault_or_exit(json_output)
     tag = _resolve_tag(vault, vault_tag, json_output)
@@ -176,7 +176,7 @@ def run_resume(
             console.print(f"[red]Error:[/] {e}")
         raise typer.Exit(1)
 
-    position = resume_position(manifest)
+    position = run_resume_position(vault, manifest)
     if manifest["status"] in ("paused", "blocked", "failed"):
         set_status(vault, tag, "running")
 
