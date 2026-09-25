@@ -13,6 +13,8 @@ Context exposed to templates:
     p          — the primary profile (default: full)
     <name>     — every available profile by name (e.g. `full`, `light`),
                  so tier tables can reference both tiers in one file.
+    platform   — the agent runtime being installed for: "claude" (Claude
+                 Code) or "codex" (OpenAI Codex CLI). See core/platforms.py.
 
 Filters:
     dash    — join a (low, high) range with an en dash (U+2013)
@@ -26,6 +28,7 @@ a prompt with a hole in it.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from jinja2 import Environment, StrictUndefined
 
@@ -64,16 +67,22 @@ def prompt_env() -> Environment:
 def build_render_context(
     config_path: Path | None = None,
     primary: str = "full",
-) -> dict[str, Profile]:
-    """Resolve every available profile; expose each by name plus `p` (primary)."""
+    platform: str = "claude",
+) -> dict[str, Any]:
+    """Resolve every available profile; expose each by name plus `p` (primary).
+
+    `platform` selects the agent runtime the prompts are rendered for.
+    """
+    from hyperresearch.core.platforms import check_platform
+
     profiles = {name: resolve_profile(name, config_path) for name in list_profiles(config_path)}
     if primary not in profiles:
         # resolve_profile raises a helpful error for unknown names
         profiles[primary] = resolve_profile(primary, config_path)
-    return {"p": profiles[primary], **profiles}
+    return {"p": profiles[primary], **profiles, "platform": check_platform(platform)}
 
 
-def render_prompt(text: str, context: dict[str, Profile]) -> str:
+def render_prompt(text: str, context: dict[str, Any]) -> str:
     """Render one prompt template with the given profile context."""
     return prompt_env().from_string(text).render(**context)
 

@@ -22,13 +22,16 @@ from pathlib import Path
 _RENDER_STATE: dict | None = None
 
 
-def _set_render_state(profile_name: str, config_path: Path | None) -> None:
+def _set_render_state(
+    profile_name: str, config_path: Path | None, platform: str = "claude"
+) -> None:
     global _RENDER_STATE
     from hyperresearch.core.render import build_render_context
 
     _RENDER_STATE = {
         "profile_name": profile_name,
-        "context": build_render_context(config_path, primary=profile_name),
+        "platform": platform,
+        "context": build_render_context(config_path, primary=profile_name, platform=platform),
     }
 
 
