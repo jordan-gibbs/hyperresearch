@@ -1,6 +1,6 @@
 <img width="1280" height="400" alt="hyperresearch-readme-hero-1280x400" src="https://github.com/user-attachments/assets/320680fc-bc56-4eac-9ec2-7ec46d4bde98" />
 
-<h3 align="center">The Most Powerful Deep Research Harness: a Claude Code deep research skill</h3>
+<h3 align="center">The Most Powerful Deep Research Harness: a deep research skill for Claude Code and OpenAI Codex</h3>
 
 <p align="center">
   <a href="https://pypi.org/project/hyperresearch/"><img src="https://img.shields.io/pypi/v/hyperresearch" alt="PyPI version"></a>
@@ -11,7 +11,7 @@
 
 ---
 
-**Hyperresearch turns Claude Code into a deep research agent: one that currently leads the DeepResearch-Bench RACE leaderboard (benchmarked internally).** A tier-adaptive 16-step pipeline takes one prompt and produces an adversarially-audited report with full source provenance. Every source it reads lands in a persistent, searchable vault, so each session starts smarter than the last.
+**Hyperresearch turns Claude Code into a deep research agent: one that currently leads the DeepResearch-Bench RACE leaderboard (benchmarked internally). It runs in OpenAI Codex too.** A tier-adaptive 16-step pipeline takes one prompt and produces an adversarially-audited report with full source provenance. Every source it reads lands in a persistent, searchable vault, so each session starts smarter than the last.
 
 <p align="center">
   <img src="assets/benchmark.png" alt="DeepResearch-Bench top-5 hyperresearch leads the chart ahead of Grep Deep Research, Cellcog Max, nvidia-aiq, Gemini Deep Research, and OpenAI Deep Research" width="780">
@@ -36,27 +36,37 @@ manuscript version with [scholarly metadata filters](docs/source-search.md).
 
 ## Install
 
+Works in **Claude Code** and **OpenAI Codex**: same pipeline, same vault.
+
 ```bash
 cd your-project
-pip install hyperresearch && hyperresearch install
+pip install hyperresearch
+
+hyperresearch install                    # Claude Code, then: /hyperresearch <anything>
+hyperresearch install . --target codex   # OpenAI Codex, then: $hyperresearch <anything>
 ```
 
-Then `/hyperresearch <anything>` in Claude Code.
+`--target all` installs both side by side. Codex sessions need write access and network, [see below](#codex).
+
+Prefer a plugin or a single skill? Each route below installs one bootstrap skill, `deep-research`, that sets the pipeline up in the current project on first use. It still needs `pip install hyperresearch`.
+
+| | Claude Code | OpenAI Codex |
+|---|---|---|
+| **Plugin** | `/plugin marketplace add jordan-gibbs/hyperresearch`<br>`/plugin install hyperresearch@hyperresearch` | `codex plugin marketplace add jordan-gibbs/hyperresearch`<br>`codex plugin add hyperresearch@hyperresearch` |
+| **Skill** ([skills.sh](https://skills.sh)) | `npx skills add jordan-gibbs/hyperresearch -a claude-code` | `npx skills add jordan-gibbs/hyperresearch -a codex` |
+| **Invoke** | `/hyperresearch:deep-research <question>` (plugin)<br>`/deep-research <question>` (skill) | `$hyperresearch:deep-research <question>` (plugin)<br>`$deep-research <question>` (skill) |
+
+Or just ask for deep research in plain words; the skill triggers on its description.
 
 > Python 3.11–3.14.
 >
 > Power users: `hyperresearch install --global` makes `/hyperresearch` reachable from every Claude Code session anywhere, at the cost of ~15 lines in every session's system reminder. Per-project install (above) keeps unrelated CC sessions clean.
 
-### Install as a Claude Code plugin
+### The bootstrap skill
 
-The repo is also a Claude Code plugin marketplace. The plugin ships one skill, `deep-research`, which checks for the `hyperresearch` CLI, runs `hyperresearch install` in the current project, and hands off to `/hyperresearch`. The pipeline still comes from the Python package, so you need `pip install hyperresearch` either way.
+The repo is a Claude Code plugin marketplace, a Codex plugin marketplace, and a skills.sh source, and all three ship the same skill, `deep-research`. It checks for the `hyperresearch` CLI, runs `hyperresearch install` for the agent it is running in (`--target codex` under Codex), and hands off to the pipeline. The pipeline itself still comes from the Python package.
 
-```
-/plugin marketplace add jordan-gibbs/hyperresearch
-/plugin install hyperresearch@hyperresearch
-```
-
-Then ask for deep research in plain words, or run `/hyperresearch:deep-research <question>`. If Claude Code does not pick up the newly installed skills and subagents, restart it in the same directory and run `/hyperresearch <question>`.
+If Claude Code does not pick up the newly installed skills and subagents, restart it in the same directory and run `/hyperresearch <question>`. Codex discovers skills at session start, so on first use the bootstrap reads the freshly installed entry skill directly; later sessions can start with `$hyperresearch <question>`.
 
 ### Codex
 
@@ -77,27 +87,30 @@ codex --sandbox workspace-write -c sandbox_workspace_write.network_access=true
 $hyperresearch <anything>
 
 # non-interactive:
-codex exec --sandbox workspace-write -c sandbox_workspace_write.network_access=true "\$hyperresearch <anything>"
+codex exec --sandbox workspace-write -c sandbox_workspace_write.network_access=true \
+  --dangerously-bypass-hook-trust "\$hyperresearch <anything>"
 ```
 
-hyperresearch passes these as flags and never edits your Codex config. What is different on Codex:
+You pass these as flags; hyperresearch never edits your Codex config. `codex exec` cannot ask you to trust the project's hooks, so without `--dangerously-bypass-hook-trust` the Stop hook below does not run. Only pass it for hooks you have read (`.codex/hooks.json`).
+
+Subagents inherit the session's model. To pin a model per role, add a `codex_models` override to a profile in `.hyperresearch/config.toml` and re-run `hyperresearch install . --target codex`:
+
+```toml
+[profile.full]
+codex_models = { fetcher = "gpt-5.4-mini", critics = "gpt-5.5" }
+```
+
+What is different on Codex:
 
 - **No browser lane.** Codex has no Claude-in-Chrome equivalent, so fetches blocked by a login wall or bot wall stay in the escalation queue, and the final message lists them for you.
 - **Tool locks are instructions, not enforcement.** Codex custom agents have no per-agent tool allowlist. The patcher and polish auditor are told to make surgical edits only, but nothing stops them from doing more.
 - **A Stop hook guards the pipeline.** `hyperresearch run stop-gate` blocks the session from ending while the newest run is mid-pipeline, so Codex cannot quietly answer inline and stop. Codex runs a project's hooks only after you trust them.
 
-The repo is also a Codex plugin marketplace, with the same `deep-research` bootstrap skill as the Claude Code plugin:
-
-```bash
-codex plugin marketplace add jordan-gibbs/hyperresearch
-codex plugin add hyperresearch@hyperresearch
-```
-
 ---
 
 ## The 16-step research pipeline
 
-The entry skill is a thin router. It pins down the canonical research query, then invokes one step skill per phase via Claude Code's `Skill` tool. Each step's procedure loads into context only when that step actually runs. That's what stops a long pipeline from quietly dropping steps as its context rots.
+The entry skill is a thin router. It pins down the canonical research query, then invokes one step skill per phase via Claude Code's `Skill` tool (on Codex, it reads one step file per phase from `.hyperresearch/codex/steps/`). Each step's procedure loads into context only when that step actually runs. That's what stops a long pipeline from quietly dropping steps as its context rots.
 
 | # | Step | What it does | Tiers |
 |---|---|---|---|
@@ -161,7 +174,7 @@ hyperresearch run status -j                                      # see what step
 
 ### The two load-bearing principles
 
-1. **Patch, never regenerate.** After step 11 produces the synthesized report (or step 10 for light tier), the only modifications are surgical Edit hunks. The patcher and polish auditor are tool-locked to `[Read, Edit]` at the Claude Code allowlist level so they physically cannot Write a new draft. Per-hunk caps make "just rewrite it" mechanically impossible. Critic findings that don't fit a small hunk escalate as structural issues.
+1. **Patch, never regenerate.** After step 11 produces the synthesized report (or step 10 for light tier), the only modifications are surgical Edit hunks. The patcher and polish auditor are tool-locked to `[Read, Edit]` at the Claude Code allowlist level so they physically cannot Write a new draft (on Codex this lock is an instruction, not enforcement). Per-hunk caps make "just rewrite it" mechanically impossible. Critic findings that don't fit a small hunk escalate as structural issues.
 
 2. **Canonical research query is gospel.** The verbatim user prompt is persisted to `research/runs/<vault_tag>/query.md` once and re-read by every subsequent step and every spawned subagent. Wrapper requirements (save paths, citation format, terminal sections) are a separate contract.
 

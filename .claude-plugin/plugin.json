@@ -9,5 +9,5 @@
   "homepage": "https://github.com/jordan-gibbs/hyperresearch",
   "repository": "https://github.com/jordan-gibbs/hyperresearch",
   "license": "MIT",
-  "keywords": ["deep-research", "research", "claude-code", "skill", "citations", "research-agent"]
+  "keywords": ["deep-research", "research", "claude-code", "codex", "agent-skills", "skill", "citations", "research-agent", "literature-review"]
 }
