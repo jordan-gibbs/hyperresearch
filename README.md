@@ -11,11 +11,14 @@
 <p align="center">
   <a href="#install"><img src="https://img.shields.io/badge/Claude%20Code-supported-D97757" alt="Works in Claude Code"></a>
   <a href="#codex"><img src="https://img.shields.io/badge/OpenAI%20Codex-supported-10A37F" alt="Works in OpenAI Codex"></a>
+  <a href="https://hyperresearch.ai"><img src="https://img.shields.io/badge/Hosted-hyperresearch.ai-4F46E5" alt="Hosted at hyperresearch.ai"></a>
 </p>
 
 ---
 
 **Hyperresearch turns Claude Code into a deep research agent: one that currently leads the DeepResearch-Bench RACE leaderboard (benchmarked internally). It runs in OpenAI Codex too.** A tier-adaptive 16-step pipeline takes one prompt and produces an adversarially-audited report with full source provenance. Every source it reads lands in a persistent, searchable vault, so each session starts smarter than the last.
+
+**Don't want to run it locally?** [Hyperresearch](https://hyperresearch.ai) is the hosted version: the same pipeline, with no Claude Code or Codex install needed.
 
 > [!NOTE]
 > **New: hyperresearch runs on OpenAI Codex.** One command installs the full pipeline for Codex: entry skill, step procedures, the subagent roster as Codex custom agents, and a Stop hook that keeps Codex from skipping steps. Same vault, same ship gate as on Claude Code.
