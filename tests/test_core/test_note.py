@@ -190,6 +190,50 @@ def test_strip_markdown():
     assert "[[" not in plain
 
 
+def test_strip_markdown_keeps_numeric_comparisons():
+    """`<[^>]+>` treated a span between a less-than and a later greater-than as
+    an HTML tag, so a datasheet sentence like the one below was indexed as
+    "an input voltage of 23.5 V DC (min. 3 s)": the search text showed a
+    different threshold from the note."""
+    md = (
+        "Battery operation is started without a delay when an input voltage of "
+        "<22.5 V DC is detected; return threshold UIN >23.5 V DC (min. 3 s)."
+    )
+    plain = strip_markdown(md)
+    assert "<22.5 V DC is detected" in plain
+    assert "UIN >23.5 V DC" in plain
+    # A span is a tag only when "<" is followed by a tag-name letter, "/" plus
+    # a letter, "!" or "?". Excluding just digits after "<" would still eat these.
+    assert strip_markdown("a < b > c") == "a < b > c"
+    assert strip_markdown("x <= 5 and y >= 3") == "x <= 5 and y >= 3"
+    # "</" opens a closing tag only when a letter follows it.
+    assert strip_markdown("a </3 b> c") == "a </3 b> c"
+    # Tag names are ASCII, as in HTML.
+    assert strip_markdown("x <\u00e9 y> z") == "x <\u00e9 y> z"
+
+
+def test_strip_markdown_keeps_unterminated_tag():
+    """The closing ">" stays mandatory: an unterminated tag passes through
+    whole, which tests/test_serve/test_xss.py asserts as its premise. Making
+    ">" optional would eat everything after "<img"."""
+    body = "trigger <img src=x onerror=alert(1) text"
+    assert strip_markdown(body) == body
+
+
+def test_strip_markdown_still_strips_html_tags():
+    """Real tags, closing tags, self-closing tags and comments still go."""
+    md = 'Some <b>bold</b> text<br/> and <a href="x">a link</a> <!-- note --> done'
+    assert strip_markdown(md) == "Some bold text and a link done"
+    # Upper-case names, a doctype, a processing instruction and a tag broken
+    # across lines are markup too.
+    md = '<?xml version="1.0"?><!DOCTYPE html><B>bold</B> and<BR> <a\nhref="x">done</a>'
+    assert strip_markdown(md) == "bold and done"
+    # Any element name, not a list of known ones: JATS abstracts carry
+    # namespaced elements, and custom elements are markup as well.
+    md = "<jats:p>Abstract</jats:p> and <custom-el>more</custom-el>"
+    assert strip_markdown(md) == "Abstract and more"
+
+
 def test_raw_file_persists_on_roundtrip(tmp_vault):
     """raw_file must survive parse + re-serialize (regression test for wipe bug).
 
