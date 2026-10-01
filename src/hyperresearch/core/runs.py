@@ -23,6 +23,7 @@ vault. Final reports ship to `research/notes/final_report_<vault_tag>.md`.
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -72,6 +73,14 @@ CHAPTER_LAST_STEP = "10"
 # possibly-stalled by `hpr run status`.
 STALL_MINUTES = 30
 
+# Only these blocks can be cleared by `run resume` or `run step --force`.
+# budget/verify blocks keep their existing behavior.
+_COUNT_BLOCK_REASONS = ("max_sources", "max_notes")
+
+# Cap explicit count-block clears, including `run resume`.
+_MAX_COUNT_FORCE_CLEARS = 3
+_COUNT_FIELDS = {"max_sources": "sources_fetched", "max_notes": "notes_written"}
+
 
 class RunError(Exception):
     pass
@@ -91,13 +100,23 @@ def init_run(
     profile: str = "full",
     budget_usd: float | None = None,
     query: str | None = None,
+    max_sources: int | None = None,
+    max_notes: int | None = None,
 ) -> dict:
     """Scaffold research/runs/<vault_tag>/ and write a fresh manifest.
 
     Idempotent: re-running on an existing run returns the existing manifest
     unchanged (so a recovering orchestrator can call it safely).
+
+    ``max_sources`` / ``max_notes`` are optional observable ceilings checked
+    at step-done against vault_tag-filtered counts (not mtime).
     """
     from hyperresearch.core.profiles import resolve_profile
+
+    if max_sources is not None and max_sources <= 0:
+        raise RunError("--max-sources must be a positive integer")
+    if max_notes is not None and max_notes <= 0:
+        raise RunError("--max-notes must be a positive integer")
 
     run_dir = vault.run_dir(vault_tag)
     mpath = run_dir / MANIFEST_NAME
@@ -112,15 +131,20 @@ def init_run(
     if query is not None:
         (run_dir / "query.md").write_text(query, encoding="utf-8")
 
+    now = _now()
     manifest = {
         "manifest_version": MANIFEST_VERSION,
         "vault_tag": vault_tag,
         "profile": profile,
         "profile_steps": [str(s) for s in resolved.steps],
         "status": "running",
-        "started_at": _now(),
-        "updated_at": _now(),
+        "started_at": now,
+        "updated_at": now,
         "budget_usd": budget_usd,
+        "max_sources": max_sources,
+        "max_notes": max_notes,
+        "counts_force_cleared": 0,
+        "counts_clear_baselines": {},  # reason -> count when last cleared
         "blocked_on": None,
         "steps": {},
         "chapters": {},
@@ -154,7 +178,7 @@ def _save(vault, vault_tag: str, manifest: dict) -> None:
 
 
 def record_event(vault, vault_tag: str, event: dict) -> None:
-    """Append one event to events.jsonl and touch the manifest heartbeat.
+    """Append one event to events.jsonl and touch updated_at for stall detection.
 
     A `chapter-plan` event (step 1.5) also registers its chapter in
     `manifest["chapters"]` — status "planned", plus the title when given —
@@ -171,7 +195,7 @@ def record_event(vault, vault_tag: str, event: dict) -> None:
     manifest = load_manifest(vault, vault_tag)
     if event.get("type") == CHAPTER_PLAN_EVENT:
         _fold_chapter_plan(manifest, event)
-    _save(vault, vault_tag, manifest)  # heartbeat
+    _save(vault, vault_tag, manifest)  # touch updated_at for stall detection
 
 
 # Bounds on what a chapter-plan event may write into the manifest. Events
@@ -219,11 +243,32 @@ def set_step(
     step: str,
     status: str,
     chapter: str | None = None,
+    force: bool = False,
 ) -> dict:
-    """Mark a step's status. Steps are keyed as strings ("1", "1.5", "11g")."""
+    """Mark a step's status. Steps are keyed as strings ("1", "1.5", "11g").
+
+    On ``done``, reconciles vault_tag-filtered counts and applies max_sources /
+    max_notes. A count block requires a force-clear (up to the cap) before
+    recording the step; budget/verify blocks cannot be cleared with force.
+    """
     if status not in STEP_STATUSES:
         raise RunError(f"invalid step status '{status}' (one of {STEP_STATUSES})")
     manifest = load_manifest(vault, vault_tag)
+    blocked_on = manifest.get("blocked_on") if manifest.get("status") == "blocked" else None
+
+    if status == "done" and blocked_on is not None:
+        if blocked_on in _COUNT_BLOCK_REASONS and not force:
+            raise RunError(
+                f"run '{vault_tag}' is blocked on {blocked_on!r}; "
+                "resolve the limit or re-run step done with --force"
+            )
+        if blocked_on not in _COUNT_BLOCK_REASONS:
+            raise RunError(
+                f"run '{vault_tag}' is blocked on {blocked_on!r}; "
+                "this block cannot be cleared with --force"
+            )
+        manifest = clear_count_block(vault, vault_tag)
+
     entry = manifest["steps"].setdefault(str(step), {})
     entry["status"] = status
     if status == "running" and "started_at" not in entry:
@@ -235,7 +280,21 @@ def set_step(
         ch = manifest["chapters"].setdefault(chapter, {})
         ch["status"] = f"step-{step}-{status}"
     _save(vault, vault_tag, manifest)
-    record_event(vault, vault_tag, {"type": "step", "step": str(step), "status": status, "chapter": chapter})
+    record_event(
+        vault,
+        vault_tag,
+        {
+            "type": "step",
+            "step": str(step),
+            "status": status,
+            "chapter": chapter,
+            "force": bool(force),
+        },
+    )
+    # Agents rarely call `hpr run spend`; reconciling at step boundaries is
+    # what lets count ceilings fire mid-run instead of only at `run finish` (#92).
+    if status == "done":
+        manifest = reconcile_spend_from_disk(vault, vault_tag)
     return manifest
 
 
@@ -262,6 +321,114 @@ def add_spend(
         manifest["status"] = "blocked"
         manifest["blocked_on"] = "budget"
     _save(vault, vault_tag, manifest)
+    return manifest
+
+
+def _count_notes_and_sources(vault, vault_tag: str) -> tuple[int, int]:
+    """Count tagged notes and distinct fetched source URLs linked to them.
+
+    Concurrent runs share the vault and note update / repair / sources score
+    rewrite files, so mtime is not a valid run filter. HTML and PDF fetches
+    both create rows in the sources table.
+    """
+    tag = (vault_tag or "").strip().lower()
+    conn = vault.db
+    try:
+        notes = conn.execute(
+            """
+            SELECT COUNT(*) FROM notes n
+            JOIN tags t ON t.note_id = n.id
+            WHERE t.tag = ?
+            """,
+            (tag,),
+        ).fetchone()[0]
+        sources = conn.execute(
+            """
+            SELECT COUNT(DISTINCT s.url) FROM sources s
+            JOIN tags t ON t.note_id = s.note_id
+            WHERE t.tag = ?
+            """,
+            (tag,),
+        ).fetchone()[0]
+    except sqlite3.Error as e:
+        # Do not invent zero counts — that is the #92 failure mode.
+        raise RunError(f"failed to count notes or sources for '{vault_tag}': {e}") from e
+    return notes, sources
+
+
+def clear_count_block(vault, vault_tag: str) -> dict:
+    """Clear one count block until its observed count increases again."""
+    manifest = load_manifest(vault, vault_tag)
+    reason = manifest.get("blocked_on")
+    if manifest.get("status") != "blocked" or reason not in _COUNT_BLOCK_REASONS:
+        raise RunError(f"run '{vault_tag}' has no count block to clear")
+    cleared = int(manifest.get("counts_force_cleared", 0) or 0)
+    if cleared >= _MAX_COUNT_FORCE_CLEARS:
+        raise RunError(f"run '{vault_tag}' reached the count force-clear limit")
+    # Refresh the snapshot before clearing; a fetch may have landed since
+    # the step that created the block.
+    manifest = reconcile_spend_from_disk(vault, vault_tag)
+    baselines = manifest.setdefault("counts_clear_baselines", {})
+    baselines[reason] = int(manifest["spend"].get(_COUNT_FIELDS[reason], 0) or 0)
+    manifest["counts_force_cleared"] = cleared + 1
+    manifest["status"] = "running"
+    manifest["blocked_on"] = None
+    _save(vault, vault_tag, manifest)
+    record_event(vault, vault_tag, {"type": "counts_force_clear", "cleared": cleared + 1})
+    return load_manifest(vault, vault_tag)
+
+
+def _apply_count_ceilings(manifest: dict) -> None:
+    """Flip to blocked when max_sources / max_notes are crossed (running only)."""
+    if manifest.get("status") != "running":
+        return
+    spend = manifest.get("spend", {})
+    max_sources = manifest.get("max_sources")
+    max_notes = manifest.get("max_notes")
+    baselines = manifest.get("counts_clear_baselines", {})
+    for reason, ceiling in (("max_sources", max_sources), ("max_notes", max_notes)):
+        count = int(spend.get(_COUNT_FIELDS[reason], 0) or 0)
+        baseline = baselines.get(reason)
+        if ceiling is not None and count >= ceiling and (baseline is None or count > baseline):
+            manifest["status"] = "blocked"
+            manifest["blocked_on"] = reason
+            baselines.pop(reason, None)
+            return
+
+
+def reconcile_spend_from_disk(vault, vault_tag: str) -> dict:
+    """Fold vault_tag-filtered notes and fetched URLs into spend.
+
+    Pipeline agents often never call `hpr run spend` (#92). Counts come from
+    the vault DB (tag + sources), not mtime. Agent-reported estimated_usd is
+    left alone — this repo does not carry unit prices.
+    """
+    manifest = load_manifest(vault, vault_tag)
+
+    notes, sources = _count_notes_and_sources(vault, vault_tag)
+
+    spend = manifest.setdefault("spend", {})
+    spend["sources_fetched"] = sources
+    spend["notes_written"] = notes
+    # estimated_usd and agents_spawned only move via add_spend / hpr run spend.
+
+    _apply_count_ceilings(manifest)
+
+    _save(vault, vault_tag, manifest)
+    record_event(
+        vault,
+        vault_tag,
+        {
+            "type": "spend_reconcile",
+            "sources_fetched": sources,
+            "notes_written": notes,
+            "agents_spawned": spend.get("agents_spawned", 0),
+            "estimated_usd": spend.get("estimated_usd", 0.0),
+            "max_sources": manifest.get("max_sources"),
+            "max_notes": manifest.get("max_notes"),
+            "blocked_on": manifest.get("blocked_on"),
+        },
+    )
     return manifest
 
 
@@ -688,6 +855,9 @@ def finish_run(vault, vault_tag: str) -> dict:
     earned it.
     """
     result = verify_run(vault, vault_tag)
+    # Counts come from vault_tag-filtered disk/DB so a finished run never
+    # reports zero just because agents skipped `hpr run spend`.
+    reconcile_spend_from_disk(vault, vault_tag)
     manifest = load_manifest(vault, vault_tag)
     manifest["verify"] = {
         "passed": result["passed"],
