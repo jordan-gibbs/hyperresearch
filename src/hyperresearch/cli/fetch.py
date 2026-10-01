@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import typer
+from rich.markup import escape
 
 from hyperresearch.cli._output import console, err_console, output
 from hyperresearch.core.config import AssetSettings, FetchSettings
@@ -322,6 +323,7 @@ def fetch(
         rescue_full_text,
     )
     from hyperresearch.core.scholar import extract_doi
+    from hyperresearch.web.safe_http import CertVerificationError
 
     rescue_reason: str | None = None
     rescue_doi: str | None = None
@@ -346,13 +348,29 @@ def fetch(
 
     try:
         result = prov.fetch(url)
+    except CertVerificationError as e:
+        # Raised as its own type so a refused certificate stays a refusal.
+        # Offered to the rescue like a 403, a forced certificate failure came
+        # back as an ordinary rescued note (exit 0, `kind: "rescued"`, the
+        # refusal only as free text in `blocked_reason`), and with --visible
+        # the rescue's landing-page candidates went through the visible lane,
+        # which ignores certificate errors. The message names the opt-out
+        # where the refusing lane has one.
+        if json_output:
+            output(error(str(e), "TLS_CERT_INVALID"), json_mode=True)
+        else:
+            # The opt-out reads "[fetch]", which Rich would take for markup.
+            console.print(
+                f"[red]Fetch refused (TLS certificate invalid):[/] {escape(str(e))}"
+            )
+        raise typer.Exit(1) from e
     except Exception as e:
         result = _rescue(f"fetch failed: {e}", None)
         if result is None:
             if json_output:
                 output(error(str(e), "FETCH_ERROR"), json_mode=True)
             else:
-                console.print(f"[red]Fetch failed:[/] {e}")
+                console.print(f"[red]Fetch failed:[/] {escape(str(e))}")
             raise typer.Exit(1)
 
     # Detect login redirects — abort, but ESCALATE to the browser lane

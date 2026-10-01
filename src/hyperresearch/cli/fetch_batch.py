@@ -7,6 +7,7 @@ import sys
 from urllib.parse import urlparse
 
 import typer
+from rich.markup import escape
 
 from hyperresearch.cli._output import console, output
 from hyperresearch.core.fetcher import existing_live_note_for_url, reclaim_orphaned_source_row
@@ -35,6 +36,7 @@ def fetch_batch(
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.core.vault import Vault, VaultError
     from hyperresearch.web.base import get_provider
+    from hyperresearch.web.safe_http import CertVerificationError
 
     # Collect URLs from args and/or stdin
     all_urls = list(urls or [])
@@ -104,14 +106,34 @@ def fetch_batch(
 
     results = []
     failed_urls: list[dict] = []  # surfaced in JSON output so callers see what was lost
+    # Cert-refused URLs are failures like any other to the caller, but they are
+    # held back from the open-access rescue below: see the comment there.
+    cert_refused: set[str] = set()
 
     def _fetch_one(provider, url: str, kind: str) -> None:
         try:
             results.append(provider.fetch(url))
+        except CertVerificationError as exc:
+            cert_refused.add(url)
+            # `reason` is the machine-readable signal; `error` and the console
+            # line carry the message, which names the config opt-out where
+            # the refusing lane has one.
+            failed_urls.append(
+                {"url": url, "error": str(exc), "phase": kind, "reason": "tls_cert_invalid"}
+            )
+            if not json_output:
+                # Rich would take "[fetch]" in the opt-out for markup, and a
+                # bracketed query parameter in the URL as well.
+                console.print(
+                    f"  [yellow]SKIPPED (TLS certificate invalid):[/] {escape(url)} "
+                    f"({escape(str(exc))})"
+                )
         except Exception as exc:
             failed_urls.append({"url": url, "error": str(exc), "phase": kind})
             if not json_output:
-                console.print(f"  [red]Failed ({kind}):[/] {url} — {exc}")
+                console.print(
+                    f"  [red]Failed ({kind}):[/] {escape(url)} — {escape(str(exc))}"
+                )
 
     # Batch fetch normal URLs
     if normal_urls:
@@ -125,7 +147,8 @@ def fetch_batch(
                 # beats none.
                 if not json_output:
                     console.print(
-                        f"[red]Batch fetch failed:[/] {e}. Falling back to per-URL fetches."
+                        f"[red]Batch fetch failed:[/] {escape(str(e))}. "
+                        "Falling back to per-URL fetches."
                     )
                 for url in normal_urls:
                     _fetch_one(prov, url, "batch-fallback")
@@ -152,7 +175,16 @@ def fetch_batch(
     # in waves through this command, so one bot-walled publisher silently drops
     # a whole cluster of papers at once.
     pending = []  # (url, result, oa_location, rescue_reason)
-    blocked = [(f["url"], f"fetch failed: {f['error']}", None) for f in failed_urls]
+    # A cert-refused URL is not "blocked", it is refused, and it stays refused.
+    # Offered to the rescue like a 403, a forced certificate failure came back
+    # as an ordinary rescued note (exit 0, `kind: "rescued"`, the refusal only
+    # as free text in `blocked_reason`). The skip is loud instead, and the URL
+    # stays in `failed_urls` with `reason: "tls_cert_invalid"`.
+    blocked = [
+        (f["url"], f"fetch failed: {f['error']}", None)
+        for f in failed_urls
+        if f["url"] not in cert_refused
+    ]
 
     for result in results:
         url = result.url
@@ -177,7 +209,7 @@ def fetch_batch(
         rescued_urls.add(burl)
         if not json_output:
             console.print(
-                f"  [cyan]Blocked — recovered an open-access copy:[/] {burl} "
+                f"  [cyan]Blocked — recovered an open-access copy:[/] {escape(burl)} "
                 f"(via {loc.resolver})"
             )
 
@@ -251,15 +283,17 @@ def fetch_batch(
         )
 
         if not json_output:
-            console.print(f"  [green]+[/] {title}")
+            # URL, title and reason are external text, and the escaped failure
+            # lines above no longer end the batch before it gets here.
+            console.print(f"  [green]+[/] {escape(title)}")
             if oa_location is not None:
                 console.print(
-                    f"    [cyan]body from:[/] {oa_location.url} "
-                    f"({oa_location.version or 'version unknown'}, via {oa_location.resolver})"
+                    f"    [cyan]body from:[/] {escape(oa_location.url)} "
+                    f"({escape(oa_location.version or 'version unknown')}, via {oa_location.resolver})"
                 )
                 if rescue_reason:
                     console.print(
-                        f"    [yellow]source never read[/] ({rescue_reason}) — "
+                        f"    [yellow]source never read[/] ({escape(rescue_reason)}) — "
                         "title and authors are the open-access copy's too"
                     )
 
