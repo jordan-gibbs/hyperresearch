@@ -36,6 +36,20 @@ class SyncResult:
     duration_ms: float = 0
 
 
+class _TransactionLostError(Exception):
+    """SQLite rolled the whole sync transaction back in the middle of a pass."""
+
+
+class _UnreadableNewFileError(Exception):
+    """A new file named after an id in play has no id sync can read, so
+    whether it claims that id is unknown."""
+
+    def __init__(self, rel_path: str, reason: str) -> None:
+        super().__init__(f"{rel_path}: {reason}")
+        self.rel_path = rel_path
+        self.reason = reason
+
+
 def _should_exclude(rel_path: str, exclude_parts: list[str]) -> bool:
     """Fast exclusion check — match on first path component."""
     first = rel_path.split("/", 1)[0]
@@ -141,18 +155,52 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
     conn.execute("BEGIN IMMEDIATE")
 
     changed_ids: set[str] = set()
+    assets_root = vault.root / "research" / "assets"
 
     # Defense-in-depth (#25): refuse to silently smash an existing row's path
     # field when a second file in the same pass derives the same id, or when
     # a new file claims an id that's already in the DB at a different path.
     # The collision would otherwise be order-dependent and lose data on the
     # next `note update`.
+    #
+    # The reverse map gives the id the row at a path carries, so a file whose
+    # `id:` changed is renamed in place; inserted as a new id, it was refused
+    # by UNIQUE(notes.path) on every run.
     deleted_paths = set(plan.to_delete)
     id_to_path: dict[str, str] = {}
+    path_to_id: dict[str, str] = {}
     for row in conn.execute("SELECT id, path FROM notes"):
         if row["path"] in deleted_paths:
             continue
         id_to_path[row["id"]] = row["path"]
+        path_to_id[row["path"]] = row["id"]
+    # Every new file by stem: a stem can be new in more than one directory
+    # (research/notes/ and research/temp/).
+    new_files_by_stem: dict[str, list[Path]] = {}
+    for p in plan.to_add:
+        new_files_by_stem.setdefault(p.stem, []).append(p)
+    renamed_from: set[str] = set()
+
+    def _new_files_claiming(note_id: str) -> list:
+        """The new files named after `note_id` whose id is `note_id`.
+
+        Fetch writes <id>.md and records its source and assets under the
+        stem, so a new file named after an id is that id's owner unless it
+        declares another. One whose frontmatter is there but does not parse
+        (a file caught mid-write) raises: its id is unknown.
+        """
+        claimants = []
+        for candidate in new_files_by_stem.get(note_id, ()):
+            rel = candidate.relative_to(vault.root).as_posix()
+            try:
+                claimant = read_note(candidate, vault.root)
+            except Exception as exc:
+                raise _UnreadableNewFileError(rel, str(exc)) from exc
+            if claimant.frontmatter_broken:
+                raise _UnreadableNewFileError(rel, "its frontmatter does not parse")
+            if claimant.meta.id == note_id:
+                claimants.append(claimant)
+        return claimants
 
     def _upsert_with_collision_check(file_path: Path) -> str | None:
         note = read_note(file_path, vault.root)
@@ -167,10 +215,93 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
                 ),
             })
             return None
-        _upsert_note_to_db(conn, note, now_iso, file_mtime=file_path.stat().st_mtime)
+        old_id = path_to_id.get(rel)
+        rename = old_id is not None and old_id != note.meta.id
+        if rename and not note.id_declared:
+            # A broken, half-written or id-less frontmatter is no reason to
+            # move the note's rows and free its id for another file.
+            result.errors.append({
+                "path": rel,
+                "error": (
+                    f"the indexed id is '{old_id}' but the frontmatter declares no id "
+                    "(missing, or the frontmatter does not parse). Not re-indexed: "
+                    "fix the frontmatter and run sync again."
+                ),
+            })
+            return None
+        keep_urls: set[str] = set()
+        keep_assets_dir: Path | None = None
+        if rename:
+            try:
+                new_id_claimants = _new_files_claiming(note.meta.id)
+                # Rows under the old id were recorded for the file with that
+                # stem: this one, or a new file named after the old id.
+                old_id_claimants = [] if file_path.stem == old_id else _new_files_claiming(old_id)
+            except _UnreadableNewFileError as exc:
+                # A guess could take that file's id or move its URL rows.
+                result.errors.append({
+                    "path": rel,
+                    "error": (
+                        f"the id changed from '{old_id}' to '{note.meta.id}', but new "
+                        f"file '{exc.rel_path}' is named after one of them and its id "
+                        f"cannot be read ({exc.reason}). Not re-indexed: fix that file "
+                        "and run sync again."
+                    ),
+                })
+                return None
+            if new_id_claimants:
+                # Fetch recorded that file's URL under its stem, so the id is that file's.
+                result.errors.append({
+                    "path": rel,
+                    "error": (
+                        f"id collision: '{note.meta.id}' is claimed by new file "
+                        f"'{new_id_claimants[0].path}'. Skipped to avoid silent overwrite."
+                    ),
+                })
+                return None
+            # Their URLs, and their assets in research/assets/<old_id>/, stay.
+            keep_urls = {c.meta.source for c in old_id_claimants if c.meta.source}
+            if old_id_claimants:
+                keep_assets_dir = assets_root / old_id
+        # A file's rename and upsert succeed or fail together, and the maps
+        # change only after both: a rename left behind by a failed upsert
+        # would park the row under an id a later file could take.
+        conn.execute("SAVEPOINT sync_note")
+        try:
+            if rename:
+                _rename_note_id(conn, old_id, note.meta.id, keep_urls, keep_assets_dir)
+            _upsert_note_to_db(conn, note, now_iso, file_mtime=file_path.stat().st_mtime)
+        except Exception:
+            # On some errors (SQLITE_FULL among them) SQLite has already
+            # rolled back the whole transaction, savepoints included, and a
+            # ROLLBACK TO or RELEASE would raise "no such savepoint" in place
+            # of the real error.
+            if conn.in_transaction:
+                conn.execute("ROLLBACK TO sync_note")
+                conn.execute("RELEASE sync_note")
+            raise
+        conn.execute("RELEASE sync_note")
+        if rename:
+            # Free the old id for a later file in this pass.
+            id_to_path.pop(old_id, None)
+            changed_ids.add(old_id)
+            renamed_from.add(old_id)
         id_to_path[note.meta.id] = rel
+        path_to_id[rel] = note.meta.id
         changed_ids.add(note.meta.id)
         return note.meta.id
+
+    def _record_error(path: str, exc: Exception) -> None:
+        result.errors.append({"path": path, "error": str(exc)})
+        if not conn.in_transaction:
+            # SQLite rolled back the whole transaction (SQLITE_FULL among
+            # others), but the maps still free the ids of undone deletes and
+            # renames: a later file would land on a restored row and take its
+            # children. Stop the pass, and say so in the error.
+            result.errors[-1]["error"] += (
+                "; nothing from this sync pass was kept: fix that error and run sync again"
+            )
+            raise _TransactionLostError from exc
 
     try:
         # Process deletes
@@ -182,7 +313,19 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
                     changed_ids.add(row["id"])
                     result.deleted += 1
             except Exception as e:
-                result.errors.append({"path": rel_path, "error": str(e)})
+                _record_error(rel_path, e)
+
+        # Updates before adds: a rename frees an id that a new file in the
+        # same pass may own, so this converges in one run. It also means that
+        # when an id edit and a new file claim the same id, the edit wins and
+        # the new file is refused as a collision, unless the new file is named
+        # after that id (see _new_files_claiming).
+        for file_path in plan.to_update:
+            try:
+                if _upsert_with_collision_check(file_path) is not None:
+                    result.updated += 1
+            except Exception as e:
+                _record_error(str(file_path), e)
 
         # Process adds
         for file_path in plan.to_add:
@@ -190,15 +333,14 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
                 if _upsert_with_collision_check(file_path) is not None:
                     result.added += 1
             except Exception as e:
-                result.errors.append({"path": str(file_path), "error": str(e)})
+                _record_error(str(file_path), e)
 
-        # Process updates
-        for file_path in plan.to_update:
-            try:
-                if _upsert_with_collision_check(file_path) is not None:
-                    result.updated += 1
-            except Exception as e:
-                result.errors.append({"path": str(file_path), "error": str(e)})
+        # Rows a rename kept for a claimant that then failed its own upsert
+        # would fail the deferred foreign-key check: orphan them as a delete
+        # of that id would (sources to NULL, assets rows gone, files kept).
+        for old_id in renamed_from - set(id_to_path):
+            conn.execute("UPDATE sources SET note_id = NULL WHERE note_id = ?", (old_id,))
+            conn.execute("DELETE FROM assets WHERE note_id = ?", (old_id,))
 
         # Resolve links — only for changed notes' outgoing + incoming
         _resolve_links_incremental(conn, changed_ids)
@@ -209,12 +351,79 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
             (now_iso,),
         )
         conn.commit()
+    except _TransactionLostError:
+        # Nothing was kept, so nothing is counted; also discard whatever a
+        # statement after the rollback opened on this connection.
+        conn.rollback()
+        result.added = result.updated = result.deleted = 0
     except Exception:
         conn.rollback()
         raise
 
     result.duration_ms = (time.monotonic() - start) * 1000
     return result
+
+
+# Child tables keyed by note_id. A rename drops the rows the upsert rebuilds
+# from the markdown, and moves the rows only the DB holds, which a delete and
+# re-insert would cascade away, null out (`sources`) or leave pointing at a
+# dead id (`escalations` has no foreign key).
+_NOTE_ID_REBUILT_TABLES = ("note_content", "tags", "aliases")
+_NOTE_ID_MOVED_TABLES = ("embeddings", "claims", "assets")
+_NOTE_ID_URL_TABLES = ("sources", "escalations")
+
+
+def _rename_note_id(
+    conn,
+    old_id: str,
+    new_id: str,
+    keep_urls: set[str],
+    keep_assets_dir: Path | None = None,
+) -> None:
+    """Move a note row to a new id in place, with the rows only the DB holds.
+
+    No foreign key declares ON UPDATE, so the parent-key change and the
+    child re-pointing cannot both pass an immediate check: the check is
+    deferred to commit. The pragma lasts until the transaction ends, not
+    the savepoint; no other statement in a sync pass can violate a foreign
+    key (each inserts a child after its parent or deletes through the
+    cascade), so that changes nothing for them. `sources` and
+    `escalations` rows whose URL is in `keep_urls`, and `assets` rows whose
+    file lies in `keep_assets_dir`, stay under the old id for the new file
+    that owns it; the caller orphans them if no row holds that id at commit.
+    Asset files never move: their rows name them by full path.
+
+    Caller guarantees `new_id` is not in use.
+    """
+    from hyperresearch.core.claims import _under
+
+    conn.execute("PRAGMA defer_foreign_keys = ON")
+    for table in _NOTE_ID_REBUILT_TABLES:
+        conn.execute(f"DELETE FROM {table} WHERE note_id = ?", (old_id,))
+    conn.execute("DELETE FROM links WHERE source_id = ?", (old_id,))
+    conn.execute("DELETE FROM notes_fts WHERE id = ?", (old_id,))
+    conn.execute("UPDATE notes SET id = ? WHERE id = ?", (new_id, old_id))
+    kept_assets: list[int] = []
+    if keep_assets_dir is not None:
+        kept_assets = [
+            row["id"]
+            for row in conn.execute("SELECT id, filename FROM assets WHERE note_id = ?", (old_id,))
+            if _under(Path(row["filename"]), keep_assets_dir)
+        ]
+    for table in _NOTE_ID_MOVED_TABLES:
+        not_kept = ""
+        params: tuple = (new_id, old_id)
+        if table == "assets" and kept_assets:
+            not_kept = f" AND id NOT IN ({','.join('?' for _ in kept_assets)})"
+            params += tuple(kept_assets)
+        conn.execute(f"UPDATE {table} SET note_id = ? WHERE note_id = ?{not_kept}", params)
+    keep = sorted(keep_urls)
+    not_kept = f" AND url NOT IN ({','.join('?' for _ in keep)})" if keep else ""
+    for table in _NOTE_ID_URL_TABLES:
+        conn.execute(
+            f"UPDATE {table} SET note_id = ? WHERE note_id = ?{not_kept}",
+            (new_id, old_id, *keep),
+        )
 
 
 def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> None:
@@ -275,12 +484,10 @@ def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> Non
 
     # Update tags — resolve aliases before writing
     conn.execute("DELETE FROM tags WHERE note_id = ?", (meta.id,))
-    alias_map = {}
-    try:
-        for row in conn.execute("SELECT alias, canonical FROM tag_aliases"):
-            alias_map[row["alias"]] = row["canonical"]
-    except Exception:
-        pass
+    alias_map = {
+        row["alias"]: row["canonical"]
+        for row in conn.execute("SELECT alias, canonical FROM tag_aliases")
+    }
     for tag in meta.tags:
         # Lowercase the frontmatter tag for BOTH the lookup and the fallback:
         # alias keys and canonicals are stored lowercase (cli/tag.py), and

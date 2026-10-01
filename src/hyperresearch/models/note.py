@@ -145,6 +145,11 @@ class Note(BaseModel):
     meta: NoteMeta
     body: str
     path: str  # Relative path from vault root
+    # Set by read_note: whether the file opens with a frontmatter that did not
+    # parse, and whether the frontmatter gave `meta.id` (otherwise the id is
+    # the filename stem).
+    frontmatter_broken: bool = False
+    id_declared: bool = False
     content_hash: str = ""
     word_count: int = 0
     outgoing_links: list[str] = Field(default_factory=list)

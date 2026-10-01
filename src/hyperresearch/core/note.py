@@ -37,11 +37,16 @@ def read_note(file_path: Path, vault_root: Path) -> Note:
     content_hash = hashlib.sha256(raw_bytes).hexdigest()
     content = raw_bytes.decode("utf-8-sig")  # Handles BOM
     meta, body = parse_frontmatter(content)
+    # parse_frontmatter hands the whole content back as the body when it found
+    # no frontmatter it could parse; a file that opens with a delimiter all the
+    # same has one, broken or half-written. A file without one is not broken.
+    frontmatter_broken = body == content and re.match(r"---[ \t]*\r?\n", content) is not None
 
     rel_path = file_path.relative_to(vault_root).as_posix()
 
     # Derive ID from filename if not set in frontmatter
-    if not meta.id:
+    id_declared = bool(meta.id)
+    if not id_declared:
         meta.id = slugify(file_path.stem)
 
     # Extract outgoing wiki links, filtering citation footnotes and URLs
@@ -58,6 +63,8 @@ def read_note(file_path: Path, vault_root: Path) -> Note:
         meta=meta,
         body=body,
         path=rel_path,
+        frontmatter_broken=frontmatter_broken,
+        id_declared=id_declared,
         content_hash=content_hash,
         word_count=word_count,
         outgoing_links=outgoing,

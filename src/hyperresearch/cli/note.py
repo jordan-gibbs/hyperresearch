@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import stat
 from datetime import UTC
+from pathlib import Path
 
 import typer
 
@@ -628,6 +631,32 @@ def note_mv(
         console.print(f"[green]Moved:[/] {row['path']} → {rel_new}")
 
 
+def _file_identity(path: Path) -> tuple | None:
+    """What makes `path` the same file as another spelling of it, or None
+    when no regular file is there.
+
+    The device and inode, so case, symlinks and `..` do not matter.
+    """
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    if not stat.S_ISREG(st.st_mode):
+        return None
+    return (st.st_dev, st.st_ino)
+
+
+def _located(path: Path) -> Path:
+    """`path` with its directory resolved; a symlink stays where it sits."""
+    return path.parent.resolve() / path.name
+
+
+def _is_below(path: Path, root: Path) -> bool:
+    """Whether `path`, symlinks resolved, lies strictly below the directory `root`."""
+    where, root = path.resolve(), root.resolve()
+    return where != root and where.is_relative_to(root)
+
+
 @app.command("rm")
 def note_rm(
     note_id: str = typer.Argument(..., help="Note ID to delete"),
@@ -641,10 +670,13 @@ def note_rm(
     Every fetch-then-delete cycle leaked disk. The current implementation
     also removes:
       - the raw file referenced in the note's `raw_file` frontmatter field
-      - any entries in the `assets` table and their files on disk
+      - the files under `research/assets/` that the note's rows in the
+        `assets` table name, and the rest of `research/assets/<id>/` unless
+        that is a symlink, except a file another note's row names; nothing
+        outside `research/assets/` is removed
+    A file that cannot be removed does not stop the delete; it is reported
+    under `assets_not_removed`.
     """
-    import shutil
-
     from hyperresearch.core.vault import Vault
 
     vault = Vault.discover()
@@ -690,13 +722,109 @@ def note_rm(
         except Exception:
             pass
 
-    # Assets directory
-    assets_dir = vault.root / "research" / "assets" / note_id
-    if assets_dir.exists() and assets_dir.is_dir():
-        for asset_file in assets_dir.iterdir():
-            if asset_file.is_file():
-                removed_assets.append(asset_file.name)
-        shutil.rmtree(assets_dir, ignore_errors=True)
+    # Assets. A row names its file by full path, and the file need not sit
+    # under research/assets/<note_id>/: fetch saves a note's files under the
+    # stem of its file at the time, and sync renames a row in place when the
+    # file's `id:` is rewritten, leaving the files where they are. So the
+    # files to remove are the ones this note's own rows name anywhere under
+    # research/assets/, plus whatever research/assets/<note_id>/ holds that
+    # no other note's row names (fetch can write a file it records no row
+    # for). A file another note's row names stays, in whichever directory it
+    # is. Files are compared by identity, not by spelling. Nothing is removed
+    # whose path, symlinks resolved, is not below this vault's
+    # research/assets/: a row naming a file elsewhere (a copy of the vault
+    # still holds the original's paths) is reported and its file left alone.
+    assets_root = vault.root / "research" / "assets"
+    assets_dir = assets_root / note_id
+    own_files: list[Path] = []
+    others: set[tuple] = set()
+    # Where other notes' rows point, as spelled: a symlink a row names is
+    # that note's, whatever it points at.
+    other_paths: set[Path] = set()
+    for r in vault.db.execute("SELECT note_id, filename FROM assets"):
+        if r["note_id"] == note_id:
+            own_files.append(Path(r["filename"]))
+        else:
+            other_paths.add(_located(Path(r["filename"])))
+            ident = _file_identity(Path(r["filename"]))
+            if ident is not None:
+                others.add(ident)
+    seen: set[tuple] = set()
+    seen_links: set[Path] = set()
+    assets_not_removed: list[str] = []
+    # The directories a removal may have emptied.
+    dirs: set[Path] = set()
+
+    def _label(path: Path) -> str:
+        # Vault-relative; a symlink is named where it sits, not by its target.
+        try:
+            return _located(path).relative_to(vault.root.resolve()).as_posix()
+        except ValueError:
+            return str(path)
+
+    def _remove_link(path: Path) -> None:
+        # A symlink is removed as itself, dangling or not: unlinking it never
+        # touches its target, wherever that is. Only a link that sits below
+        # research/assets/ goes, and not one another note's row names.
+        where = _located(path)
+        if where in other_paths or where in seen_links:
+            return
+        seen_links.add(where)
+        if not where.parent.is_relative_to(assets_root.resolve()):
+            assets_not_removed.append(f"{path}: outside research/assets/, left in place")
+            return
+        label = _label(path)
+        try:
+            path.unlink()
+        except OSError as exc:
+            assets_not_removed.append(f"{label}: {exc.strerror or exc}")
+            return
+        removed_assets.append(label)
+        dirs.add(path.parent)
+
+    def _remove_file(path: Path) -> None:
+        if path.is_symlink():
+            _remove_link(path)
+            return
+        ident = _file_identity(path)
+        if ident is None or ident in others or ident in seen:
+            return
+        seen.add(ident)
+        if not _is_below(path, assets_root):
+            assets_not_removed.append(f"{path}: outside research/assets/, left in place")
+            return
+        label = _label(path)
+        try:
+            path.unlink()
+        except OSError as exc:
+            assets_not_removed.append(f"{label}: {exc.strerror or exc}")
+            return
+        removed_assets.append(label)
+        dirs.add(path.parent)
+
+    for path in own_files:
+        _remove_file(path)
+    # A symlinked research/assets/<note_id> points at a directory that is not
+    # this note's to empty or remove, inside the vault or not; the link stays,
+    # as before.
+    if assets_dir.is_dir() and not assets_dir.is_symlink():
+        dirs.add(assets_dir)
+        for path in sorted(assets_dir.rglob("*")):
+            if path.is_dir() and not path.is_symlink():
+                dirs.add(path)
+            else:
+                _remove_file(path)
+    # An empty one goes, deepest first: never a symlink, and only below
+    # research/assets/.
+    for d in sorted({_located(d) for d in dirs}, key=lambda d: len(d.parts), reverse=True):
+        if d.is_symlink() or not _is_below(d, assets_root):
+            continue
+        try:
+            if not d.is_dir() or any(d.iterdir()):
+                continue
+            d.rmdir()
+        except OSError as exc:
+            assets_not_removed.append(f"{_label(d)}/: {exc.strerror or exc}")
 
     # Finally, unlink the .md file
     if file_path.exists():
@@ -713,6 +841,8 @@ def note_rm(
         payload["removed_raw"] = removed_raw
     if removed_assets:
         payload["removed_assets"] = removed_assets
+    if assets_not_removed:
+        payload["assets_not_removed"] = assets_not_removed
 
     if json_output:
         output(success(payload, vault=str(vault.root)), json_mode=True)
@@ -722,6 +852,8 @@ def note_rm(
             msg += f"\n  raw: {removed_raw}"
         if removed_assets:
             msg += f"\n  assets: {len(removed_assets)} file(s)"
+        if assets_not_removed:
+            msg += "\n  assets not removed: " + "; ".join(assets_not_removed)
         console.print(msg)
 
 
