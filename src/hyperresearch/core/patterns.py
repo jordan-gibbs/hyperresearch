@@ -98,7 +98,7 @@ def _strip_fenced_blocks(text: str) -> str:
     return "\n".join(out)
 
 
-def _strip_inline_code(text: str) -> str:
+def _strip_inline_code(text: str, keep_length: bool = False) -> str:
     runs = [m.span() for m in _BACKTICK_RUN_RE.finditer(text)]
     if len(runs) < 2:
         return text
@@ -127,7 +127,10 @@ def _strip_inline_code(text: str) -> str:
         end = runs[j][1]
         newlines = text.count("\n", a, end)
         out.append(text[pos:a])
-        out.append("\n" * newlines if newlines else " ")
+        if keep_length:
+            out.append(re.sub(r"[^\n]", " ", text[a:end]))
+        else:
+            out.append("\n" * newlines if newlines else " ")
         pos = end
         i = j + 1
     out.append(text[pos:])
@@ -141,6 +144,13 @@ def strip_code(text: str) -> str:
     the length of the text, including on backtick floods.
     """
     return _strip_inline_code(_strip_fenced_blocks(text))
+
+
+def mask_code(text: str) -> str:
+    """strip_code, but each inline code span becomes spaces of its own length
+    (newlines kept), so an offset into a line outside a fenced block points at
+    the same character in both texts. Fenced block lines become empty."""
+    return _strip_inline_code(_strip_fenced_blocks(text), keep_length=True)
 
 
 # Citation-footnote patterns that should NOT be treated as wiki-links even

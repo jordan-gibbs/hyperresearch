@@ -1,6 +1,6 @@
 """Tests for wiki-link target validation — citation-footnote edge cases."""
 
-from hyperresearch.core.patterns import is_valid_wiki_link_target, strip_code
+from hyperresearch.core.patterns import is_valid_wiki_link_target, mask_code, strip_code
 
 
 def test_empty_and_whitespace_rejected():
@@ -292,3 +292,17 @@ def test_shell_shaped_but_legitimate_refs_still_accepted():
     assert is_valid_wiki_link_target("C. elegans")
     assert is_valid_wiki_link_target("yahoo! finance")  # '!' mid-string stays legal
     assert is_valid_wiki_link_target("e.g. v1.2")
+
+
+def test_mask_code_blanks_spans_at_their_own_length():
+    text = "Run `a [1]` now [2].\nSpan `across\nlines` ends [3].\n```\nfenced [4]\n```\nLast `x`."
+    masked = mask_code(text)
+    lines, mlines = text.split("\n"), masked.split("\n")
+    assert len(mlines) == len(lines)
+    assert mlines[0] == "Run " + " " * 7 + " now [2]."
+    assert mlines[1] == "Span " + " " * 7 and mlines[2] == " " * 6 + " ends [3]."
+    assert mlines[3:6] == ["", "", ""]
+    assert mlines[6] == "Last " + " " * 3 + "."
+    assert "[1]" not in masked and "[4]" not in masked
+    # strip_code is unchanged: a span still becomes one space.
+    assert strip_code("Run `a [1]` now") == "Run   now"
