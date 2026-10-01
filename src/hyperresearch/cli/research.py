@@ -8,9 +8,14 @@ from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 import typer
+from rich.markup import escape
 
-from hyperresearch.cli._output import console, output
-from hyperresearch.core.fetcher import existing_live_note_for_url, reclaim_orphaned_source_row
+from hyperresearch.cli._output import console, err_console, output
+from hyperresearch.core.fetcher import (
+    discard_unindexed_note,
+    existing_live_note_for_url,
+    reclaim_orphaned_source_row,
+)
 from hyperresearch.models.output import error, success
 
 
@@ -25,7 +30,7 @@ def research(
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
     """Deep research: search the web, fetch results, save as linked notes, generate synthesis."""
-    from hyperresearch.core.note import write_note
+    from hyperresearch.core.note import indexed_note_ids, write_note
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.core.vault import Vault, VaultError
     from hyperresearch.models.note import slugify
@@ -160,7 +165,10 @@ def research(
             note_type="moc",
             parent=parent,
             summary=f"Research synthesis: {topic} ({len(created_notes)} sources)",
+            taken_ids=indexed_note_ids(conn),
         )
+        # The id write_note chose: a second run on the same topic gets "-2".
+        moc_id = moc_path.stem
 
         # Final sync to pick up the MOC
         plan = compute_sync_plan(vault)
@@ -228,7 +236,7 @@ def research(
 
 def _save_result(vault, conn, prov, result, tags, parent) -> dict | None:
     """Save a single WebResult as a note. Returns note data dict or None if skipped."""
-    from hyperresearch.core.note import write_note
+    from hyperresearch.core.note import indexed_note_ids, write_note
 
     url = result.url
 
@@ -260,6 +268,7 @@ def _save_result(vault, conn, prov, result, tags, parent) -> dict | None:
         source=url,
         parent=parent,
         extra_frontmatter=extra_meta,
+        taken_ids=indexed_note_ids(conn),
     )
 
     # Auto-enrich: add suggested tags and summary before sync
@@ -274,6 +283,13 @@ def _save_result(vault, conn, prov, result, tags, parent) -> dict | None:
     plan = compute_sync_plan(vault)
     if plan.to_add or plan.to_update:
         execute_sync(vault, plan)
+
+    # A note sync did not index under its own id is skipped: its source row
+    # would point at whichever file holds that id.
+    refused = discard_unindexed_note(vault, note_path)
+    if refused:
+        err_console.print(f"[yellow]Skipped:[/] {escape(refused)}")
+        return None
 
     conn.execute(
         """INSERT OR IGNORE INTO sources (url, note_id, domain, fetched_at, provider, content_hash)

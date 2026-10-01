@@ -53,7 +53,7 @@ def repair(
     if stub_broken:
         if not json_output:
             console.print("[bold]2/6 Stubbing broken links...[/]")
-        from hyperresearch.core.note import stub_summary, write_note
+        from hyperresearch.core.note import indexed_note_ids, stub_summary, write_note
         rows = vault.db.execute(
             "SELECT DISTINCT target_ref FROM links WHERE target_id IS NULL"
         ).fetchall()
@@ -67,6 +67,7 @@ def repair(
                     body=f"# {title}\n\n*Stub — created to resolve a broken link. Expand this note.*\n",
                     note_id=target, status="draft",
                     summary=stub_summary(target),
+                    taken_ids=indexed_note_ids(vault.db),
                 )
                 stubs_created += 1
             except Exception as exc:

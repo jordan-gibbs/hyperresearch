@@ -334,7 +334,7 @@ def create_note(title: str, body: str, tags: str = "", source: str = "", summary
         summary: One-line summary (auto-generated if empty)
     """
     from hyperresearch.core.enrich import enrich_note_file
-    from hyperresearch.core.note import write_note
+    from hyperresearch.core.note import indexed_note_ids, write_note
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
 
     vault = _get_vault()
@@ -354,6 +354,7 @@ def create_note(title: str, body: str, tags: str = "", source: str = "", summary
         source=source or None,
         summary=summary or None,
         extra_frontmatter=extra if extra else None,
+        taken_ids=indexed_note_ids(vault.db),
     )
 
     enrich_note_file(note_path, vault.db, tag_list)

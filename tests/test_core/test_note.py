@@ -141,6 +141,22 @@ def test_write_collision_id_survives_reslugify_bytecap(tmp_vault):
     assert len(p2.stem.encode("utf-8")) <= 200
 
 
+def test_write_skips_taken_ids_with_no_file(tmp_vault):
+    """`note mv` keeps a note's id while renaming its file, so an id can be
+    taken while `<id>.md` is free. taken_ids skips it through the same
+    fixed-point collision ids as a file collision."""
+    p = write_note(tmp_vault.notes_dir, "Same Title", taken_ids={"same-title", "same-title-2"})
+    assert p.name == "same-title-3.md"
+    assert read_note(p, tmp_vault.root).meta.id == "same-title-3"
+
+    long_title = "x" * 120  # slug hits the 80-char cap
+    p2 = write_note(tmp_vault.notes_dir, long_title, taken_ids={slugify(long_title)})
+    n2 = read_note(p2, tmp_vault.root)
+    assert p2.stem == n2.meta.id != slugify(long_title)
+    assert slugify(n2.meta.id) == n2.meta.id
+    assert len(p2.stem) <= 80
+
+
 def test_write_with_parent(tmp_vault):
     """`parent:` is frontmatter metadata (DB-indexed), NOT a filesystem dir."""
     path = write_note(

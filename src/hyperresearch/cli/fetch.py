@@ -9,10 +9,15 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import typer
+from rich.markup import escape
 
 from hyperresearch.cli._output import console, err_console, output
 from hyperresearch.core.config import AssetSettings, FetchSettings
-from hyperresearch.core.fetcher import existing_live_note_for_url, reclaim_orphaned_source_row
+from hyperresearch.core.fetcher import (
+    discard_unindexed_note,
+    existing_live_note_for_url,
+    reclaim_orphaned_source_row,
+)
 from hyperresearch.models.output import error, success
 
 app = typer.Typer()
@@ -226,7 +231,7 @@ def fetch(
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
     """Fetch a URL and save its content as a research note."""
-    from hyperresearch.core.note import write_note
+    from hyperresearch.core.note import indexed_note_ids, write_note
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.core.vault import Vault, VaultError
     from hyperresearch.web.base import get_provider
@@ -493,6 +498,7 @@ def fetch(
         tier=detected_tier,
         content_type=detected_content_type,
         extra_frontmatter=extra_meta,
+        taken_ids=indexed_note_ids(conn),
     )
 
     # Save raw file (PDF, etc.) if present
@@ -534,6 +540,16 @@ def fetch(
     plan = compute_sync_plan(vault)
     if plan.to_add or plan.to_update:
         execute_sync(vault, plan)
+
+    # The id is free when write_note picks it, but another file can still take
+    # it before this sync. Recording the source then would wire it to that note.
+    refused = discard_unindexed_note(vault, note_path, raw_file_path)
+    if refused:
+        if json_output:
+            output(error(refused, "NOTE_NOT_INDEXED"), json_mode=True)
+        else:
+            console.print(f"[red]Not indexed:[/] {escape(refused)}")
+        raise typer.Exit(1)
 
     # Record source in DB. Use INSERT OR IGNORE to survive a duplicate-URL
     # race: two parallel fetches on the same URL both pass the earlier
