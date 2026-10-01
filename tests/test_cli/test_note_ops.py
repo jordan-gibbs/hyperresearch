@@ -244,3 +244,147 @@ def test_note_update_accepts_valid_status_and_stays_indexed(vault_with_notes):
     listed = runner.invoke(app, ["note", "list", "--json"])
     rows = json.loads(listed.output)["data"]
     assert [n["status"] for n in rows if n["id"] == "alpha-note"] == ["evergreen"]
+
+
+# ---------------------------------------------------------------------------
+# The final report has no YAML header by pipeline design and is indexed from
+# derived metadata. Every writer that round-trips parse -> serialize -> write
+# must refuse it, or the next `note update` puts a header into the deliverable.
+# ---------------------------------------------------------------------------
+
+REPORT_ID = "final_report_kb-test-a1b2c3"
+
+
+@pytest.fixture
+def vault_with_report(vault_with_notes: Path) -> Path:
+    report = vault_with_notes / "research" / "notes" / f"{REPORT_ID}.md"
+    # Long enough (>= 100 words) and linked, so repair's promote query selects it.
+    filler = " ".join(f"word{i}" for i in range(110))
+    report.write_text(
+        "# Report Title\n\n"
+        "This first paragraph is long enough to become the derived summary of the report.\n\n"
+        f"It cites [[alpha-note]] and [[beta-note]]. {filler}\n",
+        encoding="utf-8",
+    )
+    runner.invoke(app, ["sync"])
+    return report
+
+
+def test_note_show_reads_a_frontmatterless_final_report(vault_with_report):
+    result = runner.invoke(app, ["note", "show", REPORT_ID, "--json"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)["data"]
+    assert data["title"] == "Report Title"
+    assert data["tags"] == ["final-report"]
+    assert data["status"] == "review"
+    assert "It cites [[alpha-note]]" in data["body"]
+
+
+def test_note_update_refuses_to_write_a_header_into_the_report(vault_with_report):
+    before = vault_with_report.read_bytes()
+    result = runner.invoke(app, ["note", "update", REPORT_ID, "--add-tag", "x", "--json"])
+    assert result.exit_code == 1, result.output
+    data = json.loads(result.output)
+    assert data["ok"] is False
+    assert data["error_code"] == "REPORT_WITHOUT_FRONTMATTER"
+    assert vault_with_report.read_bytes() == before
+
+
+def test_batch_frontmatter_update_refuses_the_report(vault_with_report):
+    from hyperresearch.cli.batch import _update_file_frontmatter
+
+    assert _indexed_path(REPORT_ID) == f"research/notes/{REPORT_ID}.md"
+    from hyperresearch.core.frontmatter import FrontmatterWriteRefusedError
+
+    vault_root = vault_with_report.parents[2]
+    before = vault_with_report.read_bytes()
+    with pytest.raises(FrontmatterWriteRefusedError):
+        _update_file_frontmatter(vault_root, f"research/notes/{REPORT_ID}.md", {"add_tag": "x"})
+    assert vault_with_report.read_bytes() == before
+
+
+def test_repair_leaves_the_report_byte_identical(vault_with_report):
+    """The report is `review`, over 100 words and linked, so repair's promote
+    step selects it for `evergreen`; the enrich step would also rewrite any note
+    it finds deficient. Both must skip the header-less deliverable.
+    """
+    before = vault_with_report.read_bytes()
+    result = runner.invoke(app, ["repair", "--no-stub", "--no-index", "--no-docs", "--json"])
+    assert result.exit_code == 0, result.output
+    assert vault_with_report.read_bytes() == before
+
+
+def test_batch_commands_skip_the_report_instead_of_crashing(vault_with_report):
+    """Every `batch` command selects through _get_matching_notes and writes in
+    a bare loop. An unfiltered batch matches the indexed report, so it must be
+    left out of the selection rather than raise halfway through the loop."""
+    before = vault_with_report.read_bytes()
+    result = runner.invoke(app, ["batch", "tag-add", "x", "--json"])
+    assert result.exit_code == 0, result.output
+    modified = json.loads(result.output)["data"]["modified"]
+    assert sorted(modified) == ["alpha-note", "beta-note"]
+    assert vault_with_report.read_bytes() == before
+
+
+def test_auto_link_leaves_the_report_byte_identical(vault_with_report):
+    """`link --auto` appends a Related section to any note whose prose names
+    another note. The report is indexed now, so the linker must skip it: its
+    body is the deliverable, not a place for generated sections."""
+    runner.invoke(app, ["note", "new", "Gamma Field Measurements", "--tag", "test"])
+    with vault_with_report.open("a", encoding="utf-8") as f:
+        f.write("\nThe Gamma Field Measurements reach the same conclusion.\n")
+    runner.invoke(app, ["sync"])
+    before = vault_with_report.read_bytes()
+    result = runner.invoke(app, ["link", "--auto", "--json"])
+    assert result.exit_code == 0, result.output
+    assert vault_with_report.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "dest",
+    ["renamed.md", f"research/temp/{REPORT_ID}.md", f"research/temp/notes/{REPORT_ID}.md"],
+)
+def test_note_mv_refuses_to_move_the_report_out_of_the_report_name(vault_with_report, dest):
+    """The header-less report is indexed by its name under research/notes/
+    alone, so any other destination would silently drop it from the index."""
+    result = runner.invoke(app, ["note", "mv", REPORT_ID, dest, "--json"])
+    assert result.exit_code == 1, result.output
+    assert json.loads(result.output)["error_code"] == "DESTINATION_NOT_INDEXABLE"
+    assert vault_with_report.exists()
+    assert _indexed_path(REPORT_ID) == f"research/notes/{REPORT_ID}.md"
+
+
+def test_note_mv_allows_a_report_name_that_stays_indexed(vault_with_report):
+    result = runner.invoke(app, ["note", "mv", REPORT_ID, "final_report_renamed.md", "--json"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["data"]["new_path"] == "research/notes/final_report_renamed.md"
+    # The id derives from the stem, so the note is now indexed under the new name.
+    assert _indexed_path("final_report_renamed") == "research/notes/final_report_renamed.md"
+    assert _indexed_path(REPORT_ID) is None
+
+
+@pytest.mark.parametrize("dest", ["final_report_taken.md", "final_report_Taken.md"])
+def test_note_mv_refuses_a_report_name_whose_id_another_note_has(vault_with_report, dest):
+    """The report's id derives from its stem, so the rename changes it; where
+    another note already has the new id, the move would drop the report from
+    the index while reporting success. The id is the slugified stem, so a
+    name that differs only in case lands on the same id."""
+    other = vault_with_report.parent / "other.md"
+    other.write_text("---\nid: final_report_taken\ntitle: Other\n---\n\nBody.\n", encoding="utf-8")
+    runner.invoke(app, ["sync"])
+    assert _indexed_path("final_report_taken") == "research/notes/other.md"
+
+    result = runner.invoke(app, ["note", "mv", REPORT_ID, dest, "--json"])
+    assert result.exit_code == 1, result.output
+    assert json.loads(result.output)["error_code"] == "ID_TAKEN"
+    assert vault_with_report.exists()
+    assert _indexed_path(REPORT_ID) == f"research/notes/{REPORT_ID}.md"
+
+
+def test_note_rm_deletes_the_report_when_forced(vault_with_report):
+    """Deletion is not a header write and `--force` is explicit, so the
+    indexed report is removable like any other note."""
+    result = runner.invoke(app, ["note", "rm", REPORT_ID, "--force", "--json"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["data"]["deleted"] == REPORT_ID
+    assert not vault_with_report.exists()

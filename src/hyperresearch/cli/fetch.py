@@ -41,7 +41,7 @@ def _append_suggested_by_to_existing(
     actually added.
     """
     # Find the note file — scan research/notes/ for `<note-id>.md` or walk subdirs
-    from hyperresearch.core.frontmatter import parse_frontmatter, serialize_frontmatter
+    from hyperresearch.core.frontmatter import parse_frontmatter, write_frontmatter
 
     note_path = None
     for candidate in vault_root.rglob(f"{note_id}.md"):
@@ -75,8 +75,7 @@ def _append_suggested_by_to_existing(
     # Prepend the new breadcrumb lines to the body
     breadcrumb_block = "\n".join(new_lines) + "\n\n"
     new_body = breadcrumb_block + body
-    new_text = serialize_frontmatter(meta) + "\n" + new_body
-    note_path.write_text(new_text, encoding="utf-8")
+    write_frontmatter(note_path, meta, new_body, vault_root)
     return added
 
 
@@ -522,12 +521,12 @@ def fetch(
     # The text-injection approach used previously was silently dropped by
     # NoteMeta.model_config = {"extra": "ignore"} on the next parse.
     if raw_file_path:
-        from hyperresearch.core.frontmatter import parse_frontmatter, render_note
+        from hyperresearch.core.frontmatter import parse_frontmatter, write_frontmatter
         note_text = note_path.read_text(encoding="utf-8")
         meta, body = parse_frontmatter(note_text)
         if meta.raw_file != raw_file_path:
             meta.raw_file = raw_file_path
-            note_path.write_text(render_note(meta, body), encoding="utf-8")
+            write_frontmatter(note_path, meta, body, vault.root)
 
     # Sync first so the note exists in the notes table (needed for FK on sources/assets)
     note_id = note_path.stem

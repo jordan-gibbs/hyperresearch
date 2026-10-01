@@ -1556,3 +1556,120 @@ def test_citation_preservation_wrapper_contract_overrides_style(tmp_vault):
     _write_final_report(tmp_vault, "# Report\n\nWrapper said no citations.\n")
     _, out = _run_lint(tmp_vault, rule="citation-style-preservation")
     assert _citation_issues(out) == []
+
+
+def test_uncurated_exempts_the_indexed_final_report(tmp_vault):
+    """The header-less final report indexes as `review` with no tier or
+    content_type, which is the `uncurated` rule's exact selector, and `note
+    update --tier` on it refuses: the rule must not ask for an action the tool
+    forbids. An ordinary reviewed note without classification is still flagged."""
+    import json
+
+    notes_dir = tmp_vault.root / "research" / "notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    (notes_dir / "final_report_curate.md").write_text(
+        "# A report\n\nA first paragraph long enough to be the derived summary.\n", encoding="utf-8"
+    )
+    write_note(notes_dir, title="Reviewed Source", body="Body.", tags=["t"], status="review")
+    _, out = _run_lint(tmp_vault, rule="uncurated")
+    data = json.loads(out)
+    flagged = {i["note_id"] for i in data.get("data", {}).get("issues", []) if i.get("rule") == "uncurated"}
+    assert flagged == {"reviewed-source"}
+    row = tmp_vault.db.execute(
+        "SELECT title FROM notes WHERE path = ?", ("research/notes/final_report_curate.md",)
+    ).fetchone()
+    assert row is not None
+    assert row["title"] == "A report"
+
+    # The exemption is keyed on the file, not on its tag: aliasing
+    # `final-report` away and re-syncing must not make the rule flag a note
+    # the tool refuses to curate.
+    tmp_vault.db.execute(
+        "INSERT OR REPLACE INTO tag_aliases (alias, canonical) VALUES ('final-report', 'report')"
+    )
+    tmp_vault.db.commit()
+    from hyperresearch.core.sync import compute_sync_plan, execute_sync
+
+    execute_sync(tmp_vault, compute_sync_plan(tmp_vault, force=True))
+    tags = {
+        r["tag"]
+        for r in tmp_vault.db.execute("SELECT tag FROM tags WHERE note_id = 'final_report_curate'")
+    }
+    assert tags == {"report"}
+    _, out = _run_lint(tmp_vault, rule="uncurated")
+    data = json.loads(out)
+    flagged = {i["note_id"] for i in data.get("data", {}).get("issues", []) if i.get("rule") == "uncurated"}
+    assert flagged == {"reviewed-source"}
+
+
+def _write_indexed_report(vault, tag: str, with_scaffold: bool) -> None:
+    notes_dir = vault.root / "research" / "notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    (notes_dir / f"final_report_{tag}.md").write_text("# Report\n\nBody.\n", encoding="utf-8")
+    if with_scaffold:
+        run_dir = vault.root / "research" / "runs" / tag
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "run.json").write_text("{}", encoding="utf-8")
+        (run_dir / "scaffold.md").write_text("scaffold\n", encoding="utf-8")
+    vault.auto_sync()
+
+
+def _issues(out: str, rule: str) -> list[dict]:
+    import json
+
+    return [i for i in json.loads(out).get("data", {}).get("issues", []) if i.get("rule") == rule]
+
+
+def test_indexed_report_with_its_scaffold_trips_neither_workflow_nor_singleton_tags(tmp_vault):
+    """A finished run leaves research/runs/<tag>/scaffold.md beside the report,
+    which satisfies the workflow rule's final-report selector (live now that
+    the report is indexed); and the derived `final-report` tag is no singleton
+    to merge away."""
+    _write_indexed_report(tmp_vault, "kb-run", with_scaffold=True)
+    row = tmp_vault.db.execute("SELECT title FROM notes WHERE id = 'final_report_kb-run'").fetchone()
+    assert row is not None
+    assert row["title"] == "Report"  # derived from the heading, not parsed as Untitled
+    _, out = _run_lint(tmp_vault, rule="workflow")
+    assert _issues(out, "workflow") == []
+    _, out = _run_lint(tmp_vault, rule="singleton-tags")
+    assert _issues(out, "singleton-tags") == []
+
+
+def test_workflow_ignores_the_header_less_report(tmp_vault):
+    """The report is left out of the rule's research-output count, so a vault
+    whose only research output is the report stays silent, as it did when the
+    report was not indexed."""
+    _write_indexed_report(tmp_vault, "kb-run", with_scaffold=False)
+    assert tmp_vault.db.execute("SELECT 1 FROM notes WHERE id = 'final_report_kb-run'").fetchone()
+    _, out = _run_lint(tmp_vault, rule="workflow")
+    assert _issues(out, "workflow") == []
+
+
+def test_workflow_stays_silent_on_a_legacy_vault_with_an_archived_scaffold(tmp_vault):
+    """archive-run moves a legacy flat research/scaffold.md under
+    research/runs/archive-<ts>/, where the rule's run lookup (which needs a
+    run.json) never sees it; the indexed report must not turn that vault red."""
+    _write_indexed_report(tmp_vault, "kb-run", with_scaffold=False)
+    archive = tmp_vault.root / "research" / "runs" / "archive-20240101T000000Z"
+    archive.mkdir(parents=True)
+    (archive / "scaffold.md").write_text("scaffold\n", encoding="utf-8")
+    _, out = _run_lint(tmp_vault, rule="workflow")
+    assert _issues(out, "workflow") == []
+
+
+def test_missing_summary_exempts_the_header_less_report(tmp_vault):
+    """A report with no prose line of 25+ characters derives no summary, and
+    `note update --summary` on it refuses, so the rule must not ask for one.
+    An ordinary note without a summary is still flagged."""
+    notes_dir = tmp_vault.root / "research" / "notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    (notes_dir / "final_report_terse.md").write_text("# R\n\nShort.\n", encoding="utf-8")
+    write_note(notes_dir, "Plain Note", body="Short.", tags=["t"])
+    tmp_vault.auto_sync()
+    row = tmp_vault.db.execute(
+        "SELECT summary FROM notes WHERE id = 'final_report_terse'"
+    ).fetchone()
+    assert row is not None
+    assert not row["summary"]
+    _, out = _run_lint(tmp_vault, rule="missing-summary")
+    assert {i["note_id"] for i in _issues(out, "missing-summary")} == {"plain-note"}

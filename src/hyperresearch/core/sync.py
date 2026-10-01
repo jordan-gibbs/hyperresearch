@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import hashlib
-import re
 import sqlite3
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from hyperresearch.core.frontmatter import has_frontmatter, is_final_report_path
 from hyperresearch.core.note import read_note, strip_markdown
 from hyperresearch.core.patterns import (
     WIKI_LINK_RE,
@@ -42,29 +42,15 @@ def _should_exclude(rel_path: str, exclude_parts: list[str]) -> bool:
     return first in exclude_parts
 
 
-_FRONTMATTER_PROBE = re.compile(rb"^---[ \t]*\r?\n")
-
-
-def _has_frontmatter(path: Path) -> bool:
-    """Cheap content probe — true iff the file opens with a YAML frontmatter
-    delimiter (matching parse_frontmatter's regex, with optional UTF-8 BOM).
-
-    Real notes — including stub notes under research/temp/ — always carry
-    frontmatter (write_note() in core/note.py emits it unconditionally).
-    Files without it are agent scratch artifacts that should never enter the
-    note index (see issue #25): interim-report body files written before
-    `note new --body-file`, evidence-digest.md, draft-{a,b,c}.md, and similar.
-    Ingesting them produces same-id collisions with the canonical notes
-    derived from them.
+def is_indexable(path: Path, notes_dir: Path) -> bool:
+    """The scan's admission rule for a .md under research/ (root and runs/
+    excluded by the caller): a YAML header (see has_frontmatter and issue
+    #25), or the header-less final report whose metadata read_note() derives.
+    The report is admitted from `notes_dir` itself only, which is where
+    lint, `run verify` and citecheck look for it. Anything else is agent
+    scratch.
     """
-    try:
-        with path.open("rb") as f:
-            head = f.read(16)
-    except OSError:
-        return False
-    if head.startswith(b"\xef\xbb\xbf"):
-        head = head[3:]
-    return _FRONTMATTER_PROBE.match(head) is not None
+    return has_frontmatter(path) or (path.parent == notes_dir and is_final_report_path(path))
 
 
 def compute_sync_plan(vault, force: bool = False) -> SyncPlan:
@@ -95,8 +81,9 @@ def compute_sync_plan(vault, force: bool = False) -> SyncPlan:
         # run-scoped pipeline artifacts are never vault notes.
         if runs_dir in md_file.parents:
             continue
-        # Skip scratch artifacts without YAML frontmatter.
-        if not _has_frontmatter(md_file):
+        # Skip scratch artifacts without YAML frontmatter; the header-less
+        # final report is the designed exception (is_indexable).
+        if not is_indexable(md_file, vault.notes_dir):
             continue
         rel = md_file.relative_to(vault.root).as_posix()
         disk_files[rel] = md_file.stat().st_mtime
@@ -220,6 +207,13 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
 def _upsert_note_to_db(conn, note, synced_at: str, file_mtime: float = 0) -> None:
     """Insert or update a note and all related tables using proper UPSERT."""
     meta = note.meta
+    # A derived `created` is the file's mtime (derive_report_meta); keep the
+    # row's value from the first indexing, or every edit of the deliverable
+    # would move it.
+    if note.meta_derived:
+        prev = conn.execute("SELECT created FROM notes WHERE id = ?", (meta.id,)).fetchone()
+        if prev and prev["created"]:
+            meta.created = datetime.fromisoformat(prev["created"])
     created_iso = meta.created.isoformat() if meta.created else synced_at
     updated_iso = meta.updated.isoformat() if meta.updated else None
 

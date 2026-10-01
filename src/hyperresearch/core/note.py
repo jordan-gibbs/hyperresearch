@@ -7,13 +7,17 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 
-from hyperresearch.core.frontmatter import parse_frontmatter, render_note
+from hyperresearch.core.frontmatter import (
+    is_frontmatterless_report,
+    parse_frontmatter,
+    render_note,
+)
 from hyperresearch.core.patterns import (
     WIKI_LINK_RE,
     is_valid_wiki_link_target,
     strip_code,
 )
-from hyperresearch.models.note import Note, NoteMeta, slugify
+from hyperresearch.models.note import Note, NoteMeta, NoteStatus, NoteType, slugify
 
 # Summary prefix that marks a resolver-minted stub (`repair --stub`,
 # `graph stub`). Both minting sites write `summary="Stub for [[<id>]]"` and
@@ -31,12 +35,59 @@ def stub_summary(note_id: str) -> str:
     return f"{STUB_SUMMARY_PREFIX}{note_id}]]"
 
 
+# The pipeline's deliverable, research/notes/final_report_<vault_tag>.md,
+# carries no YAML header by design (see core/frontmatter.py). It is still the
+# vault's most valuable note, so read_note() derives what a header would have
+# carried; without that, sync's scratch-file skip left every report on disk yet
+# invisible to search, note show, status and the note-level lint rules.
+FINAL_REPORT_TAG = "final-report"
+# ATX heading. The optional closing `#` run must follow whitespace (CommonMark),
+# so `# C#` titles as `C#`. read_note() decodes the bytes as they are, so a
+# report saved with CRLF endings keeps its `\r` before the newline.
+_FIRST_HEADING_RE = re.compile(r"^#{1,6}[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*\r?$", re.MULTILINE)
+
+
+def derive_report_meta(file_path: Path, body: str) -> NoteMeta:
+    """Metadata for a header-less final report, from the file alone.
+
+    id from the stem (a fixed point of slugify, which keeps underscores), title
+    from the first heading outside code (the stem when there is none), summary
+    from the first prose line via the same auto_summary the enrich step uses.
+    Both timestamps are the file's mtime: `updated` on every sync, `created`
+    at first indexing, which the sync upsert keeps on later passes so the
+    polish and cite-check edits of the deliverable do not move it.
+    """
+    from hyperresearch.core.enrich import auto_summary
+
+    m = _FIRST_HEADING_RE.search(strip_code(body))
+    title = m.group(1).strip() if m else file_path.stem
+    try:
+        mtime = datetime.fromtimestamp(file_path.stat().st_mtime, tz=UTC)
+    except OSError:
+        mtime = datetime.now(UTC)
+    return NoteMeta(
+        title=title,
+        id=slugify(file_path.stem),
+        tags=[FINAL_REPORT_TAG],
+        status=NoteStatus.REVIEW,
+        type=NoteType.NOTE,
+        created=mtime,
+        updated=mtime,
+        summary=auto_summary(body),
+    )
+
+
 def read_note(file_path: Path, vault_root: Path) -> Note:
     """Read a markdown file and parse into a Note."""
     raw_bytes = file_path.read_bytes()
     content_hash = hashlib.sha256(raw_bytes).hexdigest()
     content = raw_bytes.decode("utf-8-sig")  # Handles BOM
     meta, body = parse_frontmatter(content)
+
+    # The header-less deliverable: derive what a header would have carried.
+    meta_derived = is_frontmatterless_report(file_path)
+    if meta_derived:
+        meta = derive_report_meta(file_path, body)
 
     rel_path = file_path.relative_to(vault_root).as_posix()
 
@@ -61,6 +112,7 @@ def read_note(file_path: Path, vault_root: Path) -> Note:
         content_hash=content_hash,
         word_count=word_count,
         outgoing_links=outgoing,
+        meta_derived=meta_derived,
     )
 
 
