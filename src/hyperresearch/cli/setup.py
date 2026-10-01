@@ -23,7 +23,9 @@ def setup(
     if json_output or not sys.stdin.isatty():
         import subprocess
 
-        cmd = [sys.executable, "-m", "hyperresearch", "install", path]
+        # `setup <path>` makes the directory when it runs interactively, so
+        # it asks install to as well rather than meet its missing-path refusal.
+        cmd = [sys.executable, "-m", "hyperresearch", "install", path, "--create"]
         if json_output:
             cmd.append("--json")
         raise typer.Exit(subprocess.call(cmd))
