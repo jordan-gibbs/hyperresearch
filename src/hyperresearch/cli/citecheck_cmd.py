@@ -21,8 +21,8 @@ def citecheck_extract(
 ) -> None:
     """Extract (sentence, citation) pairs from the final report and triage them.
 
-    Auto-passes pairs whose numbers/wording the cited note's claims already
-    confirm; writes the sampled needs-llm remainder + dangling citations to
+    Auto-passes long wording overlaps only for pairs without numbers.
+    Writes sampled needs-llm pairs + dangling citations to
     runs/<tag>/cite-check-pairs.json for the cite-checker agent.
     """
     from hyperresearch.core.citecheck import write_pairs_file
