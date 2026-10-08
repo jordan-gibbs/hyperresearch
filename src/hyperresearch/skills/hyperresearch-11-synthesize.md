@@ -8,7 +8,7 @@ description: >
   tool-locked<% endif %>) that writes the final report in TWO passes — pass 1 rough
   integrated draft, pass 2 voice/redundancy/length cleanup. Skipped for
   light tier (which writes a single draft directly in step 10). Invoked
-  via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry skill (full tier).
+  via <% if platform == "codex" or platform == "omp" %>step-file read<% else %>Skill tool<% endif %> from the entry skill (full tier).
 ---
 
 # Step 11 — Synthesize the final report
@@ -146,11 +146,11 @@ If any are missing or trivial, fix them before proceeding. The synthesizer canno
 
 ## Step 11.6 — Spawn the synthesizer
 
-Spawn ONE `hyperresearch-synthesizer` subagent<% if platform == "codex" %> (custom agent `.codex/agents/hyperresearch-synthesizer.toml`) and wait for it to finish<% else %><% endif %>. Single spawn, runs once.
+Spawn ONE `hyperresearch-synthesizer` subagent<% if platform == "codex" %> (custom agent `.codex/agents/hyperresearch-synthesizer.toml`) and wait for it to finish<% elif platform == "omp" %> (subagent `.omp/agents/hyperresearch-synthesizer.md`) and wait for it — its result arrives as a follow-up message<% else %><% endif %>. Single spawn, runs once.
 
 **Spawn template:**
 ```
-<% if platform == "codex" %>custom_agent: hyperresearch-synthesizer   # spawn the custom agent defined in .codex/agents/hyperresearch-synthesizer.toml<% else %>subagent_type: hyperresearch-synthesizer<% endif %>
+<% if platform == "codex" %>custom_agent: hyperresearch-synthesizer   # spawn the custom agent defined in .codex/agents/hyperresearch-synthesizer.toml<% elif platform == "omp" %>agent: hyperresearch-synthesizer   # defined in .omp/agents/hyperresearch-synthesizer.md<% else %>subagent_type: hyperresearch-synthesizer<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -203,7 +203,7 @@ prompt: |
     Sources section.
 ```
 
-**CRITICAL: <% if platform == "codex" %>do not end your turn while the synthesizer is running — wait for it.**<% else %>never emit bare text while the synthesizer is running.**<% endif %> It will take 5-15 minutes (two passes). Use the wait time to think — append notes to `research/runs/<vault_tag>/temp/orchestrator-notes.md` about what you'll watch for in step 12 (the critics) based on the synthesis plan you just wrote.
+**CRITICAL: <% if platform == "codex" %>do not end your turn while the synthesizer is running — wait for it.**<% elif platform == "omp" %>spawn it, then wait — its result arrives as a follow-up message; continue the pipeline when it lands.**<% else %>never emit bare text while the synthesizer is running.**<% endif %> It will take 5-15 minutes (two passes). Use the wait time to think — append notes to `research/runs/<vault_tag>/temp/orchestrator-notes.md` about what you'll watch for in step 12 (the critics) based on the synthesis plan you just wrote.
 
 ---
 
@@ -259,5 +259,5 @@ After this step, the final report is only modified by <% if platform == "codex" 
 Return to the entry skill (`hyperresearch`). Invoke step 12:
 
 ```
-<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-12-critics.md<% else %>Skill(skill: "hyperresearch-12-critics")<% endif %>
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-12-critics.md<% elif platform == "omp" %>read .hyperresearch/omp/steps/hyperresearch-12-critics.md with the read tool, in full<% else %>Skill(skill: "hyperresearch-12-critics")<% endif %>
 ```

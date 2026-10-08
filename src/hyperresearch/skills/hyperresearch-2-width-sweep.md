@@ -5,7 +5,7 @@ description: >
   (breadth / depth / adversarial lenses) followed by parallel fetcher waves.
   Achieves comprehensive topical coverage with << p.source_target|dash >> curated sources for
   full tier. Includes coverage check, evidence redundancy audit,
-  and source count gating. Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry skill
+  and source count gating. Invoked via <% if platform == "codex" or platform == "omp" %>step-file read<% else %>Skill tool<% endif %> from the entry skill
   after step 1 completes.
 ---
 
@@ -127,13 +127,13 @@ Write to `research/runs/<vault_tag>/temp/scored-urls.md`.
 
 ## Step 2.4 — Parallel fetcher waves
 
-**Wave 1 (main wave):** <% if platform == "codex" %>Spawn **<< p.wave1_fetchers|dash >> `hyperresearch-fetcher` custom-agent subagents (`.codex/agents/hyperresearch-fetcher.toml`) — spawn them all now, in parallel, and wait for all of them** — true parallel execution.<% else %>Spawn **<< p.wave1_fetchers|dash >> fetcher subagents in ONE message** — true parallel execution.<% endif %> Each fetcher gets its own non-overlapping batch.
+**Wave 1 (main wave):** <% if platform == "codex" %>Spawn **<< p.wave1_fetchers|dash >> `hyperresearch-fetcher` custom-agent subagents (`.codex/agents/hyperresearch-fetcher.toml`) — spawn them all now, in parallel, and wait for all of them** — true parallel execution.<% elif platform == "omp" %>Spawn **<< p.wave1_fetchers|dash >> `hyperresearch-fetcher` subagents (`.omp/agents/hyperresearch-fetcher.md`) as items of ONE task call, then wait — spawned-agent results auto-deliver as follow-up messages** — true parallel execution.<% else %>Spawn **<< p.wave1_fetchers|dash >> fetcher subagents in ONE message** — true parallel execution.<% endif %> Each fetcher gets its own non-overlapping batch.
 
-**<% if platform == "codex" %>Custom agent<% else %>Subagent type<% endif %>:** `hyperresearch-fetcher`
+**<% if platform == "codex" %>Custom agent<% elif platform == "omp" %>Agent<% else %>Subagent type<% endif %>:** `hyperresearch-fetcher`
 
 **Spawn template (use the standard 3-piece contract):**
 ```
-<% if platform == "codex" %>custom_agent: hyperresearch-fetcher   # spawn the custom agent defined in .codex/agents/hyperresearch-fetcher.toml<% else %>subagent_type: hyperresearch-fetcher<% endif %>
+<% if platform == "codex" %>custom_agent: hyperresearch-fetcher   # spawn the custom agent defined in .codex/agents/hyperresearch-fetcher.toml<% elif platform == "omp" %>agent: hyperresearch-fetcher   # defined in .omp/agents/hyperresearch-fetcher.md<% else %>subagent_type: hyperresearch-fetcher<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste contents of research/runs/<vault_tag>/query.md}}
@@ -156,7 +156,7 @@ prompt: |
 
 **CRITICAL: no token waste.** Each fetcher gets ONLY its batch. No fetcher searches for new URLs or duplicates another fetcher's work. If a fetcher finishes early, it's done.
 
-<% if platform == "codex" %>**CRITICAL: do not end your turn while waiting.** Wait for every fetcher to finish; a message with no tool call ends the run in `codex exec`.<% else %>**CRITICAL: never emit bare text while waiting.** In `-p` mode, a text-only response triggers `end_turn`.<% endif %>
+<% if platform == "codex" %>**CRITICAL: do not end your turn while waiting.** Wait for every fetcher to finish; a message with no tool call ends the run in `codex exec`.<% elif platform == "omp" %>**CRITICAL: do not end your turn mid-pipeline.** Wait for every fetcher wave to land; spawned-agent results arrive as follow-up messages, and the run is complete only when `{hpr_path} run finish <vault_tag> --json` reports `passed: true`.<% else %>**CRITICAL: never emit bare text while waiting.** In `-p` mode, a text-only response triggers `end_turn`.<% endif %>
 
 **Use wait time to think.** While subagents are working, write evolving thoughts to `research/runs/<vault_tag>/temp/orchestrator-notes.md`:
 - What patterns are emerging from sources?
@@ -255,7 +255,7 @@ Queued items are exactly the pre-4.0 status quo (lost sources), never worse.
 <% else %>**If queued items exist**, spawn EXACTLY ONE `hyperresearch-browser-fetcher` subagent to drain them (serial, one browser — never spawn two):
 
 ```
-subagent_type: hyperresearch-browser-fetcher
+<% if platform == "omp" %>agent: hyperresearch-browser-fetcher   # defined in .omp/agents/hyperresearch-browser-fetcher.md<% else %>subagent_type: hyperresearch-browser-fetcher<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -282,7 +282,7 @@ prompt: |
 2. In non-interactive (`-p`) runs where no user can answer: record `{hpr_path} run block <vault_tag> --on human-challenges -j` and CONTINUE the pipeline with everything else — the queue drains on the next `hpr run resume`.
 3. After the user says done: `{hpr_path} escalation retry <id>` each item, re-spawn the browser-fetcher once, then re-run step 2.7's ranking commands so the new sources are scored.
 
-**If the Claude-in-Chrome extension is unavailable**, the queue simply accumulates — report the queued count in your wave summary and move on. Abandoned/queued items are exactly the pre-4.0 status quo (lost sources), never worse.
+**If the <% if platform == "omp" %>browser lane (the `eval` tool's `browser` facade) is<% else %>Claude-in-Chrome extension is<% endif %> unavailable**, the queue simply accumulates — report the queued count in your wave summary and move on. Abandoned/queued items are exactly the pre-4.0 status quo (lost sources), never worse.
 <% endif %>
 ---
 
@@ -310,7 +310,7 @@ Trigger conditions (ALL three must hold):
 
 Spawn template:
 ```
-<% if platform == "codex" %>custom_agent: hyperresearch-source-analyst   # spawn the custom agent defined in .codex/agents/hyperresearch-source-analyst.toml<% else %>subagent_type: hyperresearch-source-analyst<% endif %>
+<% if platform == "codex" %>custom_agent: hyperresearch-source-analyst   # spawn the custom agent defined in .codex/agents/hyperresearch-source-analyst.toml<% elif platform == "omp" %>agent: hyperresearch-source-analyst   # defined in .omp/agents/hyperresearch-source-analyst.md<% else %>subagent_type: hyperresearch-source-analyst<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -346,5 +346,5 @@ If you fall short after two waves, proceed anyway but ensure `coverage-gaps.md` 
 
 Return to the entry skill (`hyperresearch`). Tier-based routing:
 
-- **light tier:** Skip directly to step 10 — invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-10-triple-draft.md<% else %>Skill(skill: "hyperresearch-10-triple-draft")<% endif %>` (light tier writes a single draft, not the ensemble)
-- **full tier:** Invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-3-contradiction-graph.md<% else %>Skill(skill: "hyperresearch-3-contradiction-graph")<% endif %>`
+- **light tier:** Skip directly to step 10 — invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-10-triple-draft.md<% elif platform == "omp" %>read .hyperresearch/omp/steps/hyperresearch-10-triple-draft.md with the read tool, in full<% else %>Skill(skill: "hyperresearch-10-triple-draft")<% endif %>` (light tier writes a single draft, not the ensemble)
+- **full tier:** Invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-3-contradiction-graph.md<% elif platform == "omp" %>read .hyperresearch/omp/steps/hyperresearch-3-contradiction-graph.md with the read tool, in full<% else %>Skill(skill: "hyperresearch-3-contradiction-graph")<% endif %>`

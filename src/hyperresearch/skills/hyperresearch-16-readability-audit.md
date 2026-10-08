@@ -10,7 +10,7 @@ description: >
   reads the recommendations and SELECTIVELY applies them via direct
   <% if platform == "codex" %>apply_patch hunks<% else %>Edit calls<% endif %> (the recommender does NOT modify the report itself).
   Logs orchestrator decisions to a separate file. Runs for ALL tiers.
-  Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry skill.
+  Invoked via <% if platform == "codex" or platform == "omp" %>step-file read<% else %>Skill tool<% endif %> from the entry skill.
 ---
 
 # Step 16 — Readability audit & selective apply (FINAL STEP)
@@ -33,11 +33,11 @@ Read these inputs:
 
 ## Step 16.1 — Spawn the readability recommender
 
-Spawn ONE `hyperresearch-readability-recommender` subagent<% if platform == "codex" %> (custom agent `.codex/agents/hyperresearch-readability-recommender.toml`) and wait for it to finish<% else %><% endif %>. Single spawn, runs once.
+Spawn ONE `hyperresearch-readability-recommender` subagent<% if platform == "codex" %> (custom agent `.codex/agents/hyperresearch-readability-recommender.toml`) and wait for it to finish<% elif platform == "omp" %> (subagent `.omp/agents/hyperresearch-readability-recommender.md`) and wait for it — its result arrives as a follow-up message<% else %><% endif %>. Single spawn, runs once.
 
 **Spawn template:**
 ```
-<% if platform == "codex" %>custom_agent: hyperresearch-readability-recommender   # spawn the custom agent defined in .codex/agents/hyperresearch-readability-recommender.toml<% else %>subagent_type: hyperresearch-readability-recommender<% endif %>
+<% if platform == "codex" %>custom_agent: hyperresearch-readability-recommender   # spawn the custom agent defined in .codex/agents/hyperresearch-readability-recommender.toml<% elif platform == "omp" %>agent: hyperresearch-readability-recommender   # defined in .omp/agents/hyperresearch-readability-recommender.md<% else %>subagent_type: hyperresearch-readability-recommender<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -174,6 +174,8 @@ This is the audit trail. If a future review finds a readability problem we shoul
 ## Pipeline complete
 
 <% if platform == "codex" %>Return to the entry skill (`hyperresearch`) and run its **Final integrity gate** (`run finish`). Mark all plan items complete. Only after `run finish` reports `"passed": true` (or the run is honestly `blocked` after 3 fix rounds), tell the user the final report path and list any still-queued escalations.
+
+The run is not done until the gate has spoken.<% elif platform == "omp" %>Return to the entry skill (`hyperresearch`) and run its **Final integrity gate** (`run finish`). Mark all todos complete. Only after `run finish` reports `"passed": true` (or the run is honestly `blocked` after 3 fix rounds), tell the user the final report path and list any still-queued escalations.
 
 The run is not done until the gate has spoken.<% else %>Return to the entry skill (`hyperresearch`). Mark all todos complete. Tell the user the final report path.
 

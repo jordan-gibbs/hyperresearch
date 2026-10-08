@@ -6,7 +6,7 @@ description: >
   the final hygiene + readability pass. Strips pipeline-reference leaks,
   YAML frontmatter, scaffold sections, filler phrases, run-on sentences.
   Escalates structural mismatches rather than fabricating content.
-  Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry skill. Followed by step 16
+  Invoked via <% if platform == "codex" or platform == "omp" %>step-file read<% else %>Skill tool<% endif %> from the entry skill. Followed by step 16
   (readability audit) which is the actual final step before ship.
 ---
 
@@ -38,11 +38,11 @@ echo '{"applied": [], "escalations": []}' > research/runs/<vault_tag>/polish-log
 
 ## Step 15.2 — Spawn the polish auditor
 
-Spawn ONCE<% if platform == "codex" %> — the `hyperresearch-polish-auditor` custom agent (`.codex/agents/hyperresearch-polish-auditor.toml`) — and wait for it to finish<% else %><% endif %>.
+Spawn ONCE<% if platform == "codex" %> — the `hyperresearch-polish-auditor` custom agent (`.codex/agents/hyperresearch-polish-auditor.toml`) — and wait for it to finish<% elif platform == "omp" %> — the `hyperresearch-polish-auditor` subagent (`.omp/agents/hyperresearch-polish-auditor.md`) — and wait for it; its result arrives as a follow-up message<% else %><% endif %>.
 
 **Spawn template:**
 ```
-<% if platform == "codex" %>custom_agent: hyperresearch-polish-auditor   # spawn the custom agent defined in .codex/agents/hyperresearch-polish-auditor.toml<% else %>subagent_type: hyperresearch-polish-auditor<% endif %>
+<% if platform == "codex" %>custom_agent: hyperresearch-polish-auditor   # spawn the custom agent defined in .codex/agents/hyperresearch-polish-auditor.toml<% elif platform == "omp" %>agent: hyperresearch-polish-auditor   # defined in .omp/agents/hyperresearch-polish-auditor.md<% else %>subagent_type: hyperresearch-polish-auditor<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -163,7 +163,7 @@ The final report lives at `research/notes/final_report_<vault_tag>.md`. The wrap
 Return to the entry skill (`hyperresearch`). Invoke step 16:
 
 ```
-<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-16-readability-audit.md<% else %>Skill(skill: "hyperresearch-16-readability-audit")<% endif %>
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-16-readability-audit.md<% elif platform == "omp" %>read .hyperresearch/omp/steps/hyperresearch-16-readability-audit.md with the read tool, in full<% else %>Skill(skill: "hyperresearch-16-readability-audit")<% endif %>
 ```
 
 Step 16 is the final step — readability audit + selective apply. Runs for ALL tiers.

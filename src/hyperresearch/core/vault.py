@@ -146,8 +146,9 @@ class Vault:
         """Initialize a new vault at the given path.
 
         `platforms` are the agent runtimes whose docs file gets the
-        hyperresearch blurb (claude -> CLAUDE.md, codex -> AGENTS.md); a
-        Codex-only install passes ("codex",) so no CLAUDE.md appears.
+        hyperresearch blurb (claude -> CLAUDE.md, codex and omp -> AGENTS.md);
+        a Codex- or OMP-only install passes ("codex",) / ("omp",) so no
+        CLAUDE.md appears.
         """
         root = root.resolve()
         hyperresearch_dir = root / HYPERRESEARCH_DIR

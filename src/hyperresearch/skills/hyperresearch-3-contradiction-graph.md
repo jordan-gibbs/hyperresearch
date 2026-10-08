@@ -5,7 +5,7 @@ description: >
   claims across the corpus. Ranked fight clusters feed step 4's loci
   analysis so that loci emerge from where evidence actually forks, not
   from agent intuition. Also identifies consensus claims (3+ independent
-  agreements) for confident assertion in the draft. Invoked via <% if platform == "codex" %>step-file read<% else %>Skill
+  agreements) for confident assertion in the draft. Invoked via <% if platform == "codex" or platform == "omp" %>step-file read<% else %>Skill
   tool<% endif %> from the entry skill after step 2 completes.
 ---
 
@@ -70,4 +70,4 @@ If no claims files exist (e.g., fetchers didn't produce them), skip this step en
 
 Return to the entry skill (`hyperresearch`). Tier-based routing:
 
-- **full tier:** Invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-4-loci-analysis.md<% else %>Skill(skill: "hyperresearch-4-loci-analysis")<% endif %>`
+- **full tier:** Invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-4-loci-analysis.md<% elif platform == "omp" %>read .hyperresearch/omp/steps/hyperresearch-4-loci-analysis.md with the read tool, in full<% else %>Skill(skill: "hyperresearch-4-loci-analysis")<% endif %>`

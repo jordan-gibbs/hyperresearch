@@ -53,7 +53,7 @@ manuscript version with [scholarly metadata filters](docs/source-search.md).
 
 ## Install
 
-Works in **Claude Code** and **OpenAI Codex**: same pipeline, same vault.
+Works in **Claude Code**, **OpenAI Codex**, and **OMP** ([oh-my-pi](https://github.com/can1357/oh-my-pi)): same pipeline, same vault.
 
 ```bash
 cd your-project
@@ -61,9 +61,10 @@ pip install hyperresearch
 
 hyperresearch install                    # Claude Code, then: /hyperresearch <anything>
 hyperresearch install . --target codex   # OpenAI Codex, then: $hyperresearch <anything>
+hyperresearch install . --target omp     # OMP, then: /hyperresearch <anything>
 ```
 
-`--target all` installs both side by side. Codex sessions need write access and network, [see below](#codex).
+`--target all` installs Claude Code and Codex side by side; OMP is opt-in per project. Codex sessions need write access and network, [see below](#codex); OMP needs nothing extra.
 
 Prefer a plugin or a single skill? Each route below installs one bootstrap skill, `deep-research`, that sets the pipeline up in the current project on first use. It still needs `pip install hyperresearch`.
 
@@ -122,6 +123,31 @@ What is different on Codex:
 - **No browser lane.** Codex has no Claude-in-Chrome equivalent, so fetches blocked by a login wall or bot wall stay in the escalation queue, and the final message lists them for you.
 - **Tool locks are instructions, not enforcement.** Codex custom agents have no per-agent tool allowlist. The patcher and polish auditor are told to make surgical edits only, but nothing stops them from doing more.
 - **A Stop hook guards the pipeline.** `hyperresearch run stop-gate` blocks the session from ending while the newest run is mid-pipeline, so Codex cannot quietly answer inline and stop. Codex runs a project's hooks only after you trust them.
+
+### OMP (oh-my-pi)
+
+The same pipeline runs on [OMP](https://github.com/can1357/oh-my-pi).
+
+```bash
+cd your-project
+pip install hyperresearch && hyperresearch install . --target omp
+```
+
+This installs the entry skill at `.omp/skills/hyperresearch/SKILL.md`, the `/hyperresearch <query>` command at `.omp/commands/hyperresearch.md`, the step procedures under `.hyperresearch/omp/steps/`, the subagents as task agents in `.omp/agents/`, a stop-gate extension at `.omp/extensions/hyperresearch.ts`, and a block in `AGENTS.md`. `--global --target omp` puts the entry skill, the command and the agents in `~/.omp/agent/` so `/hyperresearch` works in every OMP session; the step files and the stop gate stay per-project and appear on the first run.
+
+The step procedures are plain files, not skills: OMP's skill list stays one entry (`skill://hyperresearch`), and the orchestrator reads each step with the `read` tool. Spawns use OMP's `task` tool — one `agent` + `task` + `solutionSpace` item per subagent, several items in one call for a parallel wave.
+
+What is different on OMP:
+
+- **The browser lane stays.** The browser-fetcher drives a real browser through the `eval` tool's `browser` facade: relay mode attaches to your own logged-in Chrome (`omp browser-relay`), and a managed Chromium is the fallback. Login-walled and bot-walled fetches drain instead of queueing.
+- **Tool locks are enforced.** Each agent's frontmatter `tools:` line is an allowlist OMP enforces, so the patcher and polish auditor really cannot Write — unlike Codex, where the same lock is instruction only.
+- **The stop gate is advisory.** OMP's `session_stop` event lets an extension ask for one continuation per stop (capped at 8), so a mid-pipeline stop gets a nudge quoting the unfinished step instead of a refusal. Set `HYPERRESEARCH_STOP_GATE=0` to disable it, or delete `.omp/extensions/hyperresearch.ts`.
+- **Models are inherited.** Subagents run on your OMP session model. To pin one per role, add an `omp_models` override to a profile in `.hyperresearch/config.toml` and re-run `hyperresearch install . --target omp`:
+
+```toml
+[profile.full]
+omp_models = { fetcher = "anthropic/claude-haiku-4-5", critics = "@slow" }
+```
 
 ---
 
