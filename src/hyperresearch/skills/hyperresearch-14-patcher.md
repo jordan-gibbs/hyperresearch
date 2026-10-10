@@ -9,7 +9,7 @@ description: >
   surgical Edit hunks against the synthesized final report. Zero
   regeneration. Pre-stubs the patch log because Edit cannot create files.
 <% endif %>  Handles orchestrator-escalated structural restructures inline. Invoked
-  via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %> from the entry skill (full tier).
+  via <% if platform == "codex" or platform == "omp" %>step-file read<% else %>Skill tool<% endif %> from the entry skill (full tier).
 ---
 
 # Step 14 — Patch pass
@@ -66,11 +66,11 @@ If you skip this step the patcher will silently have nowhere to write its log, w
 
 ## Step 14.2 — Spawn the patcher
 
-Spawn ONCE<% if platform == "codex" %> — the `hyperresearch-patcher` custom agent (`.codex/agents/hyperresearch-patcher.toml`) — and wait for it to finish<% else %><% endif %>.
+Spawn ONCE<% if platform == "codex" %> — the `hyperresearch-patcher` custom agent (`.codex/agents/hyperresearch-patcher.toml`) — and wait for it to finish<% elif platform == "omp" %> — the `hyperresearch-patcher` subagent (`.omp/agents/hyperresearch-patcher.md`) — and wait for it; its result arrives as a follow-up message<% else %><% endif %>.
 
 **Spawn template:**
 ```
-<% if platform == "codex" %>custom_agent: hyperresearch-patcher   # spawn the custom agent defined in .codex/agents/hyperresearch-patcher.toml<% else %>subagent_type: hyperresearch-patcher<% endif %>
+<% if platform == "codex" %>custom_agent: hyperresearch-patcher   # spawn the custom agent defined in .codex/agents/hyperresearch-patcher.toml<% elif platform == "omp" %>agent: hyperresearch-patcher   # defined in .omp/agents/hyperresearch-patcher.md<% else %>subagent_type: hyperresearch-patcher<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -161,5 +161,5 @@ For each entry:
 Return to the entry skill (`hyperresearch`). Invoke step 14.5 (cite-check):
 
 ```
-<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-14-5-cite-check.md<% else %>Skill(skill: "hyperresearch-14-5-cite-check")<% endif %>
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-14-5-cite-check.md<% elif platform == "omp" %>read .hyperresearch/omp/steps/hyperresearch-14-5-cite-check.md with the read tool, in full<% else %>Skill(skill: "hyperresearch-14-5-cite-check")<% endif %>
 ```

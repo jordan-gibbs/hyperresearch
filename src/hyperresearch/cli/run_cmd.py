@@ -190,7 +190,9 @@ def run_resume(
         # `hyperresearch-2-width-sweep`, never a bare `hyperresearch-2`.
         "skill_to_invoke": step_skill_slug(position["next_step"]),
         # Codex has no step skills: the orchestrator reads this file instead.
-        "codex_step_file": _codex_step_file(step_skill_slug(position["next_step"])),
+        "codex_step_file": _step_file_for("codex", step_skill_slug(position["next_step"])),
+        # OMP likewise: plain step files under .hyperresearch/omp/steps/.
+        "omp_step_file": _step_file_for("omp", step_skill_slug(position["next_step"])),
     }
     if json_output:
         output(success(data, vault=str(vault.root)), json_mode=True)
@@ -202,21 +204,28 @@ def run_resume(
             console.print(f"  Skill(skill: \"{data['skill_to_invoke']}\")")
 
 
-def _codex_step_file(skill: str | None) -> str | None:
-    """Project-relative path of a step's Codex procedure file, or None."""
+def _step_file_for(platform: str, skill: str | None) -> str | None:
+    """Project-relative path of a step's procedure file for `platform`, or None."""
     if skill is None:
         return None
-    from hyperresearch.core.platforms import CODEX, paths_for
+    from hyperresearch.core.platforms import paths_for
 
-    return f"{paths_for(CODEX).steps_dir}/{skill}.md"
+    return f"{paths_for(platform).steps_dir}/{skill}.md"
 
 
 @app.command("stop-gate", hidden=True)
-def run_stop_gate() -> None:
-    """Codex Stop hook: block ending the session while the newest run is mid-pipeline.
+def run_stop_gate(
+    platform: str = typer.Option(
+        "codex",
+        "--platform",
+        "-p",
+        help="Runtime whose step-file path the block reason quotes (codex, omp).",
+    ),
+) -> None:
+    """Codex/OMP Stop hook: block ending the session while the newest run is mid-pipeline.
 
-    Reads the hook's JSON input on stdin. Prints one
-    `{"decision": "block", "reason": ...}` object when the newest run is
+    Reads the hook's JSON input on stdin (OMP's extension passes none). Prints
+    one `{"decision": "block", "reason": ...}` object when the newest run is
     running, was touched in the last 6 hours, and has a next step; prints
     nothing otherwise. Always exits 0 and never raises — a broken gate must
     not wedge the agent. Set HYPERRESEARCH_STOP_GATE=0 to disable.
@@ -226,7 +235,9 @@ def run_stop_gate() -> None:
 
     try:
         from hyperresearch.core.codex import STOP_GATE_ENV, stop_gate_decision
+        from hyperresearch.core.platforms import check_platform
 
+        check_platform(platform)
         if os.environ.get(STOP_GATE_ENV, "").strip().lower() in ("0", "false", "no", "off"):
             return
         try:
@@ -251,7 +262,7 @@ def run_stop_gate() -> None:
             vault = Vault.discover(start)
         except VaultError:
             return
-        decision = stop_gate_decision(vault)
+        decision = stop_gate_decision(vault, platform=platform)
         if decision is not None:
             sys.stdout.write(json.dumps(decision) + "\n")
             sys.stdout.flush()

@@ -4,7 +4,7 @@ description: >
   Step 12 of the hyperresearch V8 pipeline. Spawns 4 adversarial critics
   in parallel against the synthesized final report from step 11. Each
   critic produces an independent findings JSON that the patcher (step 14)
-  consumes. Critics never modify the draft directly. Invoked via <% if platform == "codex" %>step-file read<% else %>Skill
+  consumes. Critics never modify the draft directly. Invoked via <% if platform == "codex" or platform == "omp" %>step-file read<% else %>Skill
   tool<% endif %> from the entry skill (full tier only).
 ---
 
@@ -28,7 +28,7 @@ Read these inputs:
 
 ## Procedure
 
-1. **Spawn all 4 critics in parallel.** <% if platform == "codex" %>Each is a custom agent in `.codex/agents/` — spawn all 4 now, in parallel, and wait for all of them:<% else %>In ONE message:<% endif %>
+1. **Spawn all 4 critics in parallel.** <% if platform == "codex" %>Each is a custom agent in `.codex/agents/` — spawn all 4 now, in parallel, and wait for all of them:<% elif platform == "omp" %>Each is defined in `.omp/agents/` — spawn all 4 as items of ONE task call and wait; keep sequencing when their results arrive:<% else %>In ONE message:<% endif %>
    - `hyperresearch-dialectic-critic` → `research/runs/<vault_tag>/critic-findings-dialectic.json` (counter-evidence the draft missed or straw-manned)
    - `hyperresearch-depth-critic` → `research/runs/<vault_tag>/critic-findings-depth.json` (shallow spots where interim notes could fill substance)
    - `hyperresearch-width-critic` → `research/runs/<vault_tag>/critic-findings-width.json` (corpus clusters the draft ignores despite evidence)
@@ -36,7 +36,7 @@ Read these inputs:
 
 2. **Pass each critic** (standard 3-piece contract):
    ```
-   <% if platform == "codex" %>custom_agent: hyperresearch-<critic-name>-critic   # spawn the custom agent defined in .codex/agents/hyperresearch-<critic-name>-critic.toml<% else %>subagent_type: hyperresearch-<critic-name>-critic<% endif %>
+   <% if platform == "codex" %>custom_agent: hyperresearch-<critic-name>-critic   # spawn the custom agent defined in .codex/agents/hyperresearch-<critic-name>-critic.toml<% elif platform == "omp" %>agent: hyperresearch-<critic-name>-critic   # defined in .omp/agents/hyperresearch-<critic-name>-critic.md<% else %>subagent_type: hyperresearch-<critic-name>-critic<% endif %>
    prompt: |
      RESEARCH QUERY (verbatim, gospel):
      > {{paste research/runs/<vault_tag>/query.md body}}
@@ -75,5 +75,5 @@ Read these inputs:
 Return to the entry skill (`hyperresearch`). Invoke step 13:
 
 ```
-<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-13-gap-fetch.md<% else %>Skill(skill: "hyperresearch-13-gap-fetch")<% endif %>
+<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-13-gap-fetch.md<% elif platform == "omp" %>read .hyperresearch/omp/steps/hyperresearch-13-gap-fetch.md with the read tool, in full<% else %>Skill(skill: "hyperresearch-13-gap-fetch")<% endif %>
 ```

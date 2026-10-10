@@ -109,6 +109,44 @@ class CodexModelMap(BaseModel):
         return v.strip()
 
 
+class OmpModelMap(BaseModel):
+    """Per-agent model overrides for the OMP install (`--target omp`).
+
+    Same roles as ModelMap. None (the default) omits `model` from the agent's
+    frontmatter, so the subagent inherits the OMP session's model — the right
+    default, since OMP sessions run on whatever provider the user configured.
+    Override per agent in a `[profile.<name>]` overlay:
+
+        [profile.full]
+        omp_models = { fetcher = "anthropic/claude-haiku-4-5", critics = "@slow" }
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True, protected_namespaces=())
+
+    fetcher: str | None = None
+    source_analyst: str | None = None
+    loci_analyst: str | None = None
+    depth_investigator: str | None = None
+    corpus_critic: str | None = None
+    cite_checker: str | None = None
+    browser_fetcher: str | None = None
+    draft_orchestrator: str | None = None
+    synthesizer: str | None = None
+    critics: str | None = None
+    patcher: str | None = None
+    polish_auditor: str | None = None
+    readability_recommender: str | None = None
+
+    @field_validator("*")
+    @classmethod
+    def _non_empty(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError("omp model override must be a non-empty string (omit it to inherit)")
+        return v.strip()
+
+
 class Profile(BaseModel):
     """One resolved pipeline profile. All ranges are (low, high) inclusive."""
 
@@ -215,6 +253,7 @@ class Profile(BaseModel):
 
     models: ModelMap = Field(default_factory=ModelMap)
     codex_models: CodexModelMap = Field(default_factory=CodexModelMap)
+    omp_models: OmpModelMap = Field(default_factory=OmpModelMap)
 
     @field_validator(
         "source_target", "planned_searches", "candidate_urls", "deduped_urls",
