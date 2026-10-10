@@ -16,7 +16,7 @@
 
 ---
 
-**Hyperresearch turns Claude Code into a deep research agent. It runs in OpenAI Codex too.** A tier-adaptive 16-step pipeline takes one prompt and produces an adversarially-audited report with full source provenance. Every source it reads lands in a persistent, searchable vault, so each session starts smarter than the last.
+**Hyperresearch turns Claude Code into a deep research agent, and it's #1 on the DRACO deep research benchmark, ahead of Claude Research, ChatGPT, Gemini and Perplexity. It runs in OpenAI Codex too.** A tier-adaptive 16-step pipeline takes one prompt and produces an adversarially-audited report with full source provenance. Every source it reads lands in a persistent, searchable vault, so each session starts smarter than the last.
 
 **Don't want to run it locally?** [Hyperresearch](https://hyperresearch.ai/?utm_source=github&utm_medium=readme) is the hosted version: the same pipeline, with no Claude Code or Codex install needed.
 
@@ -30,6 +30,10 @@
 >
 > Codex support ships in the next PyPI release; until then install from GitHub with `pip install git+https://github.com/jordan-gibbs/hyperresearch`. Details and what differs on Codex: [Codex](#codex).
 
+<p align="center">
+  <a href="https://hyperresearch.ai/benchmarks/draco?utm_source=github&utm_medium=readme"><img src="assets/draco-board.svg" alt="DRACO deep research benchmark, 10 tasks, same judge: Hyperresearch Deep 77.7 is #1, ahead of Claude Research (Opus) 73.0, Parallel Ultra 61.5, You.com Research 60.1, Perplexity Deep Research 57.8, Valyu DeepResearch Heavy 57.2, ChatGPT Deep research 55.2 and Gemini Deep Research 54.7" width="780"></a>
+</p>
+
 ## See a sample report
 
 Read a full report before you install anything. These are unedited Deep runs from the hosted version, and you don't need to log in:
@@ -38,7 +42,7 @@ Read a full report before you install anything. These are unedited Deep runs fro
 - [Buying a $2M HVAC business](https://hyperresearch.ai/samples/buying-an-hvac-business?utm_source=github&utm_medium=readme): multiples, SBA loans and diligence (213 sources)
 - [Who is winning AI coding agents, October 2026](https://hyperresearch.ai/samples/ai-coding-agents?utm_source=github&utm_medium=readme) (259 sources)
 
-On DRACO, the hosted Deep scored 77.7 across 10 tasks, against 73.0 for Claude Research (Opus). Method and per-task scores are on the [benchmark page](https://hyperresearch.ai/benchmarks/draco?utm_source=github&utm_medium=readme).
+These are the same kind of Deep runs that put Hyperresearch at #1 on DRACO. Method and per-task scores are on the [benchmark page](https://hyperresearch.ai/benchmarks/draco?utm_source=github&utm_medium=readme).
 
 ## Why it wins
 
