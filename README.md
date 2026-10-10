@@ -18,6 +18,10 @@
 
 **Hyperresearch turns Claude Code into a deep research agent, and it's #1 on the DRACO deep research benchmark, ahead of Claude Research, ChatGPT, Gemini and Perplexity. It runs in OpenAI Codex too.** A tier-adaptive 16-step pipeline takes one prompt and produces an adversarially-audited report with full source provenance. Every source it reads lands in a persistent, searchable vault, so each session starts smarter than the last.
 
+<p align="center">
+  <img src="assets/how-it-works.gif" alt="hyperresearch in Claude Code: /hyperresearch splits the question, gathers 214 sources from web, OpenAlex, Crossref, SEC EDGAR, FRED and CORE into research/notes, cite-checks every claim and fixes the unsupported one, then writes the final cited report" width="780">
+</p>
+
 **Don't want to run it locally?** [Hyperresearch](https://hyperresearch.ai/?utm_source=github&utm_medium=readme) is the hosted version: the same pipeline, with no Claude Code or Codex install needed.
 
 > [!NOTE]
