@@ -243,7 +243,13 @@ def lint_vault(rule: str = "") -> str:
         for r in conn.execute("SELECT id FROM notes WHERE type NOT IN ('index','raw') AND id NOT IN (SELECT DISTINCT note_id FROM tags)"):
             issues.append({"rule": "missing-tags", "severity": "warning", "note_id": r["id"], "message": "No tags"})
     if "missing-summary" in rules:
-        for r in conn.execute("SELECT id FROM notes WHERE type NOT IN ('index','raw') AND (summary IS NULL OR LENGTH(TRIM(COALESCE(summary, ''))) = 0)"):
+        from hyperresearch.core.frontmatter import is_frontmatterless_report
+
+        for r in conn.execute("SELECT id, path FROM notes WHERE type NOT IN ('index','raw') AND (summary IS NULL OR LENGTH(TRIM(COALESCE(summary, ''))) = 0)"):
+            # The header-less final report has nowhere to keep a summary, and
+            # update_note refuses to write one into it.
+            if is_frontmatterless_report(vault.root / r["path"]):
+                continue
             issues.append({"rule": "missing-summary", "severity": "warning", "note_id": r["id"], "message": "No summary"})
     if "broken-links" in rules:
         for r in conn.execute("SELECT source_id, target_ref FROM links WHERE target_id IS NULL"):
@@ -381,7 +387,11 @@ def update_note(note_id: str, status: str = "", add_tags: str = "", remove_tags:
         remove_tags: Comma-separated tags to remove
         summary: New summary text
     """
-    from hyperresearch.core.frontmatter import parse_frontmatter, serialize_frontmatter
+    from hyperresearch.core.frontmatter import (
+        FrontmatterWriteRefusedError,
+        parse_frontmatter,
+        write_frontmatter,
+    )
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.models.note import NoteStatus
 
@@ -430,7 +440,10 @@ def update_note(note_id: str, status: str = "", add_tags: str = "", remove_tags:
     if not changed:
         return json.dumps({"ok": True, "data": {"note_id": note_id, "changes": []}})
 
-    file_path.write_text(serialize_frontmatter(meta) + "\n" + body, encoding="utf-8")
+    try:
+        write_frontmatter(file_path, meta, body, vault.root)
+    except FrontmatterWriteRefusedError as exc:
+        return json.dumps({"ok": False, "error": str(exc), "error_code": "REPORT_WITHOUT_FRONTMATTER"})
 
     plan = compute_sync_plan(vault)
     if plan.to_add or plan.to_update:

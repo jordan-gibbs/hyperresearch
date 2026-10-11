@@ -256,6 +256,43 @@ class TestVerificationLints:
         assert "quantum entanglement" in issues[0]["message"]
         assert "Low Security" not in issues[0]["message"]
 
+    def test_quote_integrity_bare_report_name_is_not_its_own_evidence(
+        self, seeded_vault, monkeypatch
+    ):
+        """_latest_report checks any final_report*.md, so the evidence pool
+        excludes the same set: a headed research/notes/final_report.md is an
+        indexed note and would otherwise verify its own fabricated quote."""
+        from hyperresearch.core.note import write_note
+
+        write_note(
+            seeded_vault.notes_dir,
+            "Headed bare report",
+            note_id="final_report",
+            body=(
+                'The paper concludes that "quantum entanglement reverses causality '
+                'in every measurable frame of reference".'
+            ),
+        )
+        payload = self._lint(seeded_vault, "quote-integrity", monkeypatch)
+        issues = [i for i in payload["data"]["issues"] if i["rule"] == "quote-integrity"]
+        assert len(issues) == 1
+
+        # The exclusion is anchored to research/notes/ itself: a source note in
+        # a subfolder that happens to carry the name is evidence like any other,
+        # so the same quote, found there, verifies.
+        write_note(
+            seeded_vault.notes_dir / "topic",
+            "Subfolder source",
+            note_id="final_report_src",
+            body=(
+                'The paper concludes that "quantum entanglement reverses causality '
+                'in every measurable frame of reference".'
+            ),
+        )
+        payload = self._lint(seeded_vault, "quote-integrity", monkeypatch)
+        issues = [i for i in payload["data"]["issues"] if i["rule"] == "quote-integrity"]
+        assert issues == []
+
     def test_numeric_consistency_flags_untraceable(self, cited_vault, monkeypatch):
         report = cited_vault.root / "research" / "notes" / "final_report_n.md"
         report.write_text("Revenue grew 47.3% while costs fell 1,234,567 dollars.", encoding="utf-8")

@@ -92,8 +92,9 @@ def repair(
         from datetime import datetime as _dt
 
         from hyperresearch.core.enrich import auto_summary, auto_tag
+        from hyperresearch.core.frontmatter import is_frontmatterless_report
         from hyperresearch.core.frontmatter import parse_frontmatter as _parse_fm
-        from hyperresearch.core.frontmatter import serialize_frontmatter as _ser_fm
+        from hyperresearch.core.frontmatter import write_frontmatter as _write_fm
 
         # Get existing tag vocabulary
         tag_vocab = [
@@ -114,6 +115,10 @@ def repair(
         for row in deficient:
             try:
                 fp = vault.root / row["path"]
+                # The header-less final report (selected when its body yields
+                # no summary) must never receive a header.
+                if is_frontmatterless_report(fp):
+                    continue
                 meta, body = _parse_fm(fp.read_text(encoding="utf-8-sig"))
                 changed = False
 
@@ -135,7 +140,7 @@ def repair(
 
                 if changed:
                     meta.updated = _dt.now(UTC)
-                    fp.write_text(_ser_fm(meta) + "\n" + body, encoding="utf-8")
+                    _write_fm(fp, meta, body, vault.root)
                     enriched_count += 1
             except Exception:
                 pass
@@ -157,7 +162,11 @@ def repair(
             console.print("[bold]4/6 Promoting notes...[/]")
         from datetime import datetime
 
-        from hyperresearch.core.frontmatter import parse_frontmatter, serialize_frontmatter
+        from hyperresearch.core.frontmatter import (
+            is_frontmatterless_report,
+            parse_frontmatter,
+            write_frontmatter,
+        )
 
         # Draft -> Review
         drafts = vault.db.execute("""
@@ -173,7 +182,7 @@ def repair(
                 meta, body = parse_frontmatter(fp.read_text(encoding="utf-8-sig"))
                 meta.status = "review"
                 meta.updated = datetime.now(UTC)
-                fp.write_text(serialize_frontmatter(meta) + "\n" + body, encoding="utf-8")
+                write_frontmatter(fp, meta, body, vault.root)
                 promoted_count += 1
             except Exception:
                 pass
@@ -189,10 +198,14 @@ def repair(
         for row in reviews:
             try:
                 fp = vault.root / row["path"]
+                # The header-less deliverable indexes as `review`, so only this
+                # loop can select it; promoting it would write a header into it.
+                if is_frontmatterless_report(fp):
+                    continue
                 meta, body = parse_frontmatter(fp.read_text(encoding="utf-8-sig"))
                 meta.status = "evergreen"
                 meta.updated = datetime.now(UTC)
-                fp.write_text(serialize_frontmatter(meta) + "\n" + body, encoding="utf-8")
+                write_frontmatter(fp, meta, body, vault.root)
                 promoted_count += 1
             except Exception:
                 pass

@@ -438,7 +438,11 @@ def note_update(
     """Update frontmatter fields on a single note."""
     from datetime import datetime
 
-    from hyperresearch.core.frontmatter import parse_frontmatter, serialize_frontmatter
+    from hyperresearch.core.frontmatter import (
+        FrontmatterWriteRefusedError,
+        parse_frontmatter,
+        write_frontmatter,
+    )
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.core.vault import Vault
     from hyperresearch.models.note import ContentType, NoteStatus, Tier
@@ -530,8 +534,14 @@ def note_update(
         return
 
     meta.updated = datetime.now(UTC)
-    new_content = serialize_frontmatter(meta) + "\n" + body
-    file_path.write_text(new_content, encoding="utf-8")
+    try:
+        write_frontmatter(file_path, meta, body, vault.root)
+    except FrontmatterWriteRefusedError as exc:
+        if json_output:
+            output(error(str(exc), "REPORT_WITHOUT_FRONTMATTER"), json_mode=True)
+        else:
+            console.print(f"[red]Refused:[/] {exc}")
+        raise typer.Exit(1) from None
 
     plan = compute_sync_plan(vault)
     execute_sync(vault, plan)
@@ -551,7 +561,8 @@ def note_mv(
             "Destination relative to the vault root, e.g. research/notes/renamed.md. "
             "A bare name lands in research/notes/ and a missing .md is added. The note "
             "keeps its id (it lives in frontmatter, not the filename), so wiki-links to "
-            "it stay valid and nothing else is rewritten."
+            "it stay valid and nothing else is rewritten; a final report without "
+            "frontmatter is the exception, its id is derived from its file name."
         ),
     ),
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
@@ -559,12 +570,17 @@ def note_mv(
     """Move a note file within the tree sync scans (research/notes or research/temp).
 
     The id is unchanged: `mv` moves the file, it does not rename the note.
+    The one exception is a final report without frontmatter, whose id is its
+    file name: it can only be renamed to another final_report_*.md in
+    research/notes/, and the rename changes its id.
     """
     from pathlib import Path
 
     from hyperresearch.core.claims import _under
+    from hyperresearch.core.frontmatter import is_final_report_path, is_frontmatterless_report
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.core.vault import Vault
+    from hyperresearch.models.note import slugify
 
     vault = Vault.discover()
     vault.auto_sync()
@@ -614,6 +630,34 @@ def note_mv(
     rel_new = (
         (new_file.parent.resolve() / new_file.name).relative_to(vault.root.resolve()).as_posix()
     )
+    # A header-less final report is indexed by its name alone, so anywhere
+    # else it would silently leave the index that `mv` promises to keep it in.
+    stays_indexed = new_file.parent.resolve() == vault.notes_dir.resolve() and is_final_report_path(
+        vault.root / rel_new
+    )
+    if is_frontmatterless_report(old_file) and not stays_indexed:
+        msg = (
+            f"{row['path']} is a final report without YAML frontmatter and is indexed "
+            f"by that name only; {rel_new} would drop it from the index"
+        )
+        if json_output:
+            output(error(msg, "DESTINATION_NOT_INDEXABLE"), json_mode=True)
+        else:
+            console.print(f"[red]{msg}[/]")
+        raise typer.Exit(1)
+    if is_frontmatterless_report(old_file):
+        # Its id changes to the one sync derives from the new stem; if another
+        # note holds that id, sync reports a collision and leaves the moved
+        # report out of the index.
+        new_id = slugify(Path(rel_new).stem)
+        owner = vault.db.execute("SELECT path FROM notes WHERE id = ?", (new_id,)).fetchone()
+        if owner and owner["path"] != row["path"]:
+            msg = f"{rel_new} would give the report the id {new_id}, which {owner['path']} has"
+            if json_output:
+                output(error(msg, "ID_TAKEN"), json_mode=True)
+            else:
+                console.print(f"[red]{msg}[/]")
+            raise typer.Exit(1)
 
     new_file.parent.mkdir(parents=True, exist_ok=True)
     old_file.rename(new_file)
