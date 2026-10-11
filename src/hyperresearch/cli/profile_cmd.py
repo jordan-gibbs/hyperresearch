@@ -148,13 +148,20 @@ def profile_use(
     vault.config.save(vault.config_path)
 
     from hyperresearch.core.agent_docs import _resolve_executable
-    from hyperresearch.core.hooks import install_hooks, installed_platforms
+    from hyperresearch.core.hooks import install_hooks, install_step_files, installed_platforms
+    from hyperresearch.core.platforms import OMP, paths_for
 
     hpr_path = _resolve_executable()
     actions = install_hooks(vault.root, hpr_path=hpr_path, profile=name)
+    platforms = installed_platforms(vault.root)
     # A project also installed for Codex gets its Codex files re-rendered too.
-    if "codex" in installed_platforms(vault.root):
+    if "codex" in platforms:
         actions += install_hooks(vault.root, hpr_path=hpr_path, profile=name, platform="codex")
+    if OMP in platforms:
+        actions += install_hooks(vault.root, hpr_path=hpr_path, profile=name, platform=OMP)
+    elif (vault.root / paths_for(OMP).steps_dir).is_dir():
+        # Bootstrapped from a global OMP install: only the step files are per project.
+        actions += install_step_files(vault.root, hpr_path=hpr_path, profile=name, platform=OMP)
 
     data = {
         "gear": name,

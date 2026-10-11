@@ -39,7 +39,7 @@ def install(
         "claude",
         "--target",
         "-t",
-        help="Agent runtime to install for: claude (Claude Code), codex (OpenAI Codex CLI), or all. Applies to normal, --global, and --steps-only installs.",
+        help="Agent runtime to install for: claude (Claude Code), codex (OpenAI Codex CLI), omp (OMP, with Claude or OpenAI models), or all. Applies to normal, --global, and --steps-only installs.",
     ),
 ) -> None:
     """Install hyperresearch: init vault + inject agent docs + install agent hooks/skills."""
@@ -52,7 +52,7 @@ def install(
         install_global_hooks,
         install_hooks,
     )
-    from hyperresearch.core.platforms import CODEX, PlatformError, paths_for, resolve_targets
+    from hyperresearch.core.platforms import CODEX, OMP, PlatformError, paths_for, resolve_targets
     from hyperresearch.core.profiles import ProfileError
     from hyperresearch.core.vault import Vault, VaultError
 
@@ -60,7 +60,7 @@ def install(
     try:
         targets = resolve_targets(target)
     except PlatformError:
-        msg = f"Unknown target '{target}'. Available: claude, codex, all"
+        msg = f"Unknown target '{target}'. Available: claude, codex, omp, all"
         if json_output:
             output(error(msg, "UNKNOWN_TARGET"), json_mode=True)
         else:
@@ -173,6 +173,14 @@ def install(
                     f"[green]Global install (Codex):[/] {home}/.agents/skills/hyperresearch/ "
                     f"+ {home}/.codex/agents/"
                 )
+            elif platform == OMP:
+                from hyperresearch.core.omp import user_omp_agent_dir
+
+                agent_dir = user_omp_agent_dir(home)
+                console.print(
+                    f"[green]Global install (OMP):[/] {agent_dir}/skills/hyperresearch/ "
+                    f"+ {agent_dir}/agents/ + {agent_dir}/extensions/"
+                )
             else:
                 console.print(f"[green]Global install:[/] {home}/.claude/")
             if actions:
@@ -199,6 +207,15 @@ def install(
                 "never modified.[/]"
             )
             _print_codex_exec_hint()
+        if OMP in targets:
+            console.print(
+                "\n[bold]Ready.[/] /skill:hyperresearch is now available in every OMP session."
+            )
+            console.print(
+                "[dim]On first /skill:hyperresearch run in a project, the vault, research/ "
+                "folder and step files (.hyperresearch/omp/steps/) are created in that "
+                "project. Subagents run on the session's model, Claude or OpenAI.[/]"
+            )
         return
 
     root = Path(path).resolve()
@@ -302,6 +319,11 @@ def install(
                 "\n[bold]Ready (Codex).[/] Start a research run with [bold]$hyperresearch <query>[/]."
             )
             _print_codex_exec_hint()
+        if OMP in targets:
+            console.print(
+                "\n[bold]Ready (OMP).[/] Start a research run with "
+                "[bold]/skill:hyperresearch <query>[/]."
+            )
         console.print("[dim]Tip: Run 'hyperresearch setup' for interactive configuration (profile, stealth, etc.)[/]")
 
 

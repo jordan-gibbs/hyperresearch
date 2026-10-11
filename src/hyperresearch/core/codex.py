@@ -344,11 +344,14 @@ _ACTIVE_STATUSES = ("running",)
 STOP_GATE_ENV = "HYPERRESEARCH_STOP_GATE"
 
 
-def stop_gate_decision(vault, now: datetime | None = None) -> dict | None:
+def stop_gate_decision(
+    vault, now: datetime | None = None, platform: str | None = None
+) -> dict | None:
     """The Stop hook's block decision for the newest run in `vault`, or None.
 
     Blocks only when the newest run is active, touched within
-    STOP_GATE_WINDOW, and still has a next step.
+    STOP_GATE_WINDOW, and still has a next step. `platform` picks whose step
+    file the reason names (default Codex; OMP's stop-gate extension passes "omp").
     """
     from hyperresearch.core.hooks import step_skill_slug
     from hyperresearch.core.platforms import CODEX, paths_for
@@ -374,7 +377,7 @@ def stop_gate_decision(vault, now: datetime | None = None) -> dict | None:
     if next_step is None:
         return None
     skill = step_skill_slug(next_step) or f"step {next_step}"
-    step_file = f"{paths_for(CODEX).steps_dir}/{skill}.md"
+    step_file = f"{paths_for(platform or CODEX).steps_dir}/{skill}.md"
     tag = manifest.get("vault_tag", "the current run")
     return {
         "decision": "block",

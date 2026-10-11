@@ -73,9 +73,10 @@ pip install hyperresearch
 
 hyperresearch install                    # Claude Code, then: /hyperresearch <anything>
 hyperresearch install . --target codex   # OpenAI Codex, then: $hyperresearch <anything>
+hyperresearch install . --target omp     # OMP (Claude or OpenAI models), then: /skill:hyperresearch <anything>
 ```
 
-`--target all` installs both side by side. Codex sessions need write access and network, [see below](#codex).
+`--target all` installs all three side by side. Codex sessions need write access and network, [see below](#codex); OMP is covered under [OMP](#omp).
 
 Prefer a plugin or a single skill? Each route below installs one bootstrap skill, `deep-research`, that sets the pipeline up in the current project on first use. It still needs `pip install hyperresearch`.
 
@@ -135,11 +136,33 @@ What is different on Codex:
 - **Tool locks are instructions, not enforcement.** Codex custom agents have no per-agent tool allowlist. The patcher and polish auditor are told to make surgical edits only, but nothing stops them from doing more.
 - **A Stop hook guards the pipeline.** `hyperresearch run stop-gate` blocks the session from ending while the newest run is mid-pipeline, so Codex cannot quietly answer inline and stop. Codex runs a project's hooks only after you trust them.
 
+### OMP
+
+[OMP](https://github.com/can1357/oh-my-pi) (oh-my-pi) runs Claude and OpenAI models behind one tool set, so one install serves both.
+
+```bash
+cd your-project
+pip install hyperresearch && hyperresearch install . --target omp
+# then, in an OMP session:
+/skill:hyperresearch <anything>
+```
+
+This installs the entry skill at `.omp/skills/hyperresearch/`, the step procedures under `.hyperresearch/omp/steps/`, the subagents as OMP agents in `.omp/agents/`, and a stop-gate extension in `.omp/extensions/`. No docs file is written: OMP's native project file, `.omp/AGENTS.md`, would shadow your own `AGENTS.md`. `--global --target omp` puts the skill, agents and extension in OMP's agent directory (`$PI_CODING_AGENT_DIR`, else `~/.omp/agent`), and the step files are written into a project the first time you run the skill there.
+
+The prompts are the Codex ones, translated for OMP's tools: step files are read with `read`, subagents are spawned with the `task` tool, edits use `edit`, and the plan lives in `todo`.
+
+What is different on OMP:
+
+- **Subagents run on the session's model**, Claude or OpenAI, at a thinking level set per role. Route individual agents to other models with OMP's own `task.agentModelOverrides`.
+- **Tool locks are enforced.** OMP agents carry a tool allowlist, as on Claude Code: the patcher and polish auditor get only `read` and `edit`.
+- **No browser lane.** As on Codex, blocked fetches stay in the escalation queue and are listed in the final message.
+- **The stop gate is an extension.** It acts only in a session that has run `hyperresearch run init` or `run step` itself. When such a session tries to stop mid-pipeline, OMP continues it with the next step. OMP caps these continuations, and `HYPERRESEARCH_STOP_GATE=0` turns the gate off.
+
 ---
 
 ## The 16-step research pipeline
 
-The entry skill is a thin router. It pins down the canonical research query, then invokes one step skill per phase via Claude Code's `Skill` tool (on Codex, it reads one step file per phase from `.hyperresearch/codex/steps/`). Each step's procedure loads into context only when that step actually runs. That's what stops a long pipeline from quietly dropping steps as its context rots.
+The entry skill is a thin router. It pins down the canonical research query, then invokes one step skill per phase via Claude Code's `Skill` tool (on Codex and OMP, it reads one step file per phase from `.hyperresearch/codex/steps/` or `.hyperresearch/omp/steps/`). Each step's procedure loads into context only when that step actually runs. That's what stops a long pipeline from quietly dropping steps as its context rots.
 
 | # | Step | What it does | Tiers |
 |---|---|---|---|

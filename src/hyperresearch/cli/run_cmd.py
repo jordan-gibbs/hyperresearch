@@ -189,8 +189,9 @@ def run_resume(
         # string substitution — "2" must come back as the invokable
         # `hyperresearch-2-width-sweep`, never a bare `hyperresearch-2`.
         "skill_to_invoke": step_skill_slug(position["next_step"]),
-        # Codex has no step skills: the orchestrator reads this file instead.
-        "codex_step_file": _codex_step_file(step_skill_slug(position["next_step"])),
+        # Codex and OMP have no step skills: the orchestrator reads this file instead.
+        "codex_step_file": _step_file(step_skill_slug(position["next_step"]), "codex"),
+        "omp_step_file": _step_file(step_skill_slug(position["next_step"]), "omp"),
     }
     if json_output:
         output(success(data, vault=str(vault.root)), json_mode=True)
@@ -202,20 +203,30 @@ def run_resume(
             console.print(f"  Skill(skill: \"{data['skill_to_invoke']}\")")
 
 
-def _codex_step_file(skill: str | None) -> str | None:
-    """Project-relative path of a step's Codex procedure file, or None."""
+def _step_file(skill: str | None, platform: str) -> str | None:
+    """Project-relative path of a step's procedure file on Codex or OMP, or None."""
     if skill is None:
         return None
-    from hyperresearch.core.platforms import CODEX, paths_for
+    from hyperresearch.core.platforms import paths_for
 
-    return f"{paths_for(CODEX).steps_dir}/{skill}.md"
+    return f"{paths_for(platform).steps_dir}/{skill}.md"
 
 
 @app.command("stop-gate", hidden=True)
-def run_stop_gate() -> None:
-    """Codex Stop hook: block ending the session while the newest run is mid-pipeline.
+def run_stop_gate(
+    cwd: str | None = typer.Option(
+        None,
+        "--cwd",
+        help="Session directory. When given, stdin is not read (OMP's extension passes it).",
+    ),
+    platform: str | None = typer.Option(
+        None, "--platform", help="Runtime whose step file the reason names (default codex)"
+    ),
+) -> None:
+    """Stop hook: block ending the session while the newest run is mid-pipeline.
 
-    Reads the hook's JSON input on stdin. Prints one
+    Codex calls it as a Stop hook with the hook's JSON input on stdin; OMP's
+    stop-gate extension passes `--cwd` and `--platform omp` instead. Prints one
     `{"decision": "block", "reason": ...}` object when the newest run is
     running, was touched in the last 6 hours, and has a next step; prints
     nothing otherwise. Always exits 0 and never raises — a broken gate must
@@ -229,13 +240,15 @@ def run_stop_gate() -> None:
 
         if os.environ.get(STOP_GATE_ENV, "").strip().lower() in ("0", "false", "no", "off"):
             return
-        try:
-            raw = sys.stdin.read() if sys.stdin is not None else ""
-            payload = json.loads(raw) if raw.strip() else {}
-        except (OSError, ValueError):
-            payload = {}
-        if not isinstance(payload, dict):
-            payload = {}
+        if cwd is not None:
+            payload: dict = {"cwd": cwd}
+        else:
+            try:
+                raw = sys.stdin.read() if sys.stdin is not None else ""
+                loaded = json.loads(raw) if raw.strip() else {}
+            except (OSError, ValueError):
+                loaded = {}
+            payload = loaded if isinstance(loaded, dict) else {}
         # Already continuing because of a previous block: let it stop, or a
         # run that can't advance would loop forever.
         if payload.get("stop_hook_active"):
@@ -245,13 +258,13 @@ def run_stop_gate() -> None:
 
         from hyperresearch.core.vault import Vault
 
-        cwd = payload.get("cwd")
-        start = Path(cwd) if isinstance(cwd, str) and cwd else None
+        start_dir = payload.get("cwd")
+        start = Path(start_dir) if isinstance(start_dir, str) and start_dir else None
         try:
             vault = Vault.discover(start)
         except VaultError:
             return
-        decision = stop_gate_decision(vault)
+        decision = stop_gate_decision(vault, platform=platform)
         if decision is not None:
             sys.stdout.write(json.dumps(decision) + "\n")
             sys.stdout.flush()

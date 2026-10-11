@@ -1,4 +1,4 @@
-"""Agent runtimes hyperresearch installs into — Claude Code and OpenAI Codex.
+"""Agent runtimes hyperresearch installs into — Claude Code, OpenAI Codex and OMP.
 
 The pipeline prompts are shared; each platform differs in where its files
 live and how the orchestrator loads a step or spawns a subagent:
@@ -11,8 +11,15 @@ live and how the orchestrator loads a step or spawns a subagent:
                    Codex caps the skill listing and has no documented
                    skill-to-skill invocation. Subagents are TOML files in
                    `.codex/agents/`.
+    OMP          — the Codex layout, translated (core/omp.py): an entry skill in
+                   `.omp/skills/hyperresearch/`, step files in
+                   `.hyperresearch/omp/steps/`, subagents as OMP agent markdown in
+                   `.omp/agents/` (user level: the OMP agent directory, see
+                   core/omp.py), and a stop-gate extension instead of a hook.
+                   OMP has no docs file of its own here.
 
-Templates branch on the `platform` render variable (see core/render.py).
+Templates branch on the `platform` render variable (see core/render.py); OMP
+renders the Codex branches and translates them.
 """
 
 from __future__ import annotations
@@ -22,7 +29,8 @@ from pathlib import PurePosixPath
 
 CLAUDE = "claude"
 CODEX = "codex"
-PLATFORMS: tuple[str, ...] = (CLAUDE, CODEX)
+OMP = "omp"
+PLATFORMS: tuple[str, ...] = (CLAUDE, CODEX, OMP)
 
 
 class PlatformError(ValueError):
@@ -37,7 +45,7 @@ def check_platform(name: str) -> str:
 
 
 def resolve_targets(target: str) -> list[str]:
-    """`--target` value -> platforms to install: claude | codex | all."""
+    """`--target` value -> platforms to install: claude | codex | omp | all."""
     if target == "all":
         return list(PLATFORMS)
     return [check_platform(target)]
@@ -51,7 +59,7 @@ class PlatformPaths:
     steps_dir: PurePosixPath  # step procedures: <steps_dir>/<name>/SKILL.md or <name>.md
     agents_dir: PurePosixPath
     agent_suffix: str
-    docs_file: str
+    docs_file: str | None  # None: the platform gets no project docs file
     label: str
 
 
@@ -71,6 +79,14 @@ PATHS: dict[str, PlatformPaths] = {
         agent_suffix=".toml",
         docs_file="AGENTS.md",
         label="Codex",
+    ),
+    OMP: PlatformPaths(
+        skills_dir=PurePosixPath(".omp/skills"),
+        steps_dir=PurePosixPath(".hyperresearch/omp/steps"),
+        agents_dir=PurePosixPath(".omp/agents"),
+        agent_suffix=".md",
+        docs_file=None,
+        label="OMP",
     ),
 }
 

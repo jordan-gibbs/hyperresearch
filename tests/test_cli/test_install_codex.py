@@ -66,12 +66,14 @@ def test_install_target_all(tmp_vault, monkeypatch):
     result = runner.invoke(app, ["install", str(tmp_vault.root), "--target", "all", "--json"])
     assert result.exit_code == 0, result.stdout
     data = _json(result)["data"]
-    assert data["targets"] == ["claude", "codex"]
+    assert data["targets"] == ["claude", "codex", "omp"]
     root = tmp_vault.root
     assert (root / ".claude" / "skills" / "hyperresearch" / "SKILL.md").is_file()
     assert (root / ".claude" / "agents" / "hyperresearch-browser-fetcher.md").is_file()
     assert (root / ".agents" / "skills" / "hyperresearch" / "SKILL.md").is_file()
     assert not (root / ".codex" / "agents" / "hyperresearch-browser-fetcher.toml").exists()
+    assert (root / ".omp" / "skills" / "hyperresearch" / "SKILL.md").is_file()
+    assert not (root / ".omp" / "agents" / "hyperresearch-browser-fetcher.md").exists()
     assert (root / "AGENTS.md").is_file()
     assert (root / "CLAUDE.md").is_file()
 

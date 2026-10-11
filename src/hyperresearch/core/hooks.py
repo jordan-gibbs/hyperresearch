@@ -14,6 +14,13 @@ OpenAI Codex (`platform="codex"`): the same prompts rendered with
 `.codex/agents/` (translated by core/codex.py; no browser-fetcher — it needs
 Claude-in-Chrome), and a Stop hook in `.codex/hooks.json` runs
 `hyperresearch run stop-gate`. See core/platforms.py for the path table.
+
+OMP (`platform="omp"`): the Codex branches of the same prompts, translated by
+core/omp.py. The entry skill lands in `.omp/skills/hyperresearch/`, the step
+procedures in `.hyperresearch/omp/steps/`, the subagents are OMP agent
+markdown in `.omp/agents/`, and the stop gate is an OMP extension in
+`.omp/extensions/`. A global install writes the skill, agents and extension
+into OMP's user agent directory instead.
 """
 
 from __future__ import annotations
@@ -36,13 +43,39 @@ def _set_render_state(
     profile_name: str, config_path: Path | None, platform: str = "claude"
 ) -> None:
     global _RENDER_STATE
+    from hyperresearch.core.platforms import CODEX, OMP
     from hyperresearch.core.render import build_render_context
 
+    # OMP renders the Codex branches of the templates; core/omp.py translates them.
+    render_platform = CODEX if platform == OMP else platform
     _RENDER_STATE = {
         "profile_name": profile_name,
         "platform": platform,
-        "context": build_render_context(config_path, primary=profile_name, platform=platform),
+        "context": build_render_context(
+            config_path, primary=profile_name, platform=render_platform
+        ),
     }
+
+
+# A global OMP install writes into OMP's user agent directory
+# (`<agent_dir>/skills`, `/agents`, `/extensions`) rather than a project's
+# `.omp/` tree. install_global_hooks sets this for the duration of its run.
+_OMP_GLOBAL_DIR: Path | None = None
+
+
+def _omp_dir(kind: str, root: Path) -> Path:
+    """Where an OMP install puts `kind` ("skills" | "agents" | "extensions")."""
+    if _OMP_GLOBAL_DIR is not None:
+        return _OMP_GLOBAL_DIR / kind
+    return root / ".omp" / kind
+
+
+def _omp_label(path: Path, root: Path) -> str:
+    base = _OMP_GLOBAL_DIR if _OMP_GLOBAL_DIR is not None else root
+    try:
+        return path.relative_to(base).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 def _get_render_state() -> dict:
@@ -80,7 +113,7 @@ def _provenance_header() -> str:
 
 
 def _platform() -> str:
-    """The agent runtime the active render state targets ("claude" | "codex").
+    """The agent runtime the active render state targets ("claude" | "codex" | "omp").
 
     The render context and the install location must agree — a prompt
     rendered for Codex written into .claude/ would be wrong on both counts —
@@ -3607,8 +3640,8 @@ if (vault) {{
 def _agent_installers(platform: str) -> list:
     """The subagent installers for a platform, in install order.
 
-    Codex gets every agent except the browser-fetcher, which drives the
-    user's Chrome through Claude-in-Chrome and has no Codex equivalent —
+    Codex and OMP get every agent except the browser-fetcher, which drives
+    the user's Chrome through Claude-in-Chrome and has no equivalent there —
     escalations stay queued for the human instead.
     """
     installers = [
@@ -3629,7 +3662,7 @@ def _agent_installers(platform: str) -> list:
         _install_browser_fetcher_agent,
         _install_cite_checker_agent,
     ]
-    if platform == "codex":
+    if platform in ("codex", "omp"):
         installers.remove(_install_browser_fetcher_agent)
     return installers
 
@@ -3653,7 +3686,8 @@ def install_hooks(
 
     Skill and agent prompts are rendered from the given pipeline profile
     (plus any `[profile.*]` overlays in the vault's config.toml) and for the
-    given platform ("claude" — Claude Code, or "codex" — OpenAI Codex CLI).
+    given platform ("claude" — Claude Code, "codex" — OpenAI Codex CLI, or
+    "omp" — OMP).
 
     Hyperresearch roster (as of v7):
       fetcher (Layer 1, 3, 4), loci-analyst (Layer 2), depth-investigator (Layer 3),
@@ -3662,7 +3696,7 @@ def install_hooks(
       dialectic-critic + depth-critic + width-critic + instruction-critic (Layer 5),
       patcher (Layer 6), polish-auditor (Layer 7).
     """
-    from hyperresearch.core.platforms import CODEX, check_platform
+    from hyperresearch.core.platforms import CODEX, OMP, check_platform
 
     check_platform(platform)
     config_path = vault_root / ".hyperresearch" / "config.toml"
@@ -3678,6 +3712,14 @@ def install_hooks(
             lambda: _install_hyperresearch_step_skills(vault_root, hpr_path),
             *agents,
             lambda: _prune_stale_codex_agents(vault_root),
+        ])
+    if platform == OMP:
+        return _run_installers([
+            lambda: _install_omp_extension(vault_root, hpr_path),
+            lambda: _install_hyperresearch_skill(vault_root, hpr_path),
+            lambda: _install_hyperresearch_step_skills(vault_root, hpr_path),
+            *agents,
+            lambda: _prune_stale_omp_agents(vault_root),
         ])
     return _run_installers([
         lambda: _install_claude_hook(vault_root, hpr_path),
@@ -3701,6 +3743,8 @@ def install_global_hooks(
     install never touches ~/.codex/config.toml or ~/.codex/hooks.json —
     global agent-tool config belongs to the user; the Stop hook is
     per-project only.
+    OMP: the entry skill, agents and stop-gate extension go into OMP's user
+    agent directory (`$PI_CODING_AGENT_DIR`, else ~/.omp/agent).
 
     Unlike `install_hooks`, this skips:
       - The PreToolUse vault-check hook (don't want it firing on every
@@ -3722,7 +3766,8 @@ def install_global_hooks(
     Also prunes any hyperresearch-N-* step-skill dirs left in ~/.claude/skills/
     by older versions (≤0.8.2 used to install step skills globally).
     """
-    from hyperresearch.core.platforms import CODEX, check_platform
+    global _OMP_GLOBAL_DIR
+    from hyperresearch.core.platforms import CODEX, OMP, check_platform
 
     check_platform(platform)
     if home is None:
@@ -3738,6 +3783,19 @@ def install_global_hooks(
             *agents,
             lambda: _prune_stale_codex_agents(home),
         ])
+    if platform == OMP:
+        from hyperresearch.core.omp import user_omp_agent_dir
+
+        _OMP_GLOBAL_DIR = user_omp_agent_dir(home)
+        try:
+            return _run_installers([
+                lambda: _install_hyperresearch_skill(home, hpr_path),
+                *agents,
+                lambda: _install_omp_extension(home, hpr_path),
+                lambda: _prune_stale_omp_agents(home),
+            ])
+        finally:
+            _OMP_GLOBAL_DIR = None
     return _run_installers([
         lambda: _install_hyperresearch_skill(home, hpr_path),
         *agents,
@@ -3837,10 +3895,13 @@ def _write_agent_file(
     """Install a subagent file, returning the install message or None if unchanged.
 
     `filename` is the Claude name (`hyperresearch-X.md`); under a Codex render
-    state the agent is translated to `.codex/agents/hyperresearch-X.toml`.
+    state the agent is translated to `.codex/agents/hyperresearch-X.toml`, and
+    under an OMP one to OMP agent markdown in `.omp/agents/`.
     """
     if _platform() == "codex":
         return _write_codex_agent_file(vault_root, filename, content, label)
+    if _platform() == "omp":
+        return _write_omp_agent_file(vault_root, filename, content, label)
 
     agents_dir = vault_root / ".claude" / "agents"
     agents_dir.mkdir(parents=True, exist_ok=True)
@@ -3928,6 +3989,66 @@ def _prune_stale_codex_agents(root: Path) -> str | None:
     if not pruned:
         return None
     return f"Codex: pruned stale agents: {', '.join(pruned)}"
+
+
+def _write_omp_agent_file(
+    vault_root: Path, filename: str, content: str, label: str
+) -> str | None:
+    """Translate one agent template to OMP agent markdown (see core/omp.py)."""
+    from hyperresearch.core.omp import agent_markdown_to_omp
+
+    rendered = agent_markdown_to_omp(
+        _render_installed(content, header=False), header=_provenance_header()
+    )
+    agents_dir = _omp_dir("agents", vault_root)
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    agent_path = agents_dir / filename
+    if agent_path.exists() and agent_path.read_text(encoding="utf-8") == rendered:
+        return None
+    agent_path.write_text(rendered, encoding="utf-8", newline="\n")
+    return f"OMP: {_omp_label(agent_path, vault_root)} ({label})"
+
+
+def _prune_stale_omp_agents(root: Path) -> str | None:
+    """Delete hyperresearch-*.md OMP agents we wrote that left the roster.
+
+    Only files carrying our provenance line are removed; a same-named file the
+    user wrote by hand is left alone.
+    """
+    from hyperresearch.core.platforms import OMP
+
+    agents_dir = _omp_dir("agents", root)
+    if not agents_dir.is_dir():
+        return None
+    expected = {_AGENT_FILENAMES[fn.__name__] for fn in _agent_installers(OMP)}
+    pruned: list[str] = []
+    for child in sorted(agents_dir.glob("hyperresearch-*.md")):
+        if child.name in expected or not child.is_file():
+            continue
+        try:
+            head = child.read_text(encoding="utf-8", errors="replace")[:2000]
+        except OSError:
+            continue
+        if "<!-- rendered from profile" not in head:
+            continue
+        child.unlink()
+        pruned.append(child.name)
+    if not pruned:
+        return None
+    return f"OMP: pruned stale agents: {', '.join(pruned)}"
+
+
+def _install_omp_extension(root: Path, hpr_path: str) -> str | None:
+    """Write the stop-gate extension OMP loads from its `extensions/` directory."""
+    from hyperresearch.core.omp import EXTENSION_FILENAME, extension_source
+
+    path = _omp_dir("extensions", root) / EXTENSION_FILENAME
+    source = extension_source(hpr_path)
+    if path.exists() and path.read_text(encoding="utf-8") == source:
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source, encoding="utf-8", newline="\n")
+    return f"OMP: {_omp_label(path, root)} (stop gate: run stop-gate)"
 
 
 # Installer function -> the Claude agent filename it writes. Kept beside the
@@ -4321,6 +4442,8 @@ def _install_hyperresearch_skill(vault_root: Path, hpr_path: str = "hyperresearc
 
     if _platform() == "codex":
         return _install_codex_entry_skill(vault_root, content)
+    if _platform() == "omp":
+        return _install_omp_entry_skill(vault_root, content)
 
     skill_dir = vault_root / ".claude" / "skills" / "hyperresearch"
     skill_dir.mkdir(parents=True, exist_ok=True)
@@ -4354,6 +4477,23 @@ def _install_codex_entry_skill(root: Path, content: str) -> str | None:
     if not changed:
         return None
     return f"Codex: {rel_dir}/{{{', '.join(changed)}}} ($hyperresearch trigger)"
+
+
+def _install_omp_entry_skill(root: Path, content: str) -> str | None:
+    """Write the OMP entry skill: the Codex render, translated (core/omp.py).
+
+    OMP lists it with the other skills and loads it on `/skill:hyperresearch`
+    or when a request matches its description.
+    """
+    from hyperresearch.core.omp import translate_skill
+
+    text = translate_skill(content, entry=True)
+    dest = _omp_dir("skills", root) / "hyperresearch" / "SKILL.md"
+    if dest.exists() and dest.read_text(encoding="utf-8") == text:
+        return None
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(text, encoding="utf-8", newline="\n")
+    return f"OMP: {_omp_label(dest, root)} (/skill:hyperresearch)"
 
 
 _HYPERRESEARCH_STEP_SKILLS = [
@@ -4423,11 +4563,11 @@ def _install_hyperresearch_step_skills(
     V8 layout where steps were numbered differently) so the user doesn't see
     obsolete entries in their skill list.
 
-    Under a Codex render state the steps are plain files instead — see
-    `_install_codex_step_files`.
+    Under a Codex or OMP render state the steps are plain files instead — see
+    `_install_plain_step_files`.
     """
-    if _platform() == "codex":
-        return _install_codex_step_files(vault_root, hpr_path)
+    if _platform() in ("codex", "omp"):
+        return _install_plain_step_files(vault_root, hpr_path)
 
     skills_root = vault_root / ".claude" / "skills"
     skills_root.mkdir(parents=True, exist_ok=True)
@@ -4478,18 +4618,21 @@ def _install_hyperresearch_step_skills(
     return f"Claude Code: .claude/skills/hyperresearch-N-*/SKILL.md ({'; '.join(parts)})"
 
 
-def _install_codex_step_files(root: Path, hpr_path: str = "hyperresearch") -> str | None:
-    """Install the step procedures as plain files in .hyperresearch/codex/steps/.
+def _install_plain_step_files(root: Path, hpr_path: str = "hyperresearch") -> str | None:
+    """Install the step procedures as plain files (Codex and OMP).
 
     Codex caps its skill listing and has no documented skill-to-skill
     invocation, so the orchestrator reads `<steps_dir>/<step-name>.md` with
-    the shell instead of invoking a skill. Frontmatter and the provenance
-    header are kept — harmless to a reader, and they carry the render
-    provenance. Stale `hyperresearch-*.md` files we wrote are pruned.
+    the shell instead of invoking a skill; OMP reads the same files, translated,
+    from `.hyperresearch/omp/steps/`. Frontmatter and the provenance header
+    are kept — harmless to a reader, and they carry the render provenance.
+    Stale `hyperresearch-*.md` files we wrote are pruned.
     """
-    from hyperresearch.core.platforms import CODEX, paths_for
+    from hyperresearch.core.platforms import OMP, paths_for
 
-    rel_dir = paths_for(CODEX).steps_dir
+    platform = _platform()
+    paths = paths_for(platform)
+    rel_dir = paths.steps_dir
     steps_dir = root / rel_dir
     steps_dir.mkdir(parents=True, exist_ok=True)
 
@@ -4502,6 +4645,10 @@ def _install_codex_step_files(root: Path, hpr_path: str = "hyperresearch") -> st
         if content is None:
             continue
         content = _render_installed(content, hpr_path)
+        if platform == OMP:
+            from hyperresearch.core.omp import translate_skill
+
+            content = translate_skill(content, entry=False)
         dest = steps_dir / f"{skill_name}.md"
         if dest.exists() and dest.read_text(encoding="utf-8") == content:
             continue
@@ -4527,7 +4674,17 @@ def _install_codex_step_files(root: Path, hpr_path: str = "hyperresearch") -> st
         parts.append(f"{len(installed)} step files: {', '.join(installed)}")
     if pruned:
         parts.append(f"pruned: {', '.join(sorted(pruned))}")
-    return f"Codex: {rel_dir}/hyperresearch-N-*.md ({'; '.join(parts)})"
+    return f"{paths.label}: {rel_dir}/hyperresearch-N-*.md ({'; '.join(parts)})"
+
+
+def install_step_files(
+    root: Path, hpr_path: str = "hyperresearch", profile: str = "full", platform: str = "claude"
+) -> list[str]:
+    """Re-render only the step procedures for one platform (no skill, agents, or hooks)."""
+    config_path = root / ".hyperresearch" / "config.toml"
+    _set_render_state(profile, config_path if config_path.exists() else None, platform)
+    result = _install_hyperresearch_step_skills(root, hpr_path)
+    return [result] if result else []
 
 
 def installed_platforms(root: Path) -> list[str]:

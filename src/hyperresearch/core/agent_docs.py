@@ -300,13 +300,18 @@ def inject_agent_docs(vault_root: Path, platform: str = "claude") -> list[str]:
     """Inject hyperresearch docs into the platform's docs file at the vault root.
 
     `platform="claude"` writes/updates CLAUDE.md; `platform="codex"` writes/
-    updates AGENTS.md with the Codex blurb. Only the marked section is
-    replaced. GEMINI.md and .github/copilot-instructions.md are never
-    created, and pre-existing copies are left untouched.
+    updates AGENTS.md with the Codex blurb; `platform="omp"` writes nothing —
+    the entry skill carries the instructions, and OMP's native project docs
+    file (.omp/AGENTS.md) would shadow the project's own AGENTS.md. Only the
+    marked section is replaced. GEMINI.md and .github/copilot-instructions.md
+    are never created, and pre-existing copies are left untouched.
     """
     from hyperresearch.core.platforms import CODEX, check_platform, paths_for
 
     check_platform(platform)
+    docs_file = paths_for(platform).docs_file
+    if docs_file is None:
+        return []
     hpr_path = _resolve_executable()
     # Use forward slashes — bash on Windows eats backslashes
     hpr_path = hpr_path.replace("\\", "/")
@@ -319,7 +324,6 @@ def inject_agent_docs(vault_root: Path, platform: str = "claude") -> list[str]:
         hpr=hpr_path,
     )
 
-    docs_file = paths_for(platform).docs_file
     modified: list[str] = []
     result = _inject_into_file(vault_root / docs_file, blurb, docs_file)
     if result:

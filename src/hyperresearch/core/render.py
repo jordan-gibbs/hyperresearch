@@ -14,7 +14,9 @@ Context exposed to templates:
     <name>     — every available profile by name (e.g. `full`, `light`),
                  so tier tables can reference both tiers in one file.
     platform   — the agent runtime being installed for: "claude" (Claude
-                 Code) or "codex" (OpenAI Codex CLI). See core/platforms.py.
+                 Code) or "codex" (OpenAI Codex CLI). An OMP install renders
+                 with "codex" and translates the result (core/omp.py). See
+                 core/platforms.py.
 
 Filters:
     dash    — join a (low, high) range with an en dash (U+2013)
