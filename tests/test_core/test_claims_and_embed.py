@@ -253,6 +253,58 @@ class TestEmbeddings:
         vec = [0.5, -1.25, 3.0]
         assert embed._unpack(embed._pack(vec)) == vec
 
+    def _openai_vault(self, seeded_vault, monkeypatch):
+        self._fake_embedder(monkeypatch)
+        cfg_path = seeded_vault.config_path
+        cfg_path.write_text(
+            cfg_path.read_text(encoding="utf-8").replace(
+                'provider = "none"', 'provider = "openai"'
+            ),
+            encoding="utf-8",
+        )
+        vault = type(seeded_vault).discover(seeded_vault.root)
+        embed.embed_sync(vault)
+        return vault
+
+    def test_semantic_search_matches_naive_cosine(self, seeded_vault, monkeypatch):
+        """#59 — the numpy matmul in `semantic_search` must rank and score
+        exactly like a plain per-row `cosine()` loop, computed independently
+        here rather than by re-running `semantic_search` itself."""
+        vault = self._openai_vault(seeded_vault, monkeypatch)
+        query = "concurrency patterns"
+        cfg = vault.config.embeddings
+        model = cfg.model or embed.DEFAULT_MODELS[cfg.provider]
+        [query_vec] = embed._http_embed(cfg.provider, model, [query])
+
+        naive = [
+            {"id": row["note_id"], "score": cosine(query_vec, embed._unpack(row["vector"]))}
+            for row in vault.db.execute("SELECT note_id, vector FROM embeddings").fetchall()
+        ]
+        naive.sort(key=lambda r: r["score"], reverse=True)
+
+        hits = embed.semantic_search(vault, query, limit=len(naive))
+        assert [h["id"] for h in hits] == [n["id"] for n in naive]
+        for h, n in zip(hits, naive, strict=True):
+            assert h["score"] == pytest.approx(n["score"], abs=1e-5)
+
+    def test_semantic_search_scores_dimension_mismatch_as_zero(self, seeded_vault, monkeypatch):
+        """A note still holding a vector from a since-changed embeddings
+        model/dimension (mid-migration, before the next `embed sync`) can't
+        join the matmul's matrix — it must score 0 instead of crashing or
+        reshape()-ing garbage, same as `cosine()` did on a length mismatch."""
+        vault = self._openai_vault(seeded_vault, monkeypatch)
+        note_id = vault.db.execute("SELECT note_id FROM embeddings LIMIT 1").fetchone()["note_id"]
+        vault.db.execute(
+            "UPDATE embeddings SET vector = ? WHERE note_id = ?",
+            (embed._pack([1.0, 2.0]), note_id),
+        )
+        vault.db.commit()
+
+        hits = embed.semantic_search(vault, "concurrency patterns", limit=10)
+        assert len(hits) == 4
+        mismatched = next(h for h in hits if h["id"] == note_id)
+        assert mismatched["score"] == 0.0
+
 
 class TestClaimsIngestHostileInput:
     """Security review of #69: `--tag` is a CLI argument an agent may have
