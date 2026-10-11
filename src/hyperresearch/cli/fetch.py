@@ -229,7 +229,7 @@ def fetch(
     from hyperresearch.core.note import write_note
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.core.vault import Vault, VaultError
-    from hyperresearch.web.base import get_provider
+    from hyperresearch.web.base import get_provider, served_by
     from hyperresearch.web.pdf import PDF_FAILURE_KEY
 
     try:
@@ -438,7 +438,7 @@ def fetch(
         "source": url,
         "source_domain": domain,
         "fetched_at": result.fetched_at.isoformat(),
-        "fetch_provider": prov.name,
+        "fetch_provider": served_by(prov, result),
     }
     if result.metadata.get("author"):
         extra_meta["author"] = result.metadata["author"]

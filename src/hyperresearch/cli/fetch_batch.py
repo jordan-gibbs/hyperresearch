@@ -34,7 +34,7 @@ def fetch_batch(
     from hyperresearch.core.scholar import extract_doi
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
     from hyperresearch.core.vault import Vault, VaultError
-    from hyperresearch.web.base import get_provider
+    from hyperresearch.web.base import get_provider, served_by
 
     # Collect URLs from args and/or stdin
     all_urls = list(urls or [])
@@ -211,7 +211,7 @@ def fetch_batch(
             "source": url,
             "source_domain": domain,
             "fetched_at": result.fetched_at.isoformat(),
-            "fetch_provider": prov.name,
+            "fetch_provider": served_by(prov, result),
         }
         if detected_doi:
             extra_meta["doi"] = detected_doi

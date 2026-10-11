@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -50,35 +51,22 @@ def setup(
     console.print()
 
     has_crawl4ai = _check_crawl4ai()
-    if has_crawl4ai:
-        console.print("  [green]crawl4ai detected[/] — local headless Chromium browser")
-        console.print()
-        console.print("  crawl4ai fetches web pages using a real browser. It handles")
-        console.print("  JavaScript, bypasses bot detection, and saves full content.")
-        console.print()
-        console.print("  [dim]Without it, your agent's built-in WebFetch is used instead —[/]")
-        console.print("  [dim]which often gets blocked, returns incomplete content,[/]")
-        console.print("  [dim]and doesn't persist across sessions.[/]")
-        console.print()
-        use_crawl4ai = Confirm.ask("  Use crawl4ai as the default web provider?", default=True)
-    else:
-        console.print("  [yellow]crawl4ai not installed[/]")
-        console.print("  Your agent's built-in WebFetch will be used instead.")
-        console.print("  [dim]For headless browser support: pip install hyperresearch[crawl4ai][/]")
-        use_crawl4ai = False
-
-    provider = "crawl4ai" if use_crawl4ai else "builtin"
+    provider = _choose_provider(has_crawl4ai, _current_provider(root))
+    # The local browser runs as the provider itself or as Firecrawl's fallback.
+    uses_browser = has_crawl4ai and provider in ("crawl4ai", "firecrawl")
 
     # ── Step 2: Browser Profile ───────────────────────────────────
     profile = ""
-    if use_crawl4ai:
+    if uses_browser:
         console.print()
         console.print(Rule("[bold]Step 2[/]  Browser Profile", style="cyan"))
         console.print()
         console.print("  A login profile lets hyperresearch access sites you're")
         console.print("  logged into — LinkedIn, Twitter, paywalled news, etc.")
+        if provider == "firecrawl":
+            console.print("  [dim]Firecrawl can't use your logins: pages behind one go to[/]")
+            console.print("  [dim]crawl4ai with this profile.[/]")
         console.print()
-
         existing_profiles = _list_profiles()
 
         table = Table(show_header=False, box=None, padding=(0, 2, 0, 4))
@@ -129,8 +117,8 @@ def setup(
         vault = Vault.init(root, name=vault_name)
         console.print(f"  [green]Vault created:[/] {vault.root}")
 
-    # Write config — magic always on when crawl4ai is used
-    magic = use_crawl4ai
+    # Write config — stealth always on when the local browser is used
+    magic = uses_browser
     vault.config.web_provider = provider
     vault.config.web_profile = profile
     vault.config.web_magic = magic
@@ -152,7 +140,7 @@ def setup(
         console.print("  [dim]Hooks already installed[/]")
 
     # Install browser if needed
-    if use_crawl4ai:
+    if uses_browser:
         _ensure_browser()
 
     # ── Summary ───────────────────────────────────────────────────
@@ -162,7 +150,16 @@ def setup(
     summary = Table(show_header=False, box=None, padding=(0, 2))
     summary.add_column(style="dim", width=12)
     summary.add_column()
-    summary.add_row("Provider", f"[bold]{provider}[/]")
+    provider_desc = provider
+    if provider == "firecrawl" and has_crawl4ai:
+        provider_desc += " [dim](crawl4ai fallback)[/]"
+    summary.add_row("Provider", f"[bold]{provider_desc}[/]")
+    if provider == "firecrawl":
+        summary.add_row(
+            "API key",
+            "[bold]FIRECRAWL_API_KEY set[/]" if _firecrawl_key_set()
+            else "[yellow]not set — keyless tier[/]",
+        )
     summary.add_row("Profile", f"[bold]{profile_desc}[/]")
     summary.add_row("Stealth", "[bold]on[/]" if magic else "[dim]off[/]")
     summary.add_row("Platform", "[bold]Claude Code[/]")
@@ -184,6 +181,78 @@ def setup(
 
 
 # ── Helpers ─────────────────────────────────────────────────────
+
+
+_PROVIDER_DESCRIPTIONS = {
+    "crawl4ai": "local headless Chromium: JavaScript, stealth, login profiles. Free.",
+    "firecrawl": "Firecrawl's hosted scraping and search (FIRECRAWL_API_KEY); "
+    "crawl4ai takes login-walled and blocked pages",
+    "builtin": "plain HTTP fetch, no browser",
+}
+
+
+def _provider_options(has_crawl4ai: bool, current: str | None = None) -> list[str]:
+    """Providers the wizard offers, in menu order.
+
+    A vault already on another provider (exa, tavily, ...) gets that provider
+    as an extra option, so re-running setup doesn't silently replace it.
+    """
+    options = ["crawl4ai", "firecrawl", "builtin"] if has_crawl4ai else ["firecrawl", "builtin"]
+    if current and current not in options:
+        options.append(current)
+    return options
+
+
+def _current_provider(root: Path) -> str | None:
+    """The provider of the vault setup will configure, or None for a new vault."""
+    from hyperresearch.core.vault import Vault, VaultError
+
+    try:
+        return Vault.discover(root).config.web_provider
+    except VaultError:
+        return None
+
+
+def _choose_provider(has_crawl4ai: bool, current: str | None) -> str:
+    """Step 1 menu. Defaults to the vault's current provider, else crawl4ai, else builtin."""
+    options = _provider_options(has_crawl4ai, current)
+
+    table = Table(show_header=False, box=None, padding=(0, 2, 0, 4))
+    table.add_column(style="bold cyan", width=3)
+    table.add_column()
+    for i, name in enumerate(options, 1):
+        desc = _PROVIDER_DESCRIPTIONS.get(name, "keep the current provider")
+        if name == current:
+            desc += " [green](current)[/]"
+        table.add_row(str(i), f"[bold]{name}[/] [dim]— {desc}[/]")
+    console.print(table)
+    if not has_crawl4ai:
+        console.print()
+        console.print("  [yellow]crawl4ai not installed[/] — no local browser, and Firecrawl has")
+        console.print("  no fallback for login-walled or blocked pages.")
+        console.print("  [dim]For headless browser support: pip install hyperresearch[crawl4ai][/]")
+    console.print()
+
+    first_run_default = "crawl4ai" if has_crawl4ai else "builtin"
+    default = current if current in options else first_run_default
+    choices = [str(i) for i in range(1, len(options) + 1)]
+    choice = Prompt.ask("  Choose", choices=choices, default=str(options.index(default) + 1))
+    provider = options[int(choice) - 1]
+
+    if provider == "firecrawl":
+        console.print()
+        if _firecrawl_key_set():
+            console.print("  [green]FIRECRAWL_API_KEY found[/]")
+        else:
+            console.print("  [yellow]FIRECRAWL_API_KEY not set[/] — Firecrawl's keyless tier is used:")
+            console.print("  a daily per-IP cap, and batch fetches go one URL at a time.")
+            console.print("  [dim]Get a key at https://firecrawl.dev and export FIRECRAWL_API_KEY[/]")
+            console.print("  [dim]in the shell your agent runs in.[/]")
+    return provider
+
+
+def _firecrawl_key_set() -> bool:
+    return bool(os.environ.get("FIRECRAWL_API_KEY", "").strip())
 
 
 def _pick_existing_profile(profiles: list[str]) -> str:

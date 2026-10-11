@@ -229,6 +229,7 @@ def research(
 def _save_result(vault, conn, prov, result, tags, parent) -> dict | None:
     """Save a single WebResult as a note. Returns note data dict or None if skipped."""
     from hyperresearch.core.note import write_note
+    from hyperresearch.web.base import served_by
 
     url = result.url
 
@@ -248,7 +249,7 @@ def _save_result(vault, conn, prov, result, tags, parent) -> dict | None:
         "source": url,
         "source_domain": domain,
         "fetched_at": result.fetched_at.isoformat(),
-        "fetch_provider": prov.name,
+        "fetch_provider": served_by(prov, result),
     }
 
     note_path = write_note(

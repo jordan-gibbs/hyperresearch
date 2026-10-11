@@ -15,6 +15,12 @@ _TEXT_WHITESPACE = "\t\n\r\f\v"
 # provider usage in tests/scripts). Matches VaultConfig defaults.
 DEFAULT_GATES = JunkGates()
 
+# WebResult.metadata key naming the provider that actually served a result
+# when it differs from the configured one (firecrawl handing a URL to
+# crawl4ai). Read through `served_by`, which note writers record as
+# `fetch_provider`.
+SERVED_BY_KEY = "served_by"
+
 
 def is_binary_garbage_char(c: str) -> bool:
     """True if `c` indicates binary or mis-decoded content rather than real text.
@@ -236,7 +242,23 @@ def get_provider(
 
         return SerplyProvider()
 
+    if name == "firecrawl":
+        from hyperresearch.web.firecrawl_provider import FirecrawlProvider
+
+        return FirecrawlProvider(
+            profile=profile or None,
+            magic=magic,
+            headless=headless,
+            settings=settings,
+            gates=gates,
+        )
+
     raise ValueError(
         f"Unknown web provider: {name!r}. "
-        "Available: builtin, crawl4ai, exa, tavily, parallel, serply"
+        "Available: builtin, crawl4ai, exa, tavily, parallel, serply, firecrawl"
     )
+
+
+def served_by(provider: WebProvider, result: WebResult) -> str:
+    """Name of the provider that produced ``result``, for `fetch_provider` provenance."""
+    return result.metadata.get(SERVED_BY_KEY) or provider.name
