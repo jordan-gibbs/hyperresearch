@@ -23,6 +23,7 @@ _REGISTRY: tuple[tuple[str, str], ...] = (
     ("openalex", "OpenAlexProvider"),
     ("crossref", "CrossrefProvider"),
     ("core_oa", "CoreProvider"),
+    ("firecrawl_research", "FirecrawlResearchProvider"),
     ("repec", "RePEcProvider"),
     ("doab", "DoabProvider"),
     ("clinicaltrials", "ClinicalTrialsProvider"),
@@ -32,7 +33,7 @@ _REGISTRY: tuple[tuple[str, str], ...] = (
 
 # Sources that are academic literature, as opposed to the specialist verticals
 # (trials, filings, economic series). `--scope papers` selects this set.
-PAPER_SLUGS = frozenset({"openalex", "crossref", "core", "repec", "doab"})
+PAPER_SLUGS = frozenset({"openalex", "crossref", "core", "firecrawl", "repec", "doab"})
 
 
 def _load(module_suffix: str, class_name: str) -> SearchProvider | None:

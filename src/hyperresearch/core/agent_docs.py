@@ -88,6 +88,7 @@ Coverage worth knowing when you choose sources:
 
 - **OpenAlex** is the all-fields backbone and the one to reach for outside STEM — it indexes books and book chapters, not just articles.
 - **CORE** hosts open-access full text directly rather than linking to it, so it is the best route to a readable copy.
+- **Firecrawl Research Index** (`-s firecrawl`) is ~43M abstracts from PubMed, PMC, bioRxiv, medRxiv and arXiv, searched with a natural-language question — strongest for the life sciences and for arXiv fields. Its hits have no authors or venue; they merge into OpenAlex and Crossref records by DOI.
 - **DOAB** is open-access scholarly books — the humanities and social sciences publish through books, and no article-shaped API will find them.
 - **RePEc** is economics working papers, which journals index late or not at all.
 - **ClinicalTrials.gov, SEC EDGAR and FRED** return trials, filings and economic series. These are citable records but they are not papers — check `work_type` before treating a result as literature.
