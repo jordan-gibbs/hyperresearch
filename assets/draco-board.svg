@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="504" viewBox="0 0 880 504" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif">
+<rect width="880" height="504" rx="14" fill="#ffffff" stroke="#e5e7eb"/>
+<text x="32" y="44" font-size="22" font-weight="700" fill="#111827">#1 on the DRACO deep research benchmark</text>
+<text x="32" y="70" font-size="14" fill="#6b7280">Mean score across 10 tasks, same judge for every system (higher is better)</text>
+<text x="276" y="117" font-size="15" text-anchor="end" fill="#111827" font-weight="700">Hyperresearch Deep</text>
+<rect x="290" y="100" width="470" height="26" rx="5" fill="#f3f4f6"/>
+<rect x="290" y="100" width="365.2" height="26" rx="5" fill="#4F46E5"/>
+<text x="665.2" y="118" font-size="15" font-weight="700" fill="#4F46E5">77.7</text>
+<text x="276" y="161" font-size="15" text-anchor="end" fill="#374151" font-weight="400">Claude Research (Opus)</text>
+<rect x="290" y="144" width="470" height="26" rx="5" fill="#f3f4f6"/>
+<rect x="290" y="144" width="343.1" height="26" rx="5" fill="#9ca3af"/>
+<text x="643.1" y="162" font-size="15" font-weight="500" fill="#374151">73.0</text>
+<text x="276" y="205" font-size="15" text-anchor="end" fill="#374151" font-weight="400">Parallel Ultra</text>
+<rect x="290" y="188" width="470" height="26" rx="5" fill="#f3f4f6"/>
+<rect x="290" y="188" width="289.1" height="26" rx="5" fill="#9ca3af"/>
+<text x="589.0" y="206" font-size="15" font-weight="500" fill="#374151">61.5</text>
+<text x="276" y="249" font-size="15" text-anchor="end" fill="#374151" font-weight="400">You.com Research</text>
+<rect x="290" y="232" width="470" height="26" rx="5" fill="#f3f4f6"/>
+<rect x="290" y="232" width="282.5" height="26" rx="5" fill="#9ca3af"/>
+<text x="582.5" y="250" font-size="15" font-weight="500" fill="#374151">60.1</text>
+<text x="848" y="250" font-size="12" text-anchor="end" fill="#9ca3af">8/10 tasks</text>
+<text x="276" y="293" font-size="15" text-anchor="end" fill="#374151" font-weight="400">Perplexity Deep Research</text>
+<rect x="290" y="276" width="470" height="26" rx="5" fill="#f3f4f6"/>
+<rect x="290" y="276" width="271.7" height="26" rx="5" fill="#9ca3af"/>
+<text x="571.7" y="294" font-size="15" font-weight="500" fill="#374151">57.8</text>
+<text x="848" y="294" font-size="12" text-anchor="end" fill="#9ca3af">8/10 tasks</text>
+<text x="276" y="337" font-size="15" text-anchor="end" fill="#374151" font-weight="400">Valyu DeepResearch Heavy</text>
+<rect x="290" y="320" width="470" height="26" rx="5" fill="#f3f4f6"/>
+<rect x="290" y="320" width="268.8" height="26" rx="5" fill="#9ca3af"/>
+<text x="568.8" y="338" font-size="15" font-weight="500" fill="#374151">57.2</text>
+<text x="848" y="338" font-size="12" text-anchor="end" fill="#9ca3af">8/10 tasks</text>
+<text x="276" y="381" font-size="15" text-anchor="end" fill="#374151" font-weight="400">ChatGPT Deep research</text>
+<rect x="290" y="364" width="470" height="26" rx="5" fill="#f3f4f6"/>
+<rect x="290" y="364" width="259.4" height="26" rx="5" fill="#9ca3af"/>
+<text x="559.4" y="382" font-size="15" font-weight="500" fill="#374151">55.2</text>
+<text x="276" y="425" font-size="15" text-anchor="end" fill="#374151" font-weight="400">Gemini Deep Research</text>
+<rect x="290" y="408" width="470" height="26" rx="5" fill="#f3f4f6"/>
+<rect x="290" y="408" width="257.1" height="26" rx="5" fill="#9ca3af"/>
+<text x="557.1" y="426" font-size="15" font-weight="500" fill="#374151">54.7</text>
+<text x="32" y="480" font-size="12" fill="#6b7280">Hyperresearch Deep (hosted), Oct 2026. GPT-5.2 judge with the DRACO paper's grader. Method and per-task scores: hyperresearch.ai/benchmarks/draco</text>
+</svg>
