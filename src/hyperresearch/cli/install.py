@@ -46,6 +46,7 @@ def install(
     import sys
 
     from hyperresearch.core.hooks import (
+        _install_claude_stop_hook,
         _install_codex_stop_hook,
         _install_hyperresearch_step_skills,
         _set_render_state,
@@ -108,11 +109,13 @@ def install(
         for platform in targets:
             _set_render_state(steps_profile, steps_config_path, platform)
             result = _install_hyperresearch_step_skills(target_dir, hpr_path)
+            # The Stop gate is what keeps a session on the pipeline; a project
+            # bootstrapped from a global install needs it too.
             if platform == CODEX:
-                # The Stop gate is what keeps a Codex session on the pipeline;
-                # a project bootstrapped from a global install needs it too.
                 hook = _install_codex_stop_hook(target_dir, hpr_path)
-                result = " | ".join(r for r in (result, hook) if r) or None
+            else:
+                hook = _install_claude_stop_hook(target_dir, hpr_path)
+            result = " | ".join(r for r in (result, hook) if r) or None
             results.append((platform, result))
         if json_output:
             done = [r for _, r in results if r]

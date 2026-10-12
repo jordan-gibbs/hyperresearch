@@ -24,8 +24,10 @@ on this pipeline is answering the question inline and skipping the steps.
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import yaml
 
@@ -344,14 +346,48 @@ _ACTIVE_STATUSES = ("running",)
 STOP_GATE_ENV = "HYPERRESEARCH_STOP_GATE"
 
 
-def stop_gate_decision(vault, now: datetime | None = None) -> dict | None:
+def stop_gate_platform(
+    payload: dict, environ: dict | None = None, vault_root: Path | None = None
+) -> str:
+    """Which agent runtime is running this Stop hook: "claude" or "codex".
+
+    The same command runs under both, so an older CLI that reads a vault
+    installed by a newer one still parses it. Claude Code sets
+    CLAUDE_PROJECT_DIR for hook commands (the PreToolUse hook reads it too);
+    failing that, its default `transcript_path` sits under `~/.claude/`;
+    failing both, a vault with Claude step skills and no Codex step files can
+    only be driven by Claude Code. Anything else keeps the Codex reason,
+    which was the only one before.
+    """
+    from hyperresearch.core.platforms import CLAUDE, CODEX, paths_for
+
+    env = os.environ if environ is None else environ
+    if env.get("CLAUDE_PROJECT_DIR"):
+        return CLAUDE
+    path = payload.get("transcript_path")
+    if isinstance(path, str) and "/.claude/" in path.replace("\\", "/"):
+        return CLAUDE
+    if vault_root is not None:
+        root = Path(vault_root)
+        codex_steps = root / paths_for(CODEX).steps_dir
+        claude_steps = root / paths_for(CLAUDE).steps_dir
+        if claude_steps.is_dir() and not codex_steps.is_dir():
+            return CLAUDE
+    return CODEX
+
+
+def stop_gate_decision(
+    vault, now: datetime | None = None, platform: str = "codex"
+) -> dict | None:
     """The Stop hook's block decision for the newest run in `vault`, or None.
 
     Blocks only when the newest run is active, touched within
-    STOP_GATE_WINDOW, and still has a next step.
+    STOP_GATE_WINDOW, and still has a next step. The reason names the next
+    step the way `platform` reaches it: a step file on Codex, the step's
+    skill on Claude Code.
     """
     from hyperresearch.core.hooks import step_skill_slug
-    from hyperresearch.core.platforms import CODEX, paths_for
+    from hyperresearch.core.platforms import CLAUDE, CODEX, paths_for
     from hyperresearch.core.runs import list_runs, run_resume_position
 
     runs = list_runs(vault)
@@ -374,13 +410,26 @@ def stop_gate_decision(vault, now: datetime | None = None) -> dict | None:
     if next_step is None:
         return None
     skill = step_skill_slug(next_step) or f"step {next_step}"
-    step_file = f"{paths_for(CODEX).steps_dir}/{skill}.md"
     tag = manifest.get("vault_tag", "the current run")
-    return {
-        "decision": "block",
-        "reason": (
+    if platform != CLAUDE:
+        step_file = f"{paths_for(CODEX).steps_dir}/{skill}.md"
+        reason = (
             f"{tag} is at step {next_step} ({skill}). Continue the pipeline: read "
             f"{step_file} and follow it. Answering without finishing the pipeline "
             "is a failure."
-        ),
-    }
+        )
+    else:
+        # A Claude Code session ends turns for two good reasons the gate cannot
+        # see: background subagents are still running (re-invoking the step
+        # would spawn them twice), or it is waiting for the user (a question,
+        # the browser-challenge hand-off). The hook blocks once per stop, so
+        # the session can end its turn again in the second case.
+        reason = (
+            f"{tag} is at step {next_step} ({skill}). If subagents you started for "
+            "this step are still running, wait for them with a tool call. If you are "
+            "waiting for the user (a question you asked, or the browser-challenge "
+            "hand-off), end your turn again: this hook lets the next attempt through. "
+            f'Otherwise continue the pipeline: invoke Skill(skill: "{skill}") and '
+            "follow it. Ending the turn mid-pipeline for any other reason is a failure."
+        )
+    return {"decision": "block", "reason": reason}

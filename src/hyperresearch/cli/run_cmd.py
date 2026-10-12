@@ -213,7 +213,10 @@ def _codex_step_file(skill: str | None) -> str | None:
 
 @app.command("stop-gate", hidden=True)
 def run_stop_gate() -> None:
-    """Codex Stop hook: block ending the session while the newest run is mid-pipeline.
+    """Stop hook: block ending the session while the newest run is mid-pipeline.
+
+    Installed for Codex (.codex/hooks.json) and for Claude Code
+    (.claude/settings.json); the hook input says which one is asking.
 
     Reads the hook's JSON input on stdin. Prints one
     `{"decision": "block", "reason": ...}` object when the newest run is
@@ -225,7 +228,7 @@ def run_stop_gate() -> None:
     import sys
 
     try:
-        from hyperresearch.core.codex import STOP_GATE_ENV, stop_gate_decision
+        from hyperresearch.core.codex import STOP_GATE_ENV, stop_gate_decision, stop_gate_platform
 
         if os.environ.get(STOP_GATE_ENV, "").strip().lower() in ("0", "false", "no", "off"):
             return
@@ -251,7 +254,9 @@ def run_stop_gate() -> None:
             vault = Vault.discover(start)
         except VaultError:
             return
-        decision = stop_gate_decision(vault)
+        decision = stop_gate_decision(
+            vault, platform=stop_gate_platform(payload, vault_root=vault.root)
+        )
         if decision is not None:
             sys.stdout.write(json.dumps(decision) + "\n")
             sys.stdout.flush()
