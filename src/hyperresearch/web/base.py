@@ -236,7 +236,12 @@ def get_provider(
 
         return SerplyProvider()
 
+    if name == "looot":
+        from hyperresearch.web.looot_provider import LoootProvider
+
+        return LoootProvider()
+
     raise ValueError(
         f"Unknown web provider: {name!r}. "
-        "Available: builtin, crawl4ai, exa, tavily, parallel, serply"
+        "Available: builtin, crawl4ai, exa, tavily, parallel, serply, looot"
     )
