@@ -35,9 +35,11 @@ Read these inputs:
 This parses every (sentence, citation) pair from the report — `[N]` markers (including grouped `[7, 12]`, one pair per source number) and `[[note-id]]` styles — and auto-passes pairs whose numbers or wording the cited note's extracted claims already confirm. Output: `research/runs/<vault_tag>/cite-check-pairs.json` with:
 - `summary` — total / auto-passed / dangling / needs-llm counts
 - `sampled_for_llm` — the pairs the agent must judge (100% of number-bearing sentences; sampled for the rest)
-- `dangling` — citations that resolve to NO vault note
+- `dangling` — citations that resolve to NO vault note, each with an `unresolved` reason and its `marker`
 
-**Dangling citations are findings immediately** — no agent needed. Each one becomes a `critical` finding (fabricated or mangled citation).
+**Handle dangling citations by their `unresolved` reason.** No agent is needed, but the reasons are not equal:
+- `no-sources-entry` (a `[N]` with no `[N]` line in the Sources (or References) section) and `unknown-note-id` (a `[[note-id]]` naming no vault note): each becomes a `critical` finding (fabricated or mangled citation).
+- `unresolved-entry`: the Sources entry exists, but its URL and title match no vault note. That is a lookup miss, not evidence against the citation. Check the entry first: `{hpr_path} search "<distinctive title words>" -j`, and `{hpr_path} note show` the hit to confirm it is the cited work. If a note covers it, the citation stands and there is no finding. Only if the vault holds no such source does it become a `major` finding (a citation the vault cannot back).
 
 **If `sampled_for_llm` is empty and there are no dangling citations:** write an empty findings file `[]` to `research/runs/<vault_tag>/cite-check-findings.json`, record `{hpr_path} run step <vault_tag> 14.5 --status done -j`, and proceed to step 15. Done.
 

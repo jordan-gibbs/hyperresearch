@@ -23,21 +23,118 @@ from __future__ import annotations
 
 import json
 import re
+from urllib.parse import urlparse
 
-from hyperresearch.core.patterns import WIKI_LINK_RE
+from hyperresearch.core.fetcher import existing_live_note_for_url
+from hyperresearch.core.patterns import WIKI_LINK_RE, mask_code
+from hyperresearch.core.scholar import DOI_RE, extract_doi
 
 # Sentence split: period/question/exclamation followed by space+capital, or newline.
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z一-鿿])|\n+")
 _NUMBERED_CITE_RE = re.compile(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\]")
 _SOURCES_ENTRY_RE = re.compile(r"^\s*\[(\d{1,3})\]\s+(.+)$")
 _NUMBER_RE = re.compile(r"\d[\d,]*\.?\d*%?")
+# A link-reference definition (`[7]: https://...`) is a whole line and cites nothing.
+_LINK_DEF_RE = re.compile(r"^\s*\[\d+\]:")
 
 # Sentences carrying these are checked at 100% regardless of sampling.
 _STRONG_MARKERS = ("%", "$", "billion", "million", "increase", "decrease", "grew", "fell")
 
 
-def _split_sentences(text: str) -> list[str]:
-    return [s.strip() for s in _SENTENCE_SPLIT_RE.split(text) if s.strip()]
+def _sentence_spans(text: str) -> list[tuple[int, int]]:
+    """(start, end) of each sentence in `text`, surrounding whitespace excluded."""
+    spans: list[tuple[int, int]] = []
+    pos = 0
+    for m in [*_SENTENCE_SPLIT_RE.finditer(text), None]:
+        end = m.start() if m else len(text)
+        piece = text[pos:end]
+        if piece.strip():
+            start = pos + len(piece) - len(piece.lstrip())
+            spans.append((start, pos + len(piece.rstrip())))
+        if m:
+            pos = m.end()
+    return spans
+
+
+def _doi_key(url: str) -> str | None:
+    """The DOI or arXiv id a link names, lower-cased, or None.
+
+    extract_doi is what fills notes.doi at fetch time, so its result is the
+    key for that column.
+    """
+    # urlsplit raises ValueError on a host it cannot parse
+    # (`https://example.com]`, or a bare domain written as `[url](url)`);
+    # such a link names no DOI.
+    try:
+        doi = extract_doi(url)
+        path = urlparse(url).path
+    except ValueError:
+        return None
+    # A `(` left open means the DOI was cut (see below), or the link was:
+    # `.../S0140-6736(20)` loses its `)` to the caller's rstrip.
+    if not doi or doi.count("(") > doi.count(")"):
+        return None
+    # DOI_RE stops at `)`, which Elsevier PII and Wiley SICI DOIs contain, and
+    # fetch stores the cut value, so one journal's papers share a key. A DOI
+    # the path runs on past (beyond a closing `>` or quote) is not looked up.
+    m = DOI_RE.search(path)
+    if m and path[m.end():].strip(">\"'"):
+        return None
+    return doi.lower()
+
+
+def _note_for_url(url: str, conn) -> str | None:
+    """The vault note saved from this exact URL, or None.
+
+    The `sources` table alone is not enough. Removing a note leaves its
+    sources row with note_id NULL, and a note written again for the same
+    work (`note new --source URL`) holds the URL only in its own `source`
+    field.
+    """
+    row = existing_live_note_for_url(conn, url)
+    if row:
+        return row["note_id"]
+    row = conn.execute("SELECT id FROM notes WHERE source = ? ORDER BY id", (url,)).fetchone()
+    if row:
+        return row["id"]
+    return None
+
+
+def _note_with_doi(url: str, conn) -> str | None:
+    """The one note whose `doi` is the link's DOI, or None.
+
+    A report may cite a paper by its doi.org link while the note was saved
+    from another address. Tried after the title: fetch fills `notes.doi` from
+    the first DOI after a "DOI" label in a page's body when the page has no
+    DOI meta tag, so a news item or review can hold the DOI of a paper it only
+    cites. Two notes holding one DOI say nothing about which is the paper.
+    """
+    doi = _doi_key(url)
+    if not doi:
+        return None
+    rows = conn.execute("SELECT id FROM notes WHERE lower(doi) = ? LIMIT 2", (doi,)).fetchall()
+    return rows[0]["id"] if len(rows) == 1 else None
+
+
+def _note_holding_doi(url: str, conn) -> str | None:
+    """A note saved from another address that holds the link's DOI, or None.
+
+    The weakest match, tried after the title: an address can hold the DOI of
+    a work it only lists or searches for.
+    """
+    doi = _doi_key(url)
+    if not doi:
+        return None
+    # A DOI inside another address ends where the URL does or at its query or
+    # fragment; `/` is part of many DOIs. Without the bound, 10.1000/abc would
+    # match the address of 10.1000/abc1.
+    bounded = re.compile(re.escape(doi) + r"(?=$|[?#&])")
+    for row in conn.execute(
+        "SELECT id, source FROM notes WHERE instr(lower(source), ?) > 0 ORDER BY id", (doi,)
+    ):
+        if bounded.search(row["source"].lower()):
+            return row["id"]
+    return None
 
 
 def parse_sources_section(report_text: str, conn) -> dict[str, str | None]:
@@ -57,12 +154,11 @@ def parse_sources_section(report_text: str, conn) -> dict[str, str | None]:
             continue
         num, rest = m.group(1), m.group(2)
         note_id = None
+        url = None
         url_m = re.search(r"https?://\S+", rest)
         if url_m:
             url = url_m.group(0).rstrip(".,)")
-            row = conn.execute("SELECT note_id FROM sources WHERE url = ?", (url,)).fetchone()
-            if row:
-                note_id = row["note_id"]
+            note_id = _note_for_url(url, conn)
         if note_id is None:
             title = rest.split("http")[0].strip(" .–-")
             if title:
@@ -71,6 +167,10 @@ def parse_sources_section(report_text: str, conn) -> dict[str, str | None]:
                 ).fetchone()
                 if row:
                     note_id = row["id"]
+        if note_id is None and url:
+            note_id = _note_with_doi(url, conn)
+        if note_id is None and url:
+            note_id = _note_holding_doi(url, conn)
         mapping[num] = note_id
     return mapping
 
@@ -79,7 +179,15 @@ def extract_pairs(report_text: str, conn) -> list[dict]:
     """All (sentence, note_id) citation bindings in the report.
 
     Pairs whose citation can't be resolved to a vault note get
-    note_id=None — those are findings in themselves (dangling citation).
+    note_id=None and an `unresolved` reason, because the reasons call for
+    different handling:
+
+      no-sources-entry  - a `[N]` marker with no `[N]` line in the Sources
+                          section: a fabricated or mangled citation.
+      unknown-note-id   - a `[[note-id]]` naming no vault note: the same.
+      unresolved-entry  - the Sources entry exists but neither its URL nor its
+                          title matches a vault note. The citation may still be
+                          sound; check the entry before calling it a finding.
     """
     numbered_map = parse_sources_section(report_text, conn)
     known_ids = {row["id"] for row in conn.execute("SELECT id FROM notes")}
@@ -87,23 +195,58 @@ def extract_pairs(report_text: str, conn) -> list[dict]:
     # Strip the Sources section from the checked body
     body = re.split(r"^##\s+(?:Sources|References)\b", report_text, maxsplit=1, flags=re.M | re.I)[0]
 
+    # Code and link-reference definitions hold brackets that are not citations
+    # (`arr[0]`, `[7]: https://...`). mask_code blanks code at its own length
+    # and keeps line structure, so a line it empties (a fenced block) or a
+    # definition line is dropped, and on every other line an offset means the
+    # same character in both texts. Each line is split into sentences once,
+    # on the report's text, which is what the patcher edits by; markers are
+    # scanned in the same span of the masked line.
+    sentences: list[str] = []
+    scanned: list[str] = []
+    for line, masked in zip(body.split("\n"), mask_code(body).split("\n"), strict=True):
+        if not masked.strip() or _LINK_DEF_RE.match(line):
+            continue
+        for start, end in _sentence_spans(line):
+            sentences.append(line[start:end])
+            scanned.append(masked[start:end])
+
     pairs: list[dict] = []
-    for sentence in _split_sentences(body):
-        cited: list[str | None] = []
-        for m in _NUMBERED_CITE_RE.finditer(sentence):
-            for num in re.split(r"\s*,\s*", m.group(1)):
+    for sentence, text in zip(sentences, scanned, strict=True):
+        cited: list[tuple[str, str | None, str | None]] = []
+        for m in _NUMBERED_CITE_RE.finditer(text):
+            nums = re.split(r"\s*,\s*", m.group(1))
+            # Citations count from 1: `[0]`, `[0, 3]` and `[007]` are an index,
+            # an interval or an id, unless the Sources section numbers its
+            # entries that way.
+            if any(n.startswith("0") and n not in numbered_map for n in nums):
+                continue
+            for num in nums:
                 if num in numbered_map:
-                    cited.append(numbered_map[num])
-        for m in WIKI_LINK_RE.finditer(sentence):
+                    note_id = numbered_map[num]
+                    cited.append((f"[{num}]", note_id, None if note_id else "unresolved-entry"))
+                elif numbered_map:
+                    # Only once a `[N] ...` Sources line parsed: without one,
+                    # `[N]` is not the report's citation style and the marker
+                    # is not a citation.
+                    cited.append((f"[{num}]", None, "no-sources-entry"))
+        for m in WIKI_LINK_RE.finditer(text):
             target = m.group(1).strip()
-            cited.append(target if target in known_ids else None)
-        for note_id in cited:
-            pairs.append({
+            if target in known_ids:
+                cited.append((f"[[{target}]]", target, None))
+            else:
+                cited.append((f"[[{target}]]", None, "unknown-note-id"))
+        for marker, note_id, reason in cited:
+            pair = {
                 "sentence": sentence,
+                "marker": marker,
                 "note_id": note_id,
                 "numbers": _NUMBER_RE.findall(sentence),
                 "strong": any(k in sentence.lower() for k in _STRONG_MARKERS) or bool(_NUMBER_RE.search(sentence)),
-            })
+            }
+            if reason:
+                pair["unresolved"] = reason
+            pairs.append(pair)
     return pairs
 
 

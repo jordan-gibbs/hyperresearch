@@ -71,8 +71,295 @@ class TestCiteCheckExtraction:
         report = "A bold claim [[no-such-note]]."
         pairs = extract_pairs(report, cited_vault.db)
         assert pairs[0]["note_id"] is None
+        assert pairs[0].get("unresolved") == "unknown-note-id"
         triaged = triage_pairs(pairs, cited_vault.db)
         assert triaged["dangling"] == 1
+
+    def test_sources_entry_resolves_through_the_notes_own_source_field(self, cited_vault):
+        # `note rm` leaves the sources row with note_id NULL; a note written
+        # again for the work holds the URL only in its own source field.
+        url = "https://repo.example.org/portal/3549507.pdf"
+        cited_vault.db.execute(
+            "INSERT INTO sources (url, note_id, domain, fetched_at, provider, content_hash) "
+            "VALUES (?, NULL, 'repo.example.org', '2026-01-01', 'test', 'y')", (url,)
+        )
+        cited_vault.db.execute("UPDATE notes SET source = ? WHERE id = 'python-async-patterns'", (url,))
+        cited_vault.db.commit()
+        report = f"Throughput improves 10x [1].\n\n## Sources\n[1] Some Paper (A. Author, 2022). {url}\n"
+        assert parse_sources_section(report, cited_vault.db)["1"] == "python-async-patterns"
+
+    @pytest.mark.parametrize("link", [
+        "[https://vendor.example.com](https://vendor.example.com)",
+        "https://[vendor.example.com]/a",
+        "https://vendor.example.com]",
+    ])
+    def test_link_that_urlsplit_rejects_is_unresolved_not_an_error(self, cited_vault, link):
+        # urlsplit raises ValueError on a bracket in the host position.
+        report = f"Throughput improves 10x [1].\n\n## Sources\n[1] A Vendor Page. {link}\n"
+        assert parse_sources_section(report, cited_vault.db) == {"1": None}
+
+    @pytest.mark.parametrize("link", [
+        "https://dx.doi.org/10.1145/3313831.3376831",
+        "https://doi.org/10.1145/3313831.3376831?utm_source=x",
+    ])
+    def test_doi_link_resolves_through_the_notes_doi_column(self, cited_vault, link):
+        cited_vault.db.execute(
+            "UPDATE notes SET doi = '10.1145/3313831.3376831' WHERE id = 'python-async-patterns'"
+        )
+        cited_vault.db.commit()
+        report = f"Throughput improves 10x [1].\n\n## Sources\n[1] A Postmortem (CHI 2020). {link}\n"
+        assert parse_sources_section(report, cited_vault.db)["1"] == "python-async-patterns"
+
+    def test_arxiv_link_resolves_through_the_notes_doi_column(self, cited_vault):
+        # fetch stores extract_doi's result, an arXiv id for arxiv.org links.
+        cited_vault.db.execute("UPDATE notes SET doi = 'arXiv:2301.00001' WHERE id = 'python-async-patterns'")
+        cited_vault.db.commit()
+        report = "Throughput improves 10x [1].\n\n## Sources\n[1] A Preprint. https://arxiv.org/pdf/2301.00001\n"
+        assert parse_sources_section(report, cited_vault.db)["1"] == "python-async-patterns"
+
+    @pytest.mark.parametrize("link", [
+        "<https://doi.org/10.1145/3313831.3376831>",
+        "https://doi.org/10.1145/3313831.3376831;",
+    ])
+    def test_doi_link_resolves_to_a_note_saved_from_another_address(self, cited_vault, link):
+        cited_vault.db.execute(
+            "UPDATE notes SET source = ? WHERE id = 'python-async-patterns'",
+            ("https://api.example.org/graph/v1/paper/DOI:10.1145/3313831.3376831?fields=title",),
+        )
+        cited_vault.db.commit()
+        report = f"Throughput improves 10x [1].\n\n## Sources\n[1] A Postmortem (CHI 2020). {link}\n"
+        assert parse_sources_section(report, cited_vault.db)["1"] == "python-async-patterns"
+
+    def test_exact_doi_column_beats_an_address_that_merely_holds_the_doi(self, cited_vault):
+        doi = "10.1145/3313831.3376831"
+        cited_vault.db.execute("UPDATE notes SET doi = ? WHERE id = 'rust-ownership'", (doi,))
+        cited_vault.db.execute(
+            "UPDATE notes SET source = ? WHERE id = 'concurrency'", (f"https://cite.example/refs?doi={doi}",)
+        )
+        cited_vault.db.commit()
+        report = f"Throughput improves 10x [1].\n\n## Sources\n[1] A Postmortem (CHI 2020). https://doi.org/{doi}\n"
+        assert parse_sources_section(report, cited_vault.db)["1"] == "rust-ownership"
+
+    def test_title_match_beats_an_address_that_merely_holds_the_doi(self, cited_vault):
+        doi = "10.1145/3313831.3376831"
+        cited_vault.db.execute(
+            "UPDATE notes SET source = ? WHERE id = 'concurrency'", (f"https://cite.example/refs?doi={doi}",)
+        )
+        cited_vault.db.commit()
+        report = f"Memory safety without GC [1].\n\n## Sources\n[1] Rust Ownership. https://doi.org/{doi}\n"
+        assert parse_sources_section(report, cited_vault.db)["1"] == "rust-ownership"
+
+    @pytest.mark.parametrize(("stored", "expected"), [
+        ("https://x.example.org/view/10.1145/3313831.3376831", "python-async-patterns"),
+        ("https://x.example.org/view/10.1145/3313831.3376831?utm=1", "python-async-patterns"),
+        ("https://x.example.org/refs?doi=10.1145/3313831.3376831&from=feed", "python-async-patterns"),
+        ("https://x.example.org/view/10.1145/3313831.3376831#abstract", "python-async-patterns"),
+        ("https://x.example.org/view/10.1145/3313831.3376831/full", None),
+    ], ids=["end", "query", "ampersand", "fragment", "slash"])
+    def test_doi_inside_an_address_ends_at_the_url_end_query_or_fragment(
+        self, cited_vault, stored, expected
+    ):
+        """`/` is part of many DOIs, so a path that goes on after the DOI may
+        name another one and does not match."""
+        cited_vault.db.execute(
+            "UPDATE notes SET source = ? WHERE id = 'python-async-patterns'", (stored,)
+        )
+        cited_vault.db.commit()
+        link = "https://doi.org/10.1145/3313831.3376831"
+        report = f"Throughput improves 10x [1].\n\n## Sources\n[1] A Postmortem (CHI 2020). {link}\n"
+        assert parse_sources_section(report, cited_vault.db)["1"] == expected
+
+    def test_doi_that_prefixes_another_does_not_resolve_to_it(self, cited_vault):
+        cited_vault.db.execute("UPDATE notes SET source = 'https://x.org/10.1000/abc1' WHERE id = 'concurrency'")
+        cited_vault.db.commit()
+        report = "Claim [1] and [2].\n\n## Sources\n[1] One Paper. https://doi.org/10.1000/abc\n[2] Other Paper. https://doi.org/10.1000/abc1\n"
+        assert parse_sources_section(report, cited_vault.db) == {"1": None, "2": "concurrency"}
+
+    def test_doi_cut_short_at_a_parenthesis_is_not_looked_up(self, cited_vault):
+        # DOI_RE stops at `)` and fetch stores the cut value, so two Lancet 2020
+        # papers (Elsevier PII DOIs) share notes.doi; the cut DOI must resolve
+        # through the sources row or notes.source only, never the doi column.
+        cut = "10.1016/S0140-6736(20"
+        huang = "https://dx.doi.org/10.1016/S0140-6736(20)30183-5"
+        zhou = "https://doi.org/10.1016/S0140-6736(20)30566-3"
+        cited_vault.db.execute("UPDATE notes SET source = ?, doi = ? WHERE id = 'concurrency'", (huang, cut))
+        cited_vault.db.execute("UPDATE notes SET source = ?, doi = ? WHERE id = 'rust-ownership'", (zhou, cut))
+        cited_vault.db.execute(
+            "INSERT INTO sources (url, note_id, domain, fetched_at, provider, content_hash) "
+            "VALUES (?, 'rust-ownership', 'doi.org', '2026-01-01', 'test', 'z')", (zhou,)
+        )
+        cited_vault.db.commit()
+
+        def resolve(link):
+            return parse_sources_section(f"Claim [1].\n\n## Sources\n[1] A Paper. {link}\n", cited_vault.db)["1"]
+
+        assert resolve(zhou) == "rust-ownership"  # the sources row
+        assert resolve(huang) == "concurrency"  # notes.source
+        absent = "https://doi.org/10.1016/S0140-6736(20)31142-9"
+        variants = [
+            "https://dx.doi.org/10.1016/S0140-6736(20)30566-3",
+            "http://doi.org/10.1016/S0140-6736(20)30566-3",
+            "https://doi.org/10.1016/S0140-6736(20)30566-3?via=x",
+            absent,
+        ]
+        assert {v: resolve(v) for v in variants} == dict.fromkeys(variants)
+
+    @pytest.mark.parametrize("tail", ["(20)", "(20"])
+    def test_link_cut_after_a_parenthesised_group_is_not_looked_up(self, cited_vault, tail):
+        # The caller strips a trailing `)` from the link, which leaves the key
+        # fetch stores for every Lancet 2020 paper.
+        cited_vault.db.execute(
+            "UPDATE notes SET doi = '10.1016/S0140-6736(20' WHERE id = 'concurrency'"
+        )
+        cited_vault.db.commit()
+        report = f"Claim [1].\n\n## Sources\n[1] A Paper. https://doi.org/10.1016/S0140-6736{tail}\n"
+        assert parse_sources_section(report, cited_vault.db)["1"] is None
+
+    def test_title_match_beats_a_doi_another_page_holds(self, cited_vault):
+        # fetch fills notes.doi from the first DOI in a page's body when the
+        # page has no DOI meta tag, so a page that only cites the paper can
+        # hold its DOI.
+        doi = "10.1145/3313831.3376831"
+        cited_vault.db.execute("UPDATE notes SET doi = ? WHERE id = 'concurrency'", (doi,))
+        cited_vault.db.commit()
+        report = f"Claim [1].\n\n## Sources\n[1] Python Async Patterns. https://doi.org/{doi}\n"
+        assert parse_sources_section(report, cited_vault.db)["1"] == "python-async-patterns"
+
+    def test_doi_two_notes_hold_resolves_to_neither(self, cited_vault):
+        doi = "10.1145/3313831.3376831"
+        cited_vault.db.execute(
+            "UPDATE notes SET doi = ? WHERE id IN ('concurrency', 'rust-ownership')", (doi,)
+        )
+        cited_vault.db.commit()
+        report = f"Claim [1].\n\n## Sources\n[1] A Postmortem (CHI 2020). https://doi.org/{doi}\n"
+        assert parse_sources_section(report, cited_vault.db)["1"] is None
+
+    def test_sici_doi_via_dx_doi_org_is_not_looked_up(self, cited_vault):
+        cited_vault.db.execute(
+            "UPDATE notes SET source = ?, doi = '10.1002/(SICI' WHERE id = 'concurrency'",
+            ("https://doi.org/10.1002/(SICI)1097-0258(19980415)17:7<857::AID-SIM777>3.0.CO;2-E",),
+        )
+        cited_vault.db.commit()
+        report = (
+            "Claim [1].\n\n## Sources\n"
+            "[1] Another Article. https://dx.doi.org/10.1002/(SICI)1097-0258(19980430)17:8<900::AID-SIM800>3.0.CO;2-F\n"
+        )
+        assert parse_sources_section(report, cited_vault.db)["1"] is None
+
+    def test_marker_without_a_sources_entry_is_dangling_not_dropped(self, cited_vault):
+        report = (
+            "Throughput improves 10x [1][7].\n\n"
+            "## Sources\n[1] Python Async Patterns. https://example.com/async\n"
+        )
+        pairs = extract_pairs(report, cited_vault.db)
+        assert [p["note_id"] for p in pairs] == ["python-async-patterns", None]
+        assert [p.get("marker") for p in pairs] == ["[1]", "[7]"]
+        assert pairs[1].get("unresolved") == "no-sources-entry"
+        assert triage_pairs(pairs, cited_vault.db)["dangling"] == 1
+
+    def test_numbering_from_zero_or_zero_padded_still_cites(self, cited_vault):
+        report = (
+            "First claim [01]. Second claim [0]. An id [007].\n\n"
+            "## Sources\n[0] Rust Ownership. https://example.com/rust\n"
+            "[01] Python Async Patterns. https://example.com/async\n"
+        )
+        pairs = extract_pairs(report, cited_vault.db)
+        assert [(p["sentence"], p["note_id"]) for p in pairs] == [
+            ("First claim [01].", "python-async-patterns"),
+            ("Second claim [0].", "rust-ownership"),
+        ]
+
+    def test_unresolvable_sources_entry_is_labelled_as_such(self, cited_vault):
+        report = (
+            "Throughput improves 10x [1].\n\n"
+            "## Sources\n[1] Unrelated Study. https://example.com/other\n"
+        )
+        pairs = extract_pairs(report, cited_vault.db)
+        assert pairs[0]["note_id"] is None
+        assert pairs[0].get("unresolved") == "unresolved-entry"
+
+    def test_bracketed_numbers_without_a_sources_section_are_not_citations(self, cited_vault):
+        report = "See item [3] in the list [[python-async-patterns]]."
+        pairs = extract_pairs(report, cited_vault.db)
+        assert [p["note_id"] for p in pairs] == ["python-async-patterns"]
+        assert [p.get("marker") for p in pairs] == ["[[python-async-patterns]]"]
+
+    def test_brackets_in_code_and_link_definitions_are_not_citations(self, cited_vault):
+        report = (
+            "Intro claim [1].\n\n"
+            "```python\narr[0] = x[2]\n```\n\n"
+            "Set `v[3]` before the call [1].\n\n"
+            "[7]: https://example.com/seven\n\n"
+            "| Item | Source |\n|---|---|\n| foo | [5] |\n\n"
+            "Run `[[ -n \"$k\" ]]` first [1].\n\n"
+            "Run `foo [5]\nbar` now [1].\n\n"
+            "Then [12] and [0].\n\n"
+            "## Sources\n[1] Python Async Patterns. https://example.com/async\n"
+        )
+        pairs = extract_pairs(report, cited_vault.db)
+        # The stored sentence keeps its code span: the patcher edits by it.
+        assert [(p["sentence"], p["note_id"]) for p in pairs] == [
+            ("Intro claim [1].", "python-async-patterns"),
+            ("Set `v[3]` before the call [1].", "python-async-patterns"),
+            ("| foo | [5] |", None),
+            ("Run `[[ -n \"$k\" ]]` first [1].", "python-async-patterns"),
+            ("bar` now [1].", "python-async-patterns"),
+            ("Then [12] and [0].", None),
+        ]
+        assert all(p["sentence"] in report for p in pairs)
+        assert [p.get("marker") for p in pairs] == ["[1]", "[1]", "[5]", "[1]", "[1]", "[12]"]
+        assert [p.get("unresolved") for p in pairs] == [None, None, "no-sources-entry", None, None, "no-sources-entry"]
+
+    def test_code_span_that_shifts_the_sentence_split_keeps_markers_on_their_sentences(self, cited_vault):
+        # The first span sits between a sentence end and a capital, so the
+        # stripped side gains a sentence; the last holds a sentence break, so
+        # the report side gains one. Equal counts, different splits.
+        report = (
+            "Setup. `cfg` Loads the file [1].\n\n"
+            "Second paragraph has a claim [1].\n\n"
+            "The log says `Error. Retry` on failure [1].\n\n"
+            "## Sources\n[1] Python Async Patterns. https://example.com/async\n"
+        )
+        pairs = extract_pairs(report, cited_vault.db)
+        assert [p["sentence"] for p in pairs] == [
+            "Setup. `cfg` Loads the file [1].",
+            "Second paragraph has a claim [1].",
+            "Retry` on failure [1].",
+        ]
+
+    def test_code_spans_that_shift_the_split_both_ways_on_one_line(self, cited_vault):
+        # One span sits between a sentence end and a capital, the other holds
+        # a sentence break; each marker stays on the report sentence it is in.
+        report = (
+            "Run it. `make` Builds everything [1]. The tool prints `Done. Exiting` when finished [2].\n\n"
+            "## Sources\n[1] Python Async Patterns. https://example.com/async\n"
+            "[2] Rust Ownership. https://example.com/rust\n"
+        )
+        pairs = extract_pairs(report, cited_vault.db)
+        assert [(p.get("marker"), p["sentence"]) for p in pairs] == [
+            ("[1]", "Run it. `make` Builds everything [1]."),
+            ("[2]", "Exiting` when finished [2]."),
+        ]
+
+    def test_stored_sentence_drops_indentation_and_line_endings(self, cited_vault):
+        # The patcher finds a sentence by its text, so it is stored without the
+        # line's indentation, trailing blanks or a CRLF's `\r`.
+        report = (
+            "  Indented claim [1].\r\n"
+            "Trailing blanks [1].   \r\n\r\n"
+            "## Sources\n[1] Python Async Patterns. https://example.com/async\n"
+        )
+        pairs = extract_pairs(report, cited_vault.db)
+        assert [p["sentence"] for p in pairs] == ["Indented claim [1].", "Trailing blanks [1]."]
+
+    def test_sentence_break_in_one_code_span_leaves_other_lines_stripped(self, cited_vault):
+        report = (
+            "Run `foo [5]\nbar` now [1].\n\n"
+            "Much later `echo \"Done. Next\"` prints two words [1].\n\n"
+            "## Sources\n[1] Python Async Patterns. https://example.com/async\n"
+        )
+        pairs = extract_pairs(report, cited_vault.db)
+        assert [p["sentence"] for p in pairs] == ["bar` now [1].", "Next\"` prints two words [1]."]
 
     def test_triage_auto_passes_number_match(self, cited_vault):
         pairs = extract_pairs(
