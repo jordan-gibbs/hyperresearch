@@ -35,11 +35,11 @@ NEAR_DUP_THRESHOLD = 0.7
 
 def canonical_url(url: str) -> str:
     """Normalize scheme/host/path/query so syndication mirrors collide."""
-    p = urlparse(url.strip().lower())
-    host = p.netloc.removeprefix("www.")
-    path = p.path.rstrip("/")
+    p = urlparse(url.strip())
+    host = p.netloc.lower().removeprefix("www.")
+    path = re.sub(r"%[0-9a-fA-F]{2}", lambda m: m.group().upper(), p.path).rstrip("/")
     query = urlencode(sorted(
-        (k, v) for k, v in parse_qsl(p.query) if not _TRACKING_PARAMS_RE.match(k)
+        (k, v) for k, v in parse_qsl(p.query) if not _TRACKING_PARAMS_RE.match(k.lower())
     ))
     return urlunparse(("https", host, path, "", query, ""))
 

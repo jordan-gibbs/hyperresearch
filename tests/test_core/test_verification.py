@@ -288,6 +288,58 @@ class TestIndependence:
     def test_canonical_url(self):
         assert canonical_url("https://www.Example.com/a/?utm_source=x") == canonical_url("http://example.com/a")
 
+    @pytest.mark.parametrize(("first", "second"), [
+        ("/Report", "/report"),
+        ("/?id=AbC", "/?id=abc"),
+        ("/?ID=123", "/?id=123"),
+    ])
+    def test_canonical_url_preserves_case_sensitive_components(self, first, second):
+        assert canonical_url("https://example.com" + first) != canonical_url(
+            "https://example.com" + second
+        )
+
+    def test_canonical_url_normalizes_percent_escape_case(self):
+        assert canonical_url("https://example.com/Report%2fid%3a") == canonical_url(
+            "https://example.com/Report%2Fid%3A"
+        )
+
+    def test_canonical_url_preserves_escaped_path_separator(self):
+        assert canonical_url("https://example.com/Report%2Fid") != canonical_url(
+            "https://example.com/Report/id"
+        )
+
+    def test_canonical_url_normalizes_host_and_tracking_without_changing_identity(self):
+        assert canonical_url(
+            "HTTP://WWW.Example.COM/Report/?b=AbC&a=DeF&UTM_Source=Feed#section"
+        ) == "https://example.com/Report?a=DeF&b=AbC"
+
+    @pytest.mark.parametrize(("first", "second"), [
+        ("/Report", "/report"),
+        ("/?id=AbC", "/?id=abc"),
+        ("/?ID=123", "/?id=123"),
+    ])
+    def test_case_distinct_sources_keep_full_independence(self, tmp_vault, first, second):
+        from hyperresearch.core.note import write_note
+        from hyperresearch.core.sync import compute_sync_plan, execute_sync
+
+        write_note(
+            tmp_vault.notes_dir, "First source",
+            body="Astronomers observe distant galaxies through powerful orbital telescopes.",
+            source="https://example.com" + first,
+        )
+        write_note(
+            tmp_vault.notes_dir, "Second source",
+            body="Farmers harvest seasonal crops using sustainable irrigation techniques.",
+            source="https://example.com" + second,
+        )
+        execute_sync(tmp_vault, compute_sync_plan(tmp_vault, force=True))
+
+        result = compute_independence(tmp_vault)
+
+        assert result == {"scored": 2, "clusters": []}
+        scores = dict(tmp_vault.db.execute("SELECT id, independence FROM notes"))
+        assert scores == {"first-source": 1.0, "second-source": 1.0}
+
     def test_wire_cluster_discounts_members(self, tmp_vault):
         from hyperresearch.core.note import write_note
         from hyperresearch.core.sync import compute_sync_plan, execute_sync
