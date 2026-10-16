@@ -1,11 +1,13 @@
 """The crawl4ai headless lane verifies TLS certificates by default (#137).
 
-crawl4ai defaults ``BrowserConfig.ignore_https_errors`` to True AND launches
-Chromium with ``--ignore-certificate-errors`` unconditionally, so verifying
-takes both a config value and stripping those launch flags. These tests pin
-both halves, the ``[fetch] browser_verify_tls = false`` opt-out, and the
-refusal message. All offline: object construction and fake crawlers only,
-no browser launch, no network.
+crawl4ai defaults ``BrowserConfig.ignore_https_errors`` to True. Older
+releases also launched Chromium with ``--ignore-certificate-errors``
+unconditionally; current crawl4ai may omit those switches. Verifying still
+sets ``ignore_https_errors=False`` and strips any cert-ignore launch flags
+that remain. These tests pin both halves, the
+``[fetch] browser_verify_tls = false`` opt-out, and the refusal message.
+All offline: object construction and fake crawlers only, no browser launch,
+no network.
 """
 
 from __future__ import annotations
@@ -122,17 +124,41 @@ def test_stripping_is_per_instance_not_global():
     """The override must not leak into crawl4ai's classes or other crawlers."""
     from crawl4ai.browser_manager import ManagedBrowser
 
+    class_method = ManagedBrowser.build_browser_flags
     inst = provider.Crawl4AIProvider(headless=True, user_data_dir="/tmp/does-not-matter")
-    inst._make_crawler()
-    assert set(ManagedBrowser.build_browser_flags(inst._browser_config)) >= CERT_FLAGS
+    crawler = inst._make_crawler()
+    managed = crawler.crawler_strategy.browser_manager.managed_browser
+    assert managed is not None
+    # Class method object stays untouched...
+    assert ManagedBrowser.build_browser_flags is class_method
+    # ...while the managed-browser instance uses a stripping wrapper.
+    assert managed.build_browser_flags is not class_method
+    class_flags = set(class_method(inst._browser_config))
+    instance_flags = set(managed.build_browser_flags(inst._browser_config))
+    assert not CERT_FLAGS & instance_flags
+    # Whatever cert-ignore flags upstream still ships (if any) remain on the class.
+    assert CERT_FLAGS & class_flags == CERT_FLAGS & set(class_method(inst._browser_config))
 
 
 def test_opt_out_keeps_crawl4ai_launch_flags():
+    """Opting out must not wrap/strip launch flags; keep crawl4ai's own args."""
+    from crawl4ai.browser_manager import BrowserManager
+
     inst = provider.Crawl4AIProvider(
         headless=True, settings=FetchSettings(browser_verify_tls=False)
     )
-    args = inst._make_crawler().crawler_strategy.browser_manager._build_browser_args()["args"]
-    assert set(args) >= CERT_FLAGS
+    bm = inst._make_crawler().crawler_strategy.browser_manager
+    # Opt-out leaves the original bound method in place (no stripping wrapper).
+    assert bm._build_browser_args.__func__ is BrowserManager._build_browser_args
+    args = set(bm._build_browser_args()["args"])
+    # If this crawl4ai still injects cert-ignore flags, they must survive opt-out.
+    # Current crawl4ai may ship none; then the assertion is vacuously true.
+    from crawl4ai import BrowserConfig
+    from crawl4ai.browser_manager import ManagedBrowser
+
+    upstream = set(ManagedBrowser.build_browser_flags(BrowserConfig()))
+    assert CERT_FLAGS & upstream <= args
+    assert inst._browser_config.ignore_https_errors is True
 
 
 def test_missing_flag_builder_fails_closed():
