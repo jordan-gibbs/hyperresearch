@@ -377,6 +377,36 @@ class TestCJKLengthCheck:
             "[[dagitty-a-graphical-tool-for-analyzing-causal-diagrams-semantic-scholar]] " * 15
         )
 
+    def test_lacks_word_boundaries_cjk_body_with_ascii_scaffolding(self):
+        from hyperresearch.core.runs import _lacks_word_boundaries
+
+        # A real report in a spaceless script is not pure prose: it carries
+        # markdown tables, URLs and bracketed citation markers whose many short
+        # ASCII tokens pull the mean token length under the threshold. The body
+        # is still spaceless script and must be measured by characters, so the
+        # detector must fire even though the mean token length does not.
+        prose = (
+            "外壁塗装の成果報酬は見積依頼の成立ベースで単価と確定率は案件ごとに大きく異なる"
+            "需要側は検索ボリュームで外から測れるが供給側の成果単価は各管理画面に"
+            "ログインしないと見えないため公開ページだけを読む調査では不明のまま残る"
+        )
+        report = (
+            "## 結論\n\n"
+            + (prose + "[1]。") * 12
+            + "\n\n| 案件 | 単価 | EPC |\n|---|---|---|\n"
+            + "| ヌリカエ | 2500円 | 7.79 |\n" * 6
+            + "\n## 出典\n"
+            + "".join(
+                f"- [{i}] Affiliate Rate Benchmark {i}. https://example.com/p?k=ex{i}\n"
+                for i in range(1, 26)
+            )
+        )
+        # The scaffolding drags the mean token length under the threshold, so
+        # the mean-only detector would miss this report.
+        tokens = report.split()
+        assert sum(len(t) for t in tokens) / len(tokens) < 15.0
+        assert _lacks_word_boundaries(report)
+
     def test_verify_passes_cjk_report_within_char_target_despite_low_word_count(
         self, tmp_vault
     ):
