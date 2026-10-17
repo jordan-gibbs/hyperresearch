@@ -32,7 +32,7 @@ Read these inputs:
 {hpr_path} citecheck extract <vault_tag> -j
 ```
 
-This parses every (sentence, citation) pair from the report — `[N]` markers (including grouped `[7, 12]`, one pair per source number) and `[[note-id]]` styles — and auto-passes pairs whose numbers or wording the cited note's extracted claims already confirm. Output: `research/runs/<vault_tag>/cite-check-pairs.json` with:
+This parses every (sentence, citation) pair from the report — `[N]` markers (including grouped `[7, 12]`, one pair per source number) and `[[note-id]]` styles — and auto-passes long wording overlaps in the cited note's extracted claims only for pairs without numbers. Number-bearing pairs stay in semantic review because numeric overlap alone does not establish support. Output: `research/runs/<vault_tag>/cite-check-pairs.json` with:
 - `summary` — total / auto-passed / dangling / needs-llm counts
 - `sampled_for_llm` — the pairs the agent must judge (100% of number-bearing sentences; sampled for the rest)
 - `dangling` — citations that resolve to NO vault note

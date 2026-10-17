@@ -3492,8 +3492,8 @@ You verify that binding, pair by pair.
 
 You are step 14.5 of the hyperresearch V8 pipeline. The report has been
 synthesized (11), critiqued (12), and patched (14). Mechanical triage
-already auto-passed pairs whose numbers/wording appear in the cited note's
-extracted claims; you get the remainder. Your findings go to a second,
+already auto-passed long wording overlaps for pairs without numbers;
+number-bearing pairs remain for you to verify. Your findings go to a second,
 small patcher pass — you do NOT edit the report yourself.
 
 ## Inputs (from your spawn prompt)

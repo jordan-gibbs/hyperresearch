@@ -8,10 +8,10 @@ an external benchmark. Three layers:
    citation styles: numbered `[N]` (resolved through the `## Sources`
    section) and `[[note-id]]` wikilinks.
 
-2. `triage_pairs(pairs, conn)` — mechanical tier. A pair auto-passes when
-   the sentence's numbers or a long word-overlap window appear in the cited
-   note's claims (`quoted_support` / `numbers`) — no LLM needed for the
-   bulk. The remainder is marked `needs-llm` for the cite-checker agent.
+2. `triage_pairs(pairs, conn)` — mechanical tier. Pairs without numbers may
+   auto-pass on a long word-overlap window in the cited note's claims.
+   Number-bearing pairs remain `needs-llm` for the cite-checker agent;
+   numeric overlap alone cannot establish support.
 
 3. The `hyperresearch-cite-checker` agent (step 14.5) verifies the
    needs-llm tail against the actual note bodies and emits findings the
@@ -116,7 +116,7 @@ def triage_pairs(pairs: list[dict], conn) -> dict:
 
     Verdicts per pair:
       dangling            — citation resolves to no vault note (finding)
-      supported-mechanical — sentence numbers / long overlap found in the
+      supported-mechanical — eligible long word overlap found in the
                             cited note's claims (auto-pass)
       needs-llm           — the cite-checker agent must judge it
     """
@@ -145,18 +145,17 @@ def triage_pairs(pairs: list[dict], conn) -> dict:
             (c["claim"] or "") + " " + (c["quoted_support"] or "") + " " + (c["numbers"] or "")
             for c in note_claims
         ))
-        if blob:
-            nums = [n for n in pair["numbers"] if len(n.replace(",", "")) >= 2]
-            if nums and all(n.replace(",", "") in blob.replace(",", "") for n in nums):
-                matched = True
-            elif not nums:
-                # Long word-overlap window: any 6-consecutive-word shingle of the
-                # sentence found in the claims blob
-                words = _norm(pair["sentence"]).split()
-                for i in range(len(words) - 5):
-                    if " ".join(words[i : i + 6]) in blob:
-                        matched = True
-                        break
+        # Numeric overlap does not establish entity, metric, unit or
+        # attribution. Do not auto-pass a claim just because its numbers
+        # occur verbatim in the cited claims, including single digits.
+        if blob and not pair["numbers"]:
+            # Long word-overlap window: any 6-consecutive-word shingle of the
+            # sentence found in the claims blob
+            words = _norm(pair["sentence"]).split()
+            for i in range(len(words) - 5):
+                if " ".join(words[i : i + 6]) in blob:
+                    matched = True
+                    break
         if matched:
             pair["verdict"] = "supported-mechanical"
             supported += 1

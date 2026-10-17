@@ -111,13 +111,14 @@ def _smart_wait_js(settings: FetchSettings) -> str:
     )
 
 
-# Chromium switches crawl4ai adds to EVERY launch, unconditionally
+# Chromium switches older crawl4ai releases added on every launch
 # (browser_manager.py: BrowserManager._build_browser_args for the plain launch,
 # ManagedBrowser.build_browser_flags for the profile / managed-browser launch).
-# They make the browser process accept any certificate, so
+# When present they make the browser process accept any certificate, so
 # BrowserConfig(ignore_https_errors=False) alone verifies nothing: checked
 # against a self-signed server on crawl4ai 0.8.6, the page loads either way
-# until these are removed as well.
+# until these are removed as well. Current crawl4ai may omit them; stripping
+# stays cheap and keeps verification correct across versions.
 _CERT_IGNORE_FLAGS = frozenset({
     "--ignore-certificate-errors",
     "--ignore-certificate-errors-spki-list",

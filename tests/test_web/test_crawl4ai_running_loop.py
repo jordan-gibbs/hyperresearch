@@ -20,6 +20,10 @@ pytest.importorskip("crawl4ai.browser_adapter")
 from hyperresearch.web.base import WebResult
 from hyperresearch.web.crawl4ai_provider import Crawl4AIProvider
 
+# Public IP literal keeps the real SSRF gate active without a DNS dependency.
+# Fetching is stubbed below, so these event-loop tests make no network request.
+_PUBLIC_URL = "https://93.184.216.34"
+
 
 def _run_on_a_fresh_thread(coro):
     """Run ``coro`` to completion on a brand-new thread, guaranteeing a real,
@@ -56,7 +60,7 @@ def test_fetch_succeeds_when_called_from_a_running_event_loop(monkeypatch) -> No
     provider = Crawl4AIProvider(headless=True)
 
     async def call_fetch_on_the_running_loop():
-        return provider.fetch("https://example.com")
+        return provider.fetch(_PUBLIC_URL)
 
     result = _run_on_a_fresh_thread(call_fetch_on_the_running_loop())
 
@@ -72,7 +76,7 @@ def test_fetch_still_succeeds_with_no_running_loop(monkeypatch) -> None:
     monkeypatch.setattr(Crawl4AIProvider, "_fetch_async", fake_fetch_async)
     provider = Crawl4AIProvider(headless=True)
 
-    result = provider.fetch("https://example.com")
+    result = provider.fetch(_PUBLIC_URL)
 
     assert result.title == "ok"
     assert result.content == "fetched content"

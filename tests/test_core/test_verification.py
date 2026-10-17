@@ -74,13 +74,28 @@ class TestCiteCheckExtraction:
         triaged = triage_pairs(pairs, cited_vault.db)
         assert triaged["dangling"] == 1
 
-    def test_triage_auto_passes_number_match(self, cited_vault):
+    def test_triage_keeps_number_match_for_llm(self, cited_vault):
         pairs = extract_pairs(
             "Async improves throughput by 10x [[python-async-patterns]].", cited_vault.db
         )
         triaged = triage_pairs(pairs, cited_vault.db)
+        assert triaged["supported_mechanical"] == 0
+        assert triaged["needs_llm"] == 1
+
+    def test_triage_auto_passes_long_word_overlap(self, cited_vault):
+        pairs = extract_pairs(
+            "Async/await syntax enables concurrent I/O with [[python-async-patterns]].",
+            cited_vault.db,
+        )
+        triaged = triage_pairs(pairs, cited_vault.db)
         assert triaged["supported_mechanical"] == 1
         assert triaged["needs_llm"] == 0
+
+    def test_triage_keeps_note_without_claims_for_llm(self, cited_vault):
+        pairs = extract_pairs("Rust is safe [[rust-ownership]].", cited_vault.db)
+        triaged = triage_pairs(pairs, cited_vault.db)
+        assert triaged["supported_mechanical"] == 0
+        assert triaged["needs_llm"] == 1
 
     def test_triage_flags_unsupported_for_llm(self, cited_vault):
         pairs = extract_pairs(
@@ -130,9 +145,134 @@ class TestCiteCheckExtraction:
         r = runner.invoke(app, ["citecheck", "extract", "cc-run", "--json"])
         assert r.exit_code == 0
         data = json.loads(r.stdout)["data"]
-        assert data["summary"]["supported_mechanical"] == 1
+        assert data["summary"]["supported_mechanical"] == 0
+        assert data["summary"]["needs_llm"] == 1
+        assert data["sampled_for_llm"] == 1
         assert data["dangling"] == 1
         assert (cited_vault.run_dir("cc-run") / "cite-check-pairs.json").exists()
+
+
+@pytest.fixture
+def numeric_cited_vault(tmp_vault, tmp_path, request):
+    from hyperresearch.core.claims import ingest_claims_file
+    from hyperresearch.core.note import write_note
+    from hyperresearch.core.sync import compute_sync_plan, execute_sync
+
+    fact, numbers = getattr(
+        request, "param",
+        ("ExampleCo reported 30 million euros in recurring revenue in 2023.", [30, 2023]),
+    )
+    write_note(tmp_vault.notes_dir, title="Synthetic source", note_id="source-test", body=fact)
+    execute_sync(tmp_vault, compute_sync_plan(tmp_vault))
+    claims = tmp_path / "claims-source-test.json"
+    claims.write_text(json.dumps({"claims": [{
+        "claim": fact, "quoted_support": fact, "numbers": numbers,
+    }]}), encoding="utf-8")
+    ingest_claims_file(tmp_vault.db, claims)
+    tmp_vault.db.commit()
+    return tmp_vault
+
+
+class TestCiteCheckNumericTriage:
+    @pytest.mark.parametrize("sentence", [
+        pytest.param(
+            "OtherCo reported 30 million euros in recurring revenue",
+            id="wrong-entity",
+        ),
+        pytest.param("ExampleCo employs exactly 30 people", id="wrong-metric"),
+        pytest.param(
+            "ExampleCo reported 30 million dollars in recurring revenue",
+            id="wrong-unit",
+        ),
+        pytest.param(
+            "Fictional candidate TEST-A personally generated 30 million euros in revenue",
+            id="unsupported-attribution",
+        ),
+        pytest.param("ExampleCo earned 202 million euros", id="numeric-prefix"),
+        pytest.param("ExampleCo earned 23 million euros", id="numeric-suffix"),
+        pytest.param(
+            "ExampleCo reported 99 million euros in recurring revenue",
+            id="unmatched-number",
+        ),
+        pytest.param(
+            "ExampleCo reported 30 million euros in recurring revenue in 2023",
+            id="supported-numeric-control",
+        ),
+    ])
+    def test_numeric_overlap_never_certifies_support(self, numeric_cited_vault, sentence):
+        pairs = extract_pairs(f"{sentence} [[source-test]].", numeric_cited_vault.db)
+        triaged = triage_pairs(pairs, numeric_cited_vault.db)
+        assert triaged["total"] == 1
+        assert triaged["supported_mechanical"] == 0
+        assert triaged["dangling"] == 0
+        assert triaged["needs_llm"] == 1
+        assert pairs[0]["verdict"] == "needs-llm"
+        assert pairs[0]["strong"] is True
+        # Strong numeric claims remain in semantic review even at rate zero.
+        for rate in (0.0, 0.6, 1.0):
+            assert sample_needs_llm(pairs, sample_rate=rate) == pairs
+
+    @pytest.mark.parametrize("numeric_cited_vault", [
+        ("ExampleCo reported 3 million euros in recurring revenue.", [3]),
+    ], indirect=True)
+    @pytest.mark.parametrize("sentence", [
+        pytest.param(
+            "OtherCo reported 3 million euros in recurring revenue",
+            id="single-digit-wrong-entity",
+        ),
+        pytest.param(
+            "ExampleCo reported 3 million euros in recurring revenue",
+            id="single-digit-supported-control",
+        ),
+        pytest.param(
+            "ExampleCo reported 3 million euros in recurring revenue and employs 9 people",
+            id="single-digit-unsupported-headcount",
+        ),
+    ])
+    def test_single_digits_cannot_fall_back_to_word_overlap(self, numeric_cited_vault, sentence):
+        pairs = extract_pairs(f"{sentence} [[source-test]].", numeric_cited_vault.db)
+        triaged = triage_pairs(pairs, numeric_cited_vault.db)
+        assert triaged["supported_mechanical"] == 0
+        assert triaged["needs_llm"] == 1
+        assert pairs[0]["verdict"] == "needs-llm"
+        assert pairs[0]["strong"] is True
+        for rate in (0.0, 0.6, 1.0):
+            assert sample_needs_llm(pairs, sample_rate=rate) == pairs
+
+    def test_numeric_cli_summary_and_pairs_file(self, numeric_cited_vault, monkeypatch):
+        from typer.testing import CliRunner
+
+        from hyperresearch.cli import app
+
+        vault = numeric_cited_vault
+        init_run(vault, "numeric-run")
+        report = vault.notes_dir / "final_report_numeric-run.md"
+        sentences = [
+            "ExampleCo reported 30 million euros in recurring revenue in 2023",
+            "Fictional candidate TEST-A personally generated 30 million euros in revenue",
+            "ExampleCo employs exactly 30 people",
+            "ExampleCo reported 99 million euros in recurring revenue",
+        ]
+        report.write_text(
+            "\n".join(f"{sentence} [[source-test]]." for sentence in sentences),
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(vault.root)
+        result = CliRunner().invoke(
+            app, ["citecheck", "extract", "numeric-run", "--sample-rate", "1", "--json"]
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)["data"]
+        assert data["summary"] == {
+            "total": 4, "supported_mechanical": 0, "dangling": 0, "needs_llm": 4,
+        }
+        assert data["sampled_for_llm"] == 4
+        pairs_file = vault.run_dir("numeric-run") / "cite-check-pairs.json"
+        saved = json.loads(pairs_file.read_text(encoding="utf-8"))
+        assert saved["summary"] == data["summary"]
+        assert saved["dangling"] == []
+        assert [p["sentence"] for p in saved["sampled_for_llm"]] == report.read_text().splitlines()
+        assert all(p["verdict"] == "needs-llm" for p in saved["sampled_for_llm"])
 
 
 class TestQuoteSpanExtraction:
