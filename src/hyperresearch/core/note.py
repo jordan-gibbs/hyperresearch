@@ -163,6 +163,15 @@ def strip_markdown(text: str) -> str:
     text = re.sub(r"\[\[([^\]|]+)\|([^\]]+)\]\]", r"\2", text)
     text = re.sub(r"\[\[([^\]]+)\]\]", r"\1", text)
     text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
-    text = re.sub(r"<[^>]+>", "", text)
+    # Only spans that START like markup are tags: `<` followed by a tag-name
+    # letter, `/` plus a letter (closing tag), `!` (comment, doctype) or `?`
+    # (processing instruction). `<[^>]+>` also ate numeric comparisons, so a
+    # datasheet's `<22.5 V DC ... UIN >23.5 V` was indexed as `23.5 V` and the
+    # search text showed a different threshold from the note. A `<` followed
+    # by a letter still opens a span, so `a<b and c>d` is removed as before.
+    # A closing `>` is still required: an unterminated tag survives into
+    # body_plain whole, which tests/test_serve/test_xss.py asserts as its
+    # premise.
+    text = re.sub(r"<(?:/?[A-Za-z]|!|\?)[^>]*>", "", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
