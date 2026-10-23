@@ -8,10 +8,10 @@ an external benchmark. Three layers:
    citation styles: numbered `[N]` (resolved through the `## Sources`
    section) and `[[note-id]]` wikilinks.
 
-2. `triage_pairs(pairs, conn)` — mechanical tier. A pair auto-passes when
-   the sentence's numbers or a long word-overlap window appear in the cited
-   note's claims (`quoted_support` / `numbers`) — no LLM needed for the
-   bulk. The remainder is marked `needs-llm` for the cite-checker agent.
+2. `triage_pairs(pairs, conn)` — mechanical tier. A numeric sentence only
+   auto-passes when it matches a cited claim or quote; non-numeric sentences
+   can pass on a long word-overlap window. The remainder is marked
+   `needs-llm` for the cite-checker agent.
 
 3. The `hyperresearch-cite-checker` agent (step 14.5) verifies the
    needs-llm tail against the actual note bodies and emits findings the
@@ -116,8 +116,8 @@ def triage_pairs(pairs: list[dict], conn) -> dict:
 
     Verdicts per pair:
       dangling            — citation resolves to no vault note (finding)
-      supported-mechanical — sentence numbers / long overlap found in the
-                            cited note's claims (auto-pass)
+      supported-mechanical — full numeric claim or long non-numeric overlap
+                            found in the cited note's claims (auto-pass)
       needs-llm           — the cite-checker agent must judge it
     """
     claims_by_note: dict[str, list[dict]] = {}
@@ -141,22 +141,28 @@ def triage_pairs(pairs: list[dict], conn) -> dict:
             continue
         matched = False
         note_claims = _claims(pair["note_id"])
-        blob = _norm(" ".join(
-            (c["claim"] or "") + " " + (c["quoted_support"] or "") + " " + (c["numbers"] or "")
-            for c in note_claims
-        ))
-        if blob:
-            nums = [n for n in pair["numbers"] if len(n.replace(",", "")) >= 2]
-            if nums and all(n.replace(",", "") in blob.replace(",", "") for n in nums):
-                matched = True
-            elif not nums:
-                # Long word-overlap window: any 6-consecutive-word shingle of the
-                # sentence found in the claims blob
-                words = _norm(pair["sentence"]).split()
-                for i in range(len(words) - 5):
-                    if " ".join(words[i : i + 6]) in blob:
-                        matched = True
-                        break
+        sentence = _norm(_NUMBERED_CITE_RE.sub("", WIKI_LINK_RE.sub("", pair["sentence"])))
+        sentence = sentence.strip(" .,:;")
+        if _NUMBER_RE.search(sentence):
+            # A matching number can describe a different entity or metric.
+            matched = any(
+                sentence == _norm(claim[field] or "").strip(" .,:;")
+                for claim in note_claims
+                for field in ("claim", "quoted_support")
+            )
+        else:
+            blob = _norm(
+                " ".join(
+                    (c["claim"] or "") + " " + (c["quoted_support"] or "") for c in note_claims
+                )
+            )
+            # Long word-overlap window: any 6-consecutive-word shingle of the
+            # sentence found in the claims blob.
+            words = sentence.split()
+            for i in range(len(words) - 5):
+                if " ".join(words[i : i + 6]) in blob:
+                    matched = True
+                    break
         if matched:
             pair["verdict"] = "supported-mechanical"
             supported += 1
