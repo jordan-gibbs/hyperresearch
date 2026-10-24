@@ -29,13 +29,18 @@ dependencies = [
     "pydantic>=2.0",
     "jinja2>=3.1",
     "platformdirs>=4.0",
-    "Crawl4AI>=0.7.3",
+    # Upper-bounded on purpose: Crawl4AI 0.9 changed BrowserManager's launch
+    # flags, so the TLS-verification stripping (#137) and the tests that pin it
+    # (tests/test_web/test_crawl4ai_tls.py) no longer match and CI fails on a
+    # fresh install. 0.8.x is the last line this provider supports; lift the
+    # bound once crawl4ai_provider is adapted to 0.9's browser-args API.
+    "Crawl4AI>=0.7.3,<0.9",
     "pymupdf>=1.24",
     "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
-crawl4ai = ["Crawl4AI>=0.7.3"]
+crawl4ai = ["Crawl4AI>=0.7.3,<0.9"]
 # Upper-bounded on purpose: mcp 2.0 removed `mcp.server.fastmcp`, which
 # `hyperresearch/mcp/server.py` builds every tool on. Without the bound a
 # fresh `pip install hyperresearch[mcp]` resolves 2.x and `hyperresearch mcp`
