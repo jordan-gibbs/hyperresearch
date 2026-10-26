@@ -117,7 +117,9 @@ def _smart_wait_js(settings: FetchSettings) -> str:
 # They make the browser process accept any certificate, so
 # BrowserConfig(ignore_https_errors=False) alone verifies nothing: checked
 # against a self-signed server on crawl4ai 0.8.6, the page loads either way
-# until these are removed as well.
+# until these are removed as well. crawl4ai 0.9.5 dropped them from the default
+# launch (it adds the flag only when ignore_https_errors is on); stripping stays
+# for the 0.7.3-0.9.4 range the dependency floor still allows.
 _CERT_IGNORE_FLAGS = frozenset({
     "--ignore-certificate-errors",
     "--ignore-certificate-errors-spki-list",
