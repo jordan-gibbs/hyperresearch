@@ -149,12 +149,17 @@ def profile_use(
 
     from hyperresearch.core.agent_docs import _resolve_executable
     from hyperresearch.core.hooks import install_hooks, installed_platforms
+    from hyperresearch.core.platforms import CLAUDE
 
     hpr_path = _resolve_executable()
     actions = install_hooks(vault.root, hpr_path=hpr_path, profile=name)
-    # A project also installed for Codex gets its Codex files re-rendered too.
-    if "codex" in installed_platforms(vault.root):
-        actions += install_hooks(vault.root, hpr_path=hpr_path, profile=name, platform="codex")
+    # A project also installed for another runtime (Codex, OMP) gets those
+    # files re-rendered too; Claude Code is the call above.
+    for platform in installed_platforms(vault.root):
+        if platform != CLAUDE:
+            actions += install_hooks(
+                vault.root, hpr_path=hpr_path, profile=name, platform=platform
+            )
 
     data = {
         "gear": name,

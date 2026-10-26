@@ -29,6 +29,8 @@ from datetime import UTC, datetime, timedelta
 
 import yaml
 
+from hyperresearch.core.platforms import CODEX
+
 # ---------------------------------------------------------------------------
 # TOML string encoding. No TOML writer is a dependency, and every value we
 # emit is a string — short scalars plus one long prompt body.
@@ -344,14 +346,16 @@ _ACTIVE_STATUSES = ("running",)
 STOP_GATE_ENV = "HYPERRESEARCH_STOP_GATE"
 
 
-def stop_gate_decision(vault, now: datetime | None = None) -> dict | None:
+def stop_gate_decision(vault, platform: str = CODEX, now: datetime | None = None) -> dict | None:
     """The Stop hook's block decision for the newest run in `vault`, or None.
 
     Blocks only when the newest run is active, touched within
-    STOP_GATE_WINDOW, and still has a next step.
+    STOP_GATE_WINDOW, and still has a next step. `platform` selects which
+    runtime's step-file path the reason quotes (Codex and OMP both read step
+    files; Claude Code invokes skills and has no stop gate).
     """
     from hyperresearch.core.hooks import step_skill_slug
-    from hyperresearch.core.platforms import CODEX, paths_for
+    from hyperresearch.core.platforms import paths_for
     from hyperresearch.core.runs import list_runs, run_resume_position
 
     runs = list_runs(vault)
@@ -374,7 +378,7 @@ def stop_gate_decision(vault, now: datetime | None = None) -> dict | None:
     if next_step is None:
         return None
     skill = step_skill_slug(next_step) or f"step {next_step}"
-    step_file = f"{paths_for(CODEX).steps_dir}/{skill}.md"
+    step_file = f"{paths_for(platform).steps_dir}/{skill}.md"
     tag = manifest.get("vault_tag", "the current run")
     return {
         "decision": "block",

@@ -7,7 +7,7 @@ description: >
   table, the cite-checker agent judges the sampled remainder, and a second
   small patcher pass applies the findings. Runs AFTER step 14 (the patcher
   moved text and citations; audit what will actually ship) and BEFORE step
-  15 (polish sees the corrected text). Invoked via <% if platform == "codex" %>step-file read<% else %>Skill tool<% endif %>.
+  15 (polish sees the corrected text). Invoked via <% if platform == "codex" or platform == "omp" %>step-file read<% else %>Skill tool<% endif %>.
 ---
 
 # Step 14.5 — Cite-check (citation-sentence binding verification)
@@ -45,10 +45,10 @@ This parses every (sentence, citation) pair from the report — `[N]` markers (i
 
 ## Step 14.5.2 — Spawn the cite-checker
 
-Spawn ONE `hyperresearch-cite-checker` subagent<% if platform == "codex" %> (custom agent `.codex/agents/hyperresearch-cite-checker.toml`)<% else %><% endif %> (two in parallel with split index ranges when `sampled_for_llm` exceeds ~40 pairs)<% if platform == "codex" %> and wait for it (or both) to finish<% else %><% endif %>:
+Spawn ONE `hyperresearch-cite-checker` subagent<% if platform == "codex" %> (custom agent `.codex/agents/hyperresearch-cite-checker.toml`)<% elif platform == "omp" %> (subagent `.omp/agents/hyperresearch-cite-checker.md`)<% else %><% endif %> (two in parallel with split index ranges when `sampled_for_llm` exceeds ~40 pairs)<% if platform == "codex" %> and wait for it (or both) to finish<% elif platform == "omp" %> and wait for it (or both) — the result arrives as a follow-up message<% else %><% endif %>:
 
 ```
-<% if platform == "codex" %>custom_agent: hyperresearch-cite-checker   # spawn the custom agent defined in .codex/agents/hyperresearch-cite-checker.toml<% else %>subagent_type: hyperresearch-cite-checker<% endif %>
+<% if platform == "codex" %>custom_agent: hyperresearch-cite-checker   # spawn the custom agent defined in .codex/agents/hyperresearch-cite-checker.toml<% elif platform == "omp" %>agent: hyperresearch-cite-checker   # defined in .omp/agents/hyperresearch-cite-checker.md<% else %>subagent_type: hyperresearch-cite-checker<% endif %>
 prompt: |
   RESEARCH QUERY (verbatim, gospel):
   > {{paste research/runs/<vault_tag>/query.md body}}
@@ -94,4 +94,4 @@ Fix repertoire (in the findings' `suggested_fix`): swap to `correct_note_id`, so
 
 ## Next step
 
-Return to the entry skill and invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-15-polish.md<% else %>Skill(skill: "hyperresearch-15-polish")<% endif %>`.
+Return to the entry skill and invoke `<% if platform == "codex" %>cat .hyperresearch/codex/steps/hyperresearch-15-polish.md<% elif platform == "omp" %>read .hyperresearch/omp/steps/hyperresearch-15-polish.md with the read tool, in full<% else %>Skill(skill: "hyperresearch-15-polish")<% endif %>`.
