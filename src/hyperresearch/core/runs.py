@@ -34,6 +34,11 @@ MANIFEST_NAME = "run.json"
 # are no longer trustworthy (see _lacks_word_boundaries).
 _NO_WORD_BOUNDARY_AVG_TOKEN_CHARS = 15.0
 
+# Share of a text's non-ASCII characters that must sit inside long (spaceless)
+# tokens for the text to count as lacking word boundaries when the mean token
+# length alone does not trip (see _lacks_word_boundaries).
+_LONG_TOKEN_NONASCII_SHARE = 0.5
+
 
 def _lacks_word_boundaries(text: str) -> bool:
     """True if ASCII-whitespace doesn't meaningfully segment `text` into words."""
@@ -41,7 +46,28 @@ def _lacks_word_boundaries(text: str) -> bool:
     if not tokens:
         return False
     avg_token_chars = sum(len(t) for t in tokens) / len(tokens)
-    return avg_token_chars >= _NO_WORD_BOUNDARY_AVG_TOKEN_CHARS
+    if avg_token_chars >= _NO_WORD_BOUNDARY_AVG_TOKEN_CHARS:
+        return True
+    # A spaceless-script body interleaved with ASCII scaffolding (markdown
+    # tables, URLs, bracketed citation markers) is bimodal: long runs of the
+    # spaceless script plus many short ASCII tokens that pull the mean token
+    # length under the threshold, so the mean alone misses it. Look instead at
+    # where the non-ASCII characters live: when most of them sit inside long
+    # tokens, the text is spaceless-script content regardless of the ASCII
+    # scaffolding around it. This names no script, stays correct for
+    # space-delimited scripts such as Korean (whose non-ASCII characters sit in
+    # short word tokens), and does not fire on long *ASCII* tokens such as
+    # hyphenated citation keys (which contribute no non-ASCII characters).
+    nonascii_total = sum(1 for ch in text if ch > "\x7f" and not ch.isspace())
+    nonascii_in_long = sum(
+        sum(1 for ch in token if ch > "\x7f")
+        for token in tokens
+        if len(token) >= _NO_WORD_BOUNDARY_AVG_TOKEN_CHARS
+    )
+    return (
+        nonascii_total > 0
+        and nonascii_in_long / nonascii_total >= _LONG_TOKEN_NONASCII_SHARE
+    )
 
 
 def _effective_word_count(text: str, chars_per_word: float) -> float:
