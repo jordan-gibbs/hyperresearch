@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Cite-check no longer auto-passes a citation because one number matches (#150, from @jackiectl2).** The mechanical triage passed a sentence when every number in it appeared anywhere in the cited note's claims, so "Another team improves throughput by 10x" or "Async employs 10 engineers" passed on a claim about async's 10x throughput gain. A sentence with a figure of 2+ digits now passes only when it matches one of the cited note's claims or quotes in full; anything else goes to the cite-checker agent. Single-digit tokens ("Step 1", the "4" in "GPT-4") are still labels rather than figures, so those sentences keep passing on a long shared run of words. The step 14.5 skill and the cite-checker prompt describe the new rule.
+
 ## [0.13.0] - 2026-10-27
 
 - **Step prompts agree with each other (#102).** Settles the contract conflicts listed in the issue: the no-re-synthesis invariant names the ship gate's compression pass as its one exception; width-sweep fetchers take no new topic searches but still chase the primary sources their batch cites; step 7 has a documented path for fewer than the target tensions when step 4 justified zero loci; a failed critic is re-spawned once and otherwise leaves an empty `critic_failed` findings file, since the ship gate checks all four exist; the step 11 outline leaves out Opinionated Synthesis for `short` reports; the step 1 example no longer shows a wrapper requirement in the decomposition; the readability recommender writes a JSON object, matching its schema; the polish auditor receives `wrapper_contract_path` so it knows whether to keep YAML frontmatter; step 16 hands off to the ship gate instead of declaring the run done; the one-chapter case in step 1.5 is described as an escape hatch; and the cite-check Goal states that non-numeric citations are sampled.

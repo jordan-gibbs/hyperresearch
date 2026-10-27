@@ -32,7 +32,7 @@ Read these inputs:
 {hpr_path} citecheck extract <vault_tag> -j
 ```
 
-This parses every (sentence, citation) pair from the report — `[N]` markers (including grouped `[7, 12]`, one pair per source number) and `[[note-id]]` styles — and auto-passes pairs whose numbers or wording the cited note's extracted claims already confirm. Output: `research/runs/<vault_tag>/cite-check-pairs.json` with:
+This parses every (sentence, citation) pair from the report — `[N]` markers (including grouped `[7, 12]`, one pair per source number) and `[[note-id]]` styles — and auto-passes a pair only when the cited note's extracted claims already confirm it: a sentence carrying a figure of 2+ digits must match one claim or quote in full (a shared number alone can describe a different entity or metric), while a sentence with no such figure passes on a long shared run of words. Single-digit tokens such as "Step 1" or the "4" in "GPT-4" are labels, not figures. Output: `research/runs/<vault_tag>/cite-check-pairs.json` with:
 - `summary` — total / auto-passed / dangling / needs-llm counts
 - `sampled_for_llm` — the pairs the agent must judge (100% of number-bearing sentences; sampled for the rest)
 - `dangling` — citations that resolve to NO vault note

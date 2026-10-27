@@ -110,6 +110,23 @@ class TestCiteCheckExtraction:
         ]
         assert len(sample_needs_llm(triaged["pairs"], sample_rate=1.0)) == 3
 
+    @pytest.mark.parametrize(
+        ("sentence", "verdict"),
+        [
+            # Single-digit tokens are labels, not figures: the sentence
+            # takes the word-overlap path and passes on the shared run.
+            ("In step 1, async/await syntax enables concurrent I/O with a gain", "supported-mechanical"),
+            ("Like GPT-4, async/await syntax enables concurrent I/O with a gain", "supported-mechanical"),
+            # A 2+-digit figure makes the sentence numeric evidence, so the
+            # same overlap no longer suffices without a full-claim match.
+            ("In step 12, async/await syntax enables concurrent I/O with a gain", "needs-llm"),
+        ],
+    )
+    def test_single_digit_tokens_are_not_numeric_evidence(self, cited_vault, sentence, verdict):
+        pairs = extract_pairs(f"{sentence} [[python-async-patterns]].", cited_vault.db)
+        triaged = triage_pairs(pairs, cited_vault.db)
+        assert [p["verdict"] for p in triaged["pairs"]] == [verdict]
+
     def test_sampling_keeps_all_strong(self):
         pairs = [
             {"verdict": "needs-llm", "strong": True, "sentence": f"s{i}", "numbers": ["5"]}

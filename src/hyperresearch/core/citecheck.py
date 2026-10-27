@@ -143,8 +143,13 @@ def triage_pairs(pairs: list[dict], conn) -> dict:
         note_claims = _claims(pair["note_id"])
         sentence = _norm(_NUMBERED_CITE_RE.sub("", WIKI_LINK_RE.sub("", pair["sentence"])))
         sentence = sentence.strip(" .,:;")
-        if _NUMBER_RE.search(sentence):
-            # A matching number can describe a different entity or metric.
+        # Only tokens of 2+ digits/characters count as numeric evidence:
+        # "Step 1" or the "4" in "GPT-4" is a label, not a figure, so those
+        # sentences take the word-overlap path instead.
+        nums = [n for n in _NUMBER_RE.findall(sentence) if len(n.replace(",", "").rstrip(".")) >= 2]
+        if nums:
+            # A matching number can describe a different entity or metric,
+            # so a numeric sentence must match a whole cited claim or quote.
             matched = any(
                 sentence == _norm(claim[field] or "").strip(" .,:;")
                 for claim in note_claims

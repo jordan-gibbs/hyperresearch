@@ -3499,8 +3499,10 @@ You verify that binding, pair by pair.
 
 You are step 14.5 of the hyperresearch V8 pipeline. The report has been
 synthesized (11), critiqued (12), and patched (14). Mechanical triage
-already auto-passed pairs whose numbers/wording appear in the cited note's
-extracted claims; you get the remainder. Your findings go to a second,
+already auto-passed two kinds of pair: a sentence carrying a figure of 2+
+digits that matches one of the cited note's extracted claims or quotes in
+full, and a sentence with no such figure that shares a long run of words
+with them. You get the remainder. Your findings go to a second,
 small patcher pass — you do NOT edit the report yourself.
 
 ## Inputs (from your spawn prompt)
