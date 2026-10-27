@@ -52,7 +52,13 @@ def _get_matching_notes(vault, status=None, tag=None, parent=None, note_type=Non
         f"SELECT n.id, n.path, n.title FROM notes n WHERE {where} ORDER BY n.title",
         params,
     ).fetchall()
-    return [dict(r) for r in rows]
+    # A header-less final report is indexed from derived metadata and cannot
+    # take a frontmatter write. The batch commands write in a bare loop, so
+    # it is left out of the selection here rather than refused halfway
+    # through; dry-run previews and "modified" lists stay truthful too.
+    from hyperresearch.core.frontmatter import is_frontmatterless_report
+
+    return [dict(r) for r in rows if not is_frontmatterless_report(vault.root / r["path"])]
 
 
 def _batch_update_files(vault, notes: list[dict], updates: dict) -> tuple[list[str], list[dict]]:
@@ -75,7 +81,7 @@ def _batch_update_files(vault, notes: list[dict], updates: dict) -> tuple[list[s
 
 def _update_file_frontmatter(vault_root: Path, rel_path: str, updates: dict) -> None:
     """Read a note file, patch its frontmatter, write it back."""
-    from hyperresearch.core.frontmatter import parse_frontmatter, serialize_frontmatter
+    from hyperresearch.core.frontmatter import parse_frontmatter, write_frontmatter
 
     file_path = vault_root / rel_path
     content = file_path.read_text(encoding="utf-8-sig")
@@ -91,8 +97,7 @@ def _update_file_frontmatter(vault_root: Path, rel_path: str, updates: dict) -> 
             setattr(meta, key, value)
 
     meta.updated = datetime.now(UTC)
-    new_content = serialize_frontmatter(meta) + "\n" + body
-    file_path.write_text(new_content, encoding="utf-8")
+    write_frontmatter(file_path, meta, body, vault_root)
 
 
 # --- Tag operations ---

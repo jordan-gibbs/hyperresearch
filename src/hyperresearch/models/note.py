@@ -148,3 +148,7 @@ class Note(BaseModel):
     content_hash: str = ""
     word_count: int = 0
     outgoing_links: list[str] = Field(default_factory=list)
+    # True when read_note() derived `meta` from the file instead of parsing
+    # a header (the header-less final report); sync keeps such a row's
+    # `created` across re-syncs.
+    meta_derived: bool = False
