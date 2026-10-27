@@ -32,6 +32,7 @@ dependencies = [
     "Crawl4AI>=0.7.3",
     "pymupdf>=1.24",
     "httpx>=0.27",
+    "idna",
 ]
 
 [project.optional-dependencies]

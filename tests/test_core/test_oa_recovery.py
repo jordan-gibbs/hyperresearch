@@ -131,7 +131,9 @@ class TestCheckOaUrl:
 
         monkeypatch.setattr(socket, "getaddrinfo", boom)
         ok, reason = oa.check_oa_url("https://nowhere.example.org/p.pdf")
-        assert ok is False and "DNS resolution failed" in reason
+        # check_url turns resolver errors into SafeHTTPError, so the refusal
+        # carries the gate's reason.
+        assert ok is False and "DNS lookup failed" in reason
 
 
 class TestNeedsRecovery:

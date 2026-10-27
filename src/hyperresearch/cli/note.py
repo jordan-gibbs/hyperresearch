@@ -38,7 +38,7 @@ def note_new(
     import sys
     from pathlib import Path as P
 
-    from hyperresearch.core.note import write_note
+    from hyperresearch.core.note import indexed_note_ids, write_note
     from hyperresearch.core.vault import Vault
     from hyperresearch.models.note import ContentType, Tier, slugify
 
@@ -116,11 +116,13 @@ def note_new(
             console.print(f"[yellow]Template '{template}' not found, using default.[/]")
             path = write_note(vault.notes_dir, title, body=body, tags=tags, status=status,
                               note_type=note_type, parent=parent, summary=summary,
-                              source=source, tier=tier, content_type=content_type)
+                              source=source, tier=tier, content_type=content_type,
+                              taken_ids=indexed_note_ids(vault.db))
     else:
         path = write_note(vault.notes_dir, title, body=body, tags=tags, status=status,
                           note_type=note_type, parent=parent, summary=summary,
-                          source=source, tier=tier, content_type=content_type)
+                          source=source, tier=tier, content_type=content_type,
+                          taken_ids=indexed_note_ids(vault.db))
 
     # Sync the new file into the DB so type/tags are indexed immediately
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
