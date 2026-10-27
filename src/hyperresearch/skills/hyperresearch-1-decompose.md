@@ -73,7 +73,7 @@ Read both before starting. The vault_tag is in the scaffold's "Run config" secti
     "5-tier support/resistance table"
   ],
   "required_sections": [
-    "## Opinionated Synthesis (if wrapper_contract demands it)"
+    "## Risks and Open Questions (the prompt asks for one)"
   ],
   "required_section_headings": [
     "## 1. Major Manufacturers, Device Models, and Configurations",

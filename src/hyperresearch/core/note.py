@@ -82,6 +82,11 @@ def _collision_id(base: str, counter: int) -> str:
     return slugify(f"{trimmed.rstrip('-')}{suffix}")
 
 
+def indexed_note_ids(conn) -> set[str]:
+    """Every id the notes table holds, for ``write_note(taken_ids=...)``."""
+    return {row["id"] for row in conn.execute("SELECT id FROM notes")}
+
+
 def write_note(
     notes_dir: Path,
     title: str,
@@ -97,6 +102,7 @@ def write_note(
     tier: str | None = None,
     content_type: str | None = None,
     extra_frontmatter: dict | None = None,
+    taken_ids: set[str] | None = None,
 ) -> Path:
     """Create a new note file on disk. Returns the file path.
 
@@ -105,6 +111,11 @@ def write_note(
         tier: Epistemic role — ground_truth|institutional|practitioner|commentary|unknown.
         content_type: Artifact kind — paper|docs|article|blog|forum|dataset|policy|code|book|transcript|review|unknown.
         extra_frontmatter: Additional fields to set on NoteMeta (e.g. source_domain, fetched_at).
+        taken_ids: Ids to skip even when no file of that name exists, such as
+            the ids already in the notes table. A note keeps its id when its
+            file is renamed (`note mv`), so `<id>.md` can be free on disk while
+            the id is not; a note written there is refused by sync as an id
+            collision.
     """
     # The id must be a fixed point of the slugifier. NoteMeta.ensure_slug
     # already slugifies the FRONTMATTER id, so an unslugified note_id here
@@ -142,7 +153,8 @@ def write_note(
 
     file_path = target_dir / f"{nid}.md"
     counter = 2
-    while file_path.exists():
+    taken = taken_ids or set()
+    while file_path.exists() or meta.id in taken:
         candidate = _collision_id(nid, counter)
         file_path = target_dir / f"{candidate}.md"
         meta.id = candidate
@@ -163,6 +175,15 @@ def strip_markdown(text: str) -> str:
     text = re.sub(r"\[\[([^\]|]+)\|([^\]]+)\]\]", r"\2", text)
     text = re.sub(r"\[\[([^\]]+)\]\]", r"\1", text)
     text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
-    text = re.sub(r"<[^>]+>", "", text)
+    # Only spans that START like markup are tags: `<` followed by a tag-name
+    # letter, `/` plus a letter (closing tag), `!` (comment, doctype) or `?`
+    # (processing instruction). `<[^>]+>` also ate numeric comparisons, so a
+    # datasheet's `<22.5 V DC ... UIN >23.5 V` was indexed as `23.5 V` and the
+    # search text showed a different threshold from the note. A `<` followed
+    # by a letter still opens a span, so `a<b and c>d` is removed as before.
+    # A closing `>` is still required: an unterminated tag survives into
+    # body_plain whole, which tests/test_serve/test_xss.py asserts as its
+    # premise.
+    text = re.sub(r"<(?:/?[A-Za-z]|!|\?)[^>]*>", "", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()

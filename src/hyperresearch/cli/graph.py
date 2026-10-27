@@ -191,7 +191,7 @@ def graph_stub(
     json_output: bool = typer.Option(False, "--json", "-j", help="JSON output"),
 ) -> None:
     """Create stub notes for all broken [[links]]."""
-    from hyperresearch.core.note import stub_summary, write_note
+    from hyperresearch.core.note import indexed_note_ids, stub_summary, write_note
     from hyperresearch.core.vault import Vault
 
     vault = Vault.discover()
@@ -232,6 +232,9 @@ def graph_stub(
             note_id=target,
             status="draft",
             summary=stub_summary(target),
+            # The resolver never matches a ref by its slug, so a broken
+            # [[foo bar]] can slugify to an id another note already holds.
+            taken_ids=indexed_note_ids(vault.db),
         )
         created.append({"id": target, "title": title, "path": path.relative_to(vault.root).as_posix()})
 
