@@ -14,6 +14,8 @@ OpenAI Codex (`platform="codex"`): the same prompts rendered with
 `.codex/agents/` (translated by core/codex.py; no browser-fetcher — it needs
 Claude-in-Chrome), and a Stop hook in `.codex/hooks.json` runs
 `hyperresearch run stop-gate`. See core/platforms.py for the path table.
+The Claude Code install adds the same Stop hook to `.claude/settings.json`
+(`run stop-gate`), beside the PreToolUse hook.
 """
 
 from __future__ import annotations
@@ -3681,6 +3683,7 @@ def install_hooks(
         ])
     return _run_installers([
         lambda: _install_claude_hook(vault_root, hpr_path),
+        lambda: _install_claude_stop_hook(vault_root, hpr_path),
         lambda: _install_hyperresearch_skill(vault_root, hpr_path),
         lambda: _install_hyperresearch_step_skills(vault_root, hpr_path),
         *agents,
@@ -3826,6 +3829,38 @@ def _install_claude_hook(vault_root: Path, hpr_path: str) -> str | None:
 
     settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     return "Claude Code: .claude/settings.json (PreToolUse hook)"
+
+
+def _install_claude_stop_hook(vault_root: Path, hpr_path: str) -> str | None:
+    """Merge the stop-gate Stop hook into .claude/settings.json.
+
+    A headless `claude -p` run can end on a text-only turn mid-pipeline just
+    as `codex exec` can. The command is the Codex one; the gate tells the two
+    apart by the hook input. Only our own Stop entry is replaced; a settings
+    file that does not parse as a JSON object is left alone.
+    """
+    from hyperresearch.core.codex import merge_stop_hook
+
+    settings_path = vault_root / ".claude" / "settings.json"
+    settings: dict = {}
+    if settings_path.exists():
+        try:
+            loaded = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            loaded = None
+        if not isinstance(loaded, dict):
+            return (
+                "Claude Code: .claude/settings.json is not a JSON object; Stop hook "
+                "NOT installed (fix the file, then re-run install)"
+            )
+        settings = loaded
+
+    merged = merge_stop_hook(settings, hpr_path)
+    if merged == settings:
+        return None
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    return "Claude Code: .claude/settings.json (Stop hook: run stop-gate)"
 
 
 def _write_agent_file(

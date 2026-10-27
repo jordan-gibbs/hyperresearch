@@ -330,6 +330,7 @@ hyperresearch run verify <tag> -j    # Ship gate: headings, length, citation den
 - **Retractions block the ship.** Citing a retracted source without acknowledging the retraction is a hard error at the final gate
 - **Schema integrity.** `tier`, `content_type`, and `type` are SQLite CHECK-constrained vocabularies; corrupted frontmatter cannot poison the index
 - **Hygiene leaks caught on the way out.** Scaffold sections, YAML frontmatter, and prompt echoes are stripped by step 15 before ship
+- **No quiet early exit.** A Stop hook (`hyperresearch run stop-gate`, in `.claude/settings.json` and `.codex/hooks.json`) blocks the session from ending while the newest run is mid-pipeline, once per stop; `HYPERRESEARCH_STOP_GATE=0` turns it off
 - **Fetched text is data, never instructions.** Web-fetched bodies are served inside an `<untrusted-source>` fence on both `note show` and `search`, so a page telling the agent to ignore its instructions is read as content
 
 ---
