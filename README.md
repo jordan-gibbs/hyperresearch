@@ -54,7 +54,7 @@ These are the same kind of Deep runs that put Hyperresearch at #1 on DRACO. Meth
 - **Every citation is verified before the report ships.** A skeptical cite-checker audits whether each cited source actually supports its sentence. Hallucinated quotes and unacknowledged retractions are hard blocks at the gate.
 - **Syndication doesn't count as consensus.** An independence audit clusters derivative copies, so five reprints of one press release argue with the weight of one source.
 - **Adversarial by construction.** Four critics attack every draft in parallel, and a tool-locked patcher can only apply surgical edits. It physically cannot rewrite the report.
-- **Eight scholarly sources, one query.** `hpr scholar search` hits OpenAlex, Crossref, CORE, DOAB, ClinicalTrials.gov, SEC EDGAR and FRED through one client layer and returns a single list deduplicated by DOI and title. Books, trials and filings come back alongside papers, each tagged so the pipeline knows which is which. The humanities and social sciences are covered on purpose, not as an afterthought.
+- **Nine scholarly sources, one query.** `hpr scholar search` hits OpenAlex, Crossref, CORE, the Firecrawl Research Index, DOAB, ClinicalTrials.gov, SEC EDGAR and FRED through one client layer and returns a single list deduplicated by DOI and title. Books, trials and filings come back alongside papers, each tagged so the pipeline knows which is which. The humanities and social sciences are covered on purpose, not as an afterthought.
 - **Paywalled papers get read, not skimmed.** A closed paper normally enters a vault as a 1,500-character abstract that the report then cites as though it had been read. Hyperresearch asks Unpaywall, Europe PMC and CORE for a legal open-access copy and stores the full text instead, even when the publisher blocks the fetch outright. Every substitution is disclosed in the note, the frontmatter, and the CLI output.
 - **Nothing is thrown away.** Every source lands in a searchable markdown-plus-SQLite vault that your next session reuses before it fetches anything new.
 - **Crashed runs resume.** Each run keeps a manifest; `run resume` picks up at the exact step where it died.
@@ -379,7 +379,7 @@ LinkedIn, Twitter, Facebook, Instagram, and TikTok automatically use a visible b
 
 ---
 
-## Scholarly discovery: eight sources, one query, one deduplicated list
+## Scholarly discovery: nine sources, one query, one deduplicated list
 
 For any topic with a research literature, search the scholarly sources BEFORE web search. They return citation-ranked canonical works; web search returns derivative commentary. That advice used to be delivered as a list of URL templates the agent was trusted to assemble by hand — no retry, no rate limiting, no dedup, no tests. It is now a real client layer:
 
@@ -397,6 +397,7 @@ One call queries every configured source, merges records that are the same work 
 - **[OpenAlex](https://openalex.org/)** — ~250M works across every discipline, including books, book chapters and theses. The right default outside STEM, where the incumbent tools are weakest.
 - **[Crossref](https://www.crossref.org/)** — the DOI registry itself. Authoritative metadata for ~160M registered works, including registrations too new for anything else to have indexed.
 - **[CORE](https://core.ac.uk/)** — the largest open-access full-text aggregator. Hosts the text rather than linking to it, so it is also a full-text resolver (below). Needs a key: `CORE_API_KEY`.
+- **[Firecrawl Research Index](https://docs.firecrawl.dev/features/research)** — ~43M paper abstracts: PubMed, PMC, bioRxiv and medRxiv for the life sciences, arXiv for physics, mathematics and computer science, searched with a natural-language question. Not an OpenAlex substitute: no humanities, social science or books, and its hits carry no authors or venue, so they merge into the OpenAlex and Crossref records by DOI. arXiv ids and dated bioRxiv/medRxiv DOIs supply the year. No key needed; `FIRECRAWL_API_KEY` raises the rate limit.
 - **[DOAB](https://directory.doabooks.org/)** — peer-reviewed open-access scholarly books and chapters. The only source here that finds *the book* rather than a review of it, which matters because in the humanities the book, not the article, is the unit of publication.
 - **RePEc** — listed so the gap is visible rather than silent. Their API [has no search function](https://ideas.repec.org/api.html); `hpr scholar sources` says so and points at OpenAlex and Crossref for the DOI-bearing series.
 
