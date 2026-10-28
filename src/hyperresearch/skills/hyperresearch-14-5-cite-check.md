@@ -14,7 +14,7 @@ description: >
 
 **Tier gate:** Runs for `full` and `dissertation`. SKIP for `light` — a light report's citation volume doesn't justify the pass; the `quote-integrity` and `numeric-consistency` lint rules still cover it mechanically at the step-15 gate.
 
-**Goal:** every citation that ships either supports its sentence or gets fixed. This is the difference between "has citations" and "citations are true bindings" — the single thing external fact-checkers actually measure.
+**Goal:** every citation the check covers — all dangling citations, every number-bearing sentence, and a sample of the rest — either supports its sentence or gets fixed. This is the difference between "has citations" and "citations are true bindings" — the single thing external fact-checkers actually measure.
 
 ---
 

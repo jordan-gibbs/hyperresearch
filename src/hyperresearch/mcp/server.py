@@ -296,7 +296,7 @@ def list_sources(domain: str = "", limit: int = 50) -> str:
 
 
 @server.tool()
-def fetch_url(url: str, tags: str = "", provider: str = "") -> str:
+async def fetch_url(url: str, tags: str = "", provider: str = "") -> str:
     """Fetch a URL and save it as a research note.
 
     Args:
@@ -304,17 +304,21 @@ def fetch_url(url: str, tags: str = "", provider: str = "") -> str:
         tags: Comma-separated tags (e.g. "ml,transformers")
         provider: Web provider override (leave empty for default)
     """
-    from hyperresearch.core.fetcher import fetch_and_save
+    import anyio
+
+    from hyperresearch.core.fetcher import prepare_fetch, save_fetched
 
     vault = _get_vault()
     vault.auto_sync()
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
     try:
-        result = fetch_and_save(
-            vault, url, tags=tag_list,
-            provider_name=provider or None,
-        )
+        # Only the network fetch leaves the loop thread (#118): a sync fetch here
+        # stalls every other request, and the vault's sqlite connection only
+        # works on the thread that opened it, so prepare/save stay on this one.
+        prov = prepare_fetch(vault, url, provider_name=provider or None)
+        fetched = await anyio.to_thread.run_sync(prov.fetch, url)
+        result = save_fetched(vault, url, prov, fetched, tags=tag_list)
         return json.dumps({"ok": True, "data": result})
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e), "error_code": "DUPLICATE_URL"})

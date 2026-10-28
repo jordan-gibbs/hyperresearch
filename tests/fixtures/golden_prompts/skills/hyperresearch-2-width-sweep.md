@@ -142,8 +142,10 @@ prompt: |
 
   PIPELINE POSITION: You are step 2 (width-sweep fetcher) of the
   hyperresearch V8 pipeline. The orchestrator partitioned the URL queue into
-  non-overlapping batches; you fetch ONLY the URLs in your batch. Do not
-  search for additional URLs. After you return, the orchestrator runs a
+  non-overlapping batches; your batch is closed to new topic searches. Fetch
+  the URLs in your batch, then chase the primary sources those pages cite
+  (your Phase 2 citation-chasing, within its cap). Do not run new searches
+  for other URLs on the topic. After you return, the orchestrator runs a
   coverage check (step 2.5) and may dispatch wave 2 fetchers.
 
   YOUR INPUTS:
@@ -154,7 +156,7 @@ prompt: |
   RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/research.md here, verbatim.
 ```
 
-**CRITICAL: no token waste.** Each fetcher gets ONLY its batch. No fetcher searches for new URLs or duplicates another fetcher's work. If a fetcher finishes early, it's done.
+**CRITICAL: no token waste.** Each fetcher gets ONLY its batch, plus the primary sources its batch pages cite (citation-chasing stays mandatory, within the fetcher's cap). No fetcher runs new topic searches or duplicates another fetcher's work. If a fetcher finishes early, it's done.
 
 **CRITICAL: never emit bare text while waiting.** In `-p` mode, a text-only response triggers `end_turn`.
 

@@ -136,16 +136,132 @@ def test_check_url_rejects_parse_only_loopback_bypasses(url):
     ],
 )
 def test_check_url_rejects_resolver_dependent_loopback_bypasses(url):
-    """`ipaddress.ip_address` rejects these numeric encodings, so they fall to
-    the resolver, which normalizes them to 127.0.0.1. getaddrinfo is stubbed
-    so the test is deterministic and offline. This pins the contract that such
-    forms are *resolved and gated*, not parsed as public — a regression that
-    made `_resolve` parse the literal itself (e.g. via inet_aton) would need to
-    keep blocking them."""
+    """`ipaddress.ip_address` rejects these encodings. The numeric ones are
+    refused before any lookup (a browser parses them as IPv4 in its own
+    grammar); the rest fall to the resolver, which normalizes them to
+    127.0.0.1. getaddrinfo is stubbed so the test is deterministic and
+    offline. Either way they are never parsed as public."""
     with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
         gai.return_value = [(socket.AF_INET, None, None, "", ("127.0.0.1", 0))]
-        with pytest.raises(SafeHTTPError, match="non-public address"):
+        with pytest.raises(SafeHTTPError, match=r"non-public address|numeric host"):
             check_url(url)
+
+
+# ---------------------------------------------------------------------------
+# check_url — RFC 3986 (urlparse, httpx) vs WHATWG (Chromium) disagreements.
+# The crawl4ai lane hands the URL to Chromium, so a spelling the parsers
+# disagree on lets the gate approve one host while the browser connects to
+# another. getaddrinfo is stubbed to a public address: if the gate fell
+# through to resolution, these would be allowed.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def public_dns():
+    with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
+        gai.return_value = [(socket.AF_INET, None, None, "", ("93.184.216.34", 0))]
+        yield gai
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1\\@evil.com/",  # urlparse/httpx: evil.com; Chromium: 127.0.0.1
+        "HTTPS://127.0.0.1\\@evil.com/",
+        "http://127.0.0.1:80\\@evil.com/",
+        "http://user@127.0.0.1\\@evil.com/",
+        "http://169.254.169.254\\@evil.com/latest/meta-data/",
+        "http://127.0.0.1\\@evil.com",  # no path at all
+        " http://127.0.0.1\\@evil.com/",  # after the leading-whitespace strip
+    ],
+)
+def test_check_url_refuses_backslash_in_authority(url, public_dns):
+    with pytest.raises(SafeHTTPError, match="backslash in the authority"):
+        check_url(url)
+
+
+def test_check_url_backslash_then_private_userinfo_host_still_refused():
+    """The mirror image: the RFC parsers see 127.0.0.1, Chromium sees
+    evil.com. Fetching it would be harmless in the browser, but the gate
+    must not let it through on any lane."""
+    with pytest.raises(SafeHTTPError):
+        check_url("http://evil.com\\@127.0.0.1/")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://example.com/path\\with\\backslash",
+        "https://example.com/a?q=C:\\dir\\file",
+        "https://example.com/#frag\\x",
+        "https://example.com?\\@127.0.0.1",
+    ],
+)
+def test_check_url_allows_backslash_after_the_authority(url, public_dns):
+    """Past the first '/', '?' or '#', every parser is in the path, query or
+    fragment. Chromium turns a path backslash into '/', which changes the
+    path but cannot move the host, so these stay fetchable."""
+    check_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["http:\\\\127.0.0.1/", "http:/\\127.0.0.1/", "http:/127.0.0.1/", "http:127.0.0.1/"],
+)
+def test_check_url_refuses_whatwg_only_authority_forms(url):
+    """WHATWG finds a host in all of these (it skips any mix of slashes and
+    backslashes after a special scheme); the RFC parsers find none."""
+    with pytest.raises(SafeHTTPError, match="no hostname"):
+        check_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1\t@evil.com/",  # WHATWG strips tab/newline anywhere
+        "http://127.0.0.1\n@evil.com/",
+        "http://127.0.0.1\r\\@evil.com/",
+        "http://127.0.0.1\x00@evil.com/",
+    ],
+)
+def test_check_url_refuses_control_characters_inside_the_url(url, public_dns):
+    with pytest.raises(SafeHTTPError, match="unparseable"):
+        check_url(url)
+
+
+@pytest.mark.parametrize(
+    "url", ["http://127.0.0.%31/", "http://%31%32%37.0.0.1/", "http://%6cocalhost/"]
+)
+def test_check_url_refuses_percent_encoded_host(url, public_dns):
+    """Chromium percent-decodes the host; httpx and getaddrinfo do not."""
+    with pytest.raises(SafeHTTPError, match="percent-encoded hostname"):
+        check_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.1/",
+        "http://0x7f.1/",
+        "http://0177.0.0.1/",
+        "http://127.0.0.1./",
+        "http://example.0x10/",
+        "http://1.2.3.4.5/",
+    ],
+)
+def test_check_url_refuses_non_canonical_numeric_host(url, public_dns):
+    """WHATWG reads a host whose last label is numeric as IPv4 in its own
+    grammar; getaddrinfo's reading varies by platform and may fall to DNS.
+    httpx itself rejects some of these ("Invalid IPv4")."""
+    with pytest.raises(SafeHTTPError, match=r"numeric host|Invalid IPv4"):
+        check_url(url)
+
+
+@pytest.mark.parametrize(
+    "url", ["http://8.8.8.8/", "http://example.com/", "http://a1.example.com/", "http://x.com123/"]
+)
+def test_check_url_numeric_rule_spares_ordinary_hosts(url, public_dns):
+    check_url(url)
 
 
 def test_check_url_uppercase_http_scheme_is_normalized_then_ip_gated():

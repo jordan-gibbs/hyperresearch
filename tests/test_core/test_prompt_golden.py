@@ -110,6 +110,11 @@ Deliberate deviations already folded into the goldens (2026-07-19):
     the agent prompts' placeholder, which install resolves to the CLI's
     absolute path. These goldens pin the pre-install render, so they hold
     the placeholder.
+  - Prompt contract wording (#102): the router's invariant 2 names the
+    ship gate's compression pass as its exception; width-sweep fetchers
+    keep citation-chasing inside a batch closed to new topic searches;
+    step 16 writes recommendations as a JSON object and hands off to the
+    ship gate instead of declaring the run done.
 """
 
 from __future__ import annotations

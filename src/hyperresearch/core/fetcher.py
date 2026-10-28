@@ -99,11 +99,32 @@ def fetch_and_save(
         ValueError: If URL is already fetched.
         RuntimeError: If fetch fails, or sync does not index the new note.
     """
-    from hyperresearch.core.note import indexed_note_ids, write_note
-    from hyperresearch.core.sync import compute_sync_plan, execute_sync
+    prov = prepare_fetch(vault, url, provider_name=provider_name, visible=visible)
+    result = prov.fetch(url)
+    return save_fetched(
+        vault, url, prov, result,
+        tags=tags, title=title, parent=parent, save_assets=save_assets,
+    )
+
+
+def prepare_fetch(
+    vault,
+    url: str,
+    provider_name: str | None = None,
+    visible: bool = False,
+):
+    """Refuse a duplicate URL and build the provider that will fetch it.
+
+    ``fetch_and_save`` is prepare -> ``prov.fetch(url)`` -> ``save_fetched``.
+    The split lets the MCP server run only the network fetch in a worker
+    thread while the DB work stays on its loop thread, where the sqlite
+    connection was opened (#118).
+
+    Raises:
+        ValueError: If URL is already fetched.
+    """
     from hyperresearch.web.base import get_provider
 
-    tags = tags or []
     conn = vault.db
 
     # Check if URL already fetched (an orphaned row — note deleted — is not a duplicate)
@@ -128,8 +149,29 @@ def fetch_and_save(
         settings=vault.config.fetch,
         gates=vault.config.junk,
     )
+    return prov
 
-    result = prov.fetch(url)
+
+def save_fetched(
+    vault,
+    url: str,
+    prov,
+    result,
+    tags: list[str] | None = None,
+    title: str | None = None,
+    parent: str | None = None,
+    save_assets: bool = False,
+) -> dict:
+    """Gate a fetched ``result`` and save it as a research note. Returns result dict.
+
+    Raises:
+        RuntimeError: If the result is a login wall or junk.
+    """
+    from hyperresearch.core.note import indexed_note_ids, write_note
+    from hyperresearch.core.sync import compute_sync_plan, execute_sync
+
+    tags = tags or []
+    conn = vault.db
 
     # Detect login redirects — abort, but escalate to the browser lane
     if result.looks_like_login_wall(url, vault.config.junk):
