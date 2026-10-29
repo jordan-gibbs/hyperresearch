@@ -377,6 +377,40 @@ class TestCJKLengthCheck:
             "[[dagitty-a-graphical-tool-for-analyzing-causal-diagrams-semantic-scholar]] " * 15
         )
 
+    def test_lacks_word_boundaries_cjk_report_with_tables_urls_and_citations(self):
+        """Regression: a real Japanese report body is prose interleaved with
+        markdown tables, URLs and ``[N]`` citation markers. Those inject many
+        short ASCII whitespace-delimited tokens; an average-token-length
+        detector is dragged below its threshold and misreads the report as
+        English, failing length-in-range on a near-zero word count. The
+        detector must still see the long spaceless prose runs."""
+        from hyperresearch.core.runs import _lacks_word_boundaries
+
+        prose = (
+            "修繕費用の相場は地域と施工内容で大きく異なり、"
+            "一般的な外壁塗装では延床面積に応じて見積もりが変動する。"
+        ) * 40
+        table = "\n| 項目 | 金額 | 出典 |\n| --- | --- | --- |\n" + (
+            "| 外壁塗装 | 80万円 | [1] |\n| 屋根 | 50万円 | [2] |\n" * 20
+        )
+        urls = (
+            "\n参考: https://example.com/reform/price/estimate?area=tokyo&type=gaiheki [3]\n"
+            * 15
+        )
+        citations = " ".join(f"[{i}]" for i in range(1, 60))
+        report = prose + table + urls + citations
+        assert _lacks_word_boundaries(report)
+
+        # The inverse must hold too: a predominantly-English report that only
+        # mentions a few Japanese terms is still word-segmented English and
+        # must NOT be pushed onto the character-count path.
+        mostly_english = (
+            "This report analyzes reform pricing across regions. "
+            "It cites the term 外壁塗装 a few times but is otherwise English prose "
+            "with ordinary spaces between every word in the body. "
+        ) * 20
+        assert not _lacks_word_boundaries(mostly_english)
+
     def test_verify_passes_cjk_report_within_char_target_despite_low_word_count(
         self, tmp_vault
     ):

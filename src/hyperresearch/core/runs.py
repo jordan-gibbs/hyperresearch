@@ -29,18 +29,40 @@ from pathlib import Path
 MANIFEST_VERSION = 1
 MANIFEST_NAME = "run.json"
 
-# Avg. chars per ASCII-whitespace token above which str.split() word counts
-# are no longer trustworthy (see _lacks_word_boundaries).
-_NO_WORD_BOUNDARY_AVG_TOKEN_CHARS = 15.0
+# Min length of a whitespace-delimited token for it to count as an unbroken
+# run of a spaceless script (one str.split() couldn't segment into words).
+_SPACELESS_RUN_MIN_CHARS = 15
+# Fraction of ALL characters that must sit in such non-ASCII runs before
+# str.split() word counts stop being trustworthy for the text as a whole.
+_SPACELESS_CHAR_RATIO = 0.3
 
 
 def _lacks_word_boundaries(text: str) -> bool:
-    """True if ASCII-whitespace doesn't meaningfully segment `text` into words."""
-    tokens = text.split()
-    if not tokens:
+    """True if ASCII-whitespace doesn't meaningfully segment `text` into words.
+
+    Structural, not a script allowlist: it measures how much of the text is
+    non-ASCII characters sitting inside long whitespace-delimited tokens --
+    i.e. unbroken runs of a script that has no inter-word spaces (Chinese,
+    Japanese, Thai, ...). Averaging token length instead (the earlier
+    approach) under-counts such runs the moment the report mixes in markdown
+    tables, URLs and ``[N]`` citation markers: those short ASCII tokens drag
+    the mean below any fixed threshold, so a half-Japanese report with a few
+    tables is misread as English and fails length-in-range on a spurious
+    word count. Long ASCII tokens (URLs, wikilink slugs) don't count because
+    only non-ASCII characters are tallied; space-delimited scripts like
+    Korean don't count because their words are short tokens.
+    """
+    if not text:
         return False
-    avg_token_chars = sum(len(t) for t in tokens) / len(tokens)
-    return avg_token_chars >= _NO_WORD_BOUNDARY_AVG_TOKEN_CHARS
+    spaceless_in_runs = sum(
+        sum(1 for c in t if ord(c) > 0x7F)
+        for t in text.split()
+        if len(t) >= _SPACELESS_RUN_MIN_CHARS
+    )
+    total_chars = len(text)
+    if total_chars == 0:
+        return False
+    return spaceless_in_runs / total_chars >= _SPACELESS_CHAR_RATIO
 
 
 def _effective_word_count(text: str, chars_per_word: float) -> float:
