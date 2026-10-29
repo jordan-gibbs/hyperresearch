@@ -24,8 +24,10 @@ on this pipeline is answering the question inline and skipping the steps.
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import yaml
 
@@ -284,6 +286,16 @@ policy:
 # ---------------------------------------------------------------------------
 
 STOP_GATE_SUBCOMMAND = "run stop-gate"
+
+
+def user_codex_home() -> Path:
+    """Codex's user-level config directory: $CODEX_HOME, else ~/.codex.
+
+    Hooks there run in every Codex session, so the per-project Stop hook
+    must never be written into it.
+    """
+    configured = os.environ.get("CODEX_HOME", "").strip()
+    return Path(configured).expanduser() if configured else Path.home() / ".codex"
 
 
 def stop_hook_command(hpr_path: str) -> str:

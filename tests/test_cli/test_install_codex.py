@@ -43,6 +43,7 @@ def test_install_target_codex(tmp_vault, monkeypatch):
 
 def test_codex_only_install_on_fresh_dir_writes_no_claude_files(tmp_path, monkeypatch):
     root = tmp_path / "fresh"
+    root.mkdir()
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["install", str(root), "--target", "codex", "--json"])
     assert result.exit_code == 0, result.stdout
@@ -54,6 +55,7 @@ def test_codex_only_install_on_fresh_dir_writes_no_claude_files(tmp_path, monkey
 
 def test_fresh_all_install_writes_both_docs(tmp_path, monkeypatch):
     root = tmp_path / "fresh"
+    root.mkdir()
     monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["install", str(root), "--target", "all", "--json"])
     assert result.exit_code == 0, result.stdout

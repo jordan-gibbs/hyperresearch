@@ -115,6 +115,10 @@ Deliberate deviations already folded into the goldens (2026-07-19):
     keep citation-chasing inside a batch closed to new topic searches;
     step 16 writes recommendations as a JSON object and hands off to the
     ship gate instead of declaring the run done.
+  - Cite-check numeric auto-pass (#150): the cite-checker's pipeline
+    position describes the tightened triage — a sentence with a 2+-digit
+    figure auto-passes only on a full claim or quote match, a sentence
+    without one on a long shared word run.
 """
 
 from __future__ import annotations

@@ -3499,8 +3499,10 @@ You verify that binding, pair by pair.
 
 You are step 14.5 of the hyperresearch V8 pipeline. The report has been
 synthesized (11), critiqued (12), and patched (14). Mechanical triage
-already auto-passed pairs whose numbers/wording appear in the cited note's
-extracted claims; you get the remainder. Your findings go to a second,
+already auto-passed two kinds of pair: a sentence carrying a figure of 2+
+digits that matches one of the cited note's extracted claims or quotes in
+full, and a sentence with no such figure that shares a long run of words
+with them. You get the remainder. Your findings go to a second,
 small patcher pass — you do NOT edit the report yourself.
 
 ## Inputs (from your spawn prompt)
@@ -3970,9 +3972,19 @@ def _install_codex_stop_hook(vault_root: Path, hpr_path: str) -> str | None:
     own entry is replaced. No PreToolUse hook: `codex exec` mishandles
     PreToolUse output, and the vault-check reminder is not worth that risk.
     """
-    from hyperresearch.core.codex import merge_stop_hook
+    from hyperresearch.core.codex import merge_stop_hook, user_codex_home
 
-    hooks_path = vault_root / ".codex" / "hooks.json"
+    codex_dir = vault_root / ".codex"
+    if codex_dir.resolve() == user_codex_home().resolve():
+        # A vault at the home directory: its .codex/ is Codex's user-level
+        # config, where the hook would gate every Codex session on the
+        # machine. The gate finds this vault from any directory below it.
+        return (
+            f"Codex: Stop hook NOT installed — {codex_dir} is Codex's user-level "
+            "config, where it would run in every Codex session"
+        )
+
+    hooks_path = codex_dir / "hooks.json"
     settings: dict = {}
     if hooks_path.exists():
         # An unreadable hooks.json holds the user's hooks in a form we cannot
@@ -3991,8 +4003,18 @@ def _install_codex_stop_hook(vault_root: Path, hpr_path: str) -> str | None:
     merged = merge_stop_hook(settings, hpr_path)
     if merged == settings:
         return None
-    hooks_path.parent.mkdir(parents=True, exist_ok=True)
-    hooks_path.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    try:
+        hooks_path.parent.mkdir(parents=True, exist_ok=True)
+        hooks_path.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        # Codex's workspace-write sandbox keeps .codex/ read-only, so the
+        # first-run bootstrap inside a session cannot add the hook.
+        hpr = hpr_path.replace("\\", "/")
+        return (
+            f"Codex: .codex/hooks.json is not writable ({exc.strerror or exc}) — Stop hook "
+            f"NOT installed. Re-run `{hpr} install --steps-only . --target codex` outside "
+            "the Codex sandbox to add it"
+        )
     return "Codex: .codex/hooks.json (Stop hook: run stop-gate)"
 
 

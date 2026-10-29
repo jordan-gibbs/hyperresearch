@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import tomllib
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -357,6 +358,54 @@ def test_stop_hook_leaves_unparseable_hooks_json_alone(tmp_vault):
     result = _install_codex_stop_hook(tmp_vault.root, "hyperresearch")
     assert result and "NOT installed" in result
     assert hooks_path.read_text(encoding="utf-8") == "{ not json"
+
+
+@pytest.mark.parametrize("via", ["CODEX_HOME", "HOME"])
+def test_stop_hook_never_lands_in_user_codex_config(tmp_path, monkeypatch, via):
+    """A vault at the home directory must not turn the Stop gate into a user-level hook."""
+    from hyperresearch.core.hooks import _install_codex_stop_hook
+
+    def set_home(path):
+        # Path.home() reads HOME on POSIX and USERPROFILE on Windows.
+        monkeypatch.setenv("HOME", str(path))
+        monkeypatch.setenv("USERPROFILE", str(path))
+
+    home = tmp_path / "home"
+    home.mkdir()
+    if via == "CODEX_HOME":
+        monkeypatch.setenv("CODEX_HOME", str(home / ".codex"))
+        set_home(tmp_path / "elsewhere")
+    else:
+        monkeypatch.delenv("CODEX_HOME", raising=False)
+        set_home(home)
+    assert Path.home() == (tmp_path / "elsewhere" if via == "CODEX_HOME" else home)
+
+    result = _install_codex_stop_hook(home, "hyperresearch")
+
+    assert result and "NOT installed" in result
+    assert not (home / ".codex" / "hooks.json").exists()
+
+
+def test_stop_hook_reports_read_only_codex_dir(tmp_vault, monkeypatch):
+    """Codex's sandbox keeps .codex/ read-only; the bootstrap must not crash on it."""
+    import errno
+    from pathlib import Path
+
+    from hyperresearch.core.hooks import _install_codex_stop_hook
+
+    real_write_text = Path.write_text
+
+    def read_only_codex(self, *args, **kwargs):
+        if self.name == "hooks.json":
+            raise OSError(errno.EROFS, "Read-only file system")
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", read_only_codex)
+
+    result = _install_codex_stop_hook(tmp_vault.root, "/opt/hpr")
+
+    assert result and "NOT installed" in result
+    assert not (tmp_vault.root / ".codex" / "hooks.json").exists()
 
 
 def test_stop_hook_command_quotes_only_paths_with_spaces():

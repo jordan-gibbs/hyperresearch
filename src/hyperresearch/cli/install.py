@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+from rich.markup import escape
 
 from hyperresearch.cli._output import console, output
 from hyperresearch.models.output import error, success
@@ -29,6 +30,11 @@ def install(
         False,
         "--steps-only",
         help="Install only the 16 step skills to <PATH>/.claude/skills/. Used internally by the entry skill bootstrap on first /hyperresearch invocation in a project. Not normally invoked by users.",
+    ),
+    create: bool = typer.Option(
+        False,
+        "--create",
+        help="Create <PATH>, and any missing parents, if it does not exist. Without it a missing path is an error, so a stale or mistyped path cannot become a new empty vault.",
     ),
     profile: str | None = typer.Option(
         None,
@@ -91,12 +97,67 @@ def install(
                 console.print(f"[red]Error:[/] {e}")
             raise typer.Exit(1)
 
+    # A missing directory is refused before anything is written. Both the
+    # steps-only and the full install create parents (the step-skill installer,
+    # `Vault.init`), and with no TTY there is no setup TUI in between, so a stale
+    # or mistyped path used to come back as a new empty vault with exit 0 while
+    # the real vault kept its old skills. An existing directory with no
+    # `.hyperresearch/` is the normal first-time install and is not affected.
+    # The check sits before the interactive setup route on purpose, so a typed
+    # path is refused the same way from a terminal; `hyperresearch setup <path>`
+    # still creates one. A file in the way, as the path itself or as one of
+    # its parents (afile/sub), is refused too, and --create cannot help there.
+    # That is decided from the path before any mkdir, not from the exception a
+    # mkdir under a file raises, which differs between platforms
+    # (NotADirectoryError on POSIX, FileExistsError on Windows:
+    # python/cpython#87038). With --create the directory is made here rather
+    # than left to the installers' own mkdir(parents=True), so a failure stays
+    # inside the JSON envelope.
+    def _require_directory(target_path: Path) -> None:
+        if target_path.is_dir():
+            return
+        # The nearest thing that exists on the way to the path.
+        nearest = next((p for p in (target_path, *target_path.parents) if p.exists()), None)
+        if nearest is not None and not nearest.is_dir():
+            if nearest == target_path:
+                msg = f"{target_path} is not a directory, so nothing was installed."
+            else:
+                msg = (
+                    f"{target_path} is under {nearest}, which is not a directory, "
+                    "so nothing was installed."
+                )
+            code = "NOT_A_DIRECTORY"
+        elif create:
+            try:
+                target_path.mkdir(parents=True, exist_ok=True)
+                return
+            except OSError as e:
+                msg = (
+                    f"{target_path} could not be created ({e.strerror or e}), "
+                    "so nothing was installed."
+                )
+                code = "CREATE_FAILED"
+        else:
+            msg = (
+                f"{target_path} does not exist, so nothing was installed. Check the path, "
+                "or pass --create to make the directory and install into it."
+            )
+            code = "PATH_NOT_FOUND"
+        if json_output:
+            output(error(msg, code), json_mode=True)
+        else:
+            # The message carries the path: escaped, or Rich reads `[x]` in it
+            # as markup.
+            console.print(f"[red]Error:[/] {escape(msg)}")
+        raise typer.Exit(1)
+
     # Steps-only path: lazy install of the 16 step skills to a project's
     # .claude/skills/ (Codex: step files in .hyperresearch/codex/steps/).
     # Called by the entry skill's bootstrap on first /hyperresearch in a
     # project (after a global install). Cheap no-op on subsequent invocations.
     if steps_only:
         target_dir = Path(path).resolve()
+        _require_directory(target_dir)
         steps_config = target_dir / ".hyperresearch" / "config.toml"
         steps_config_path = steps_config if steps_config.exists() else None
         steps_profile = _default_profile(steps_config_path)
@@ -202,6 +263,7 @@ def install(
         return
 
     root = Path(path).resolve()
+    _require_directory(root)
 
     # First-time install in an interactive terminal → run the setup TUI instead
     # (The setup TUI configures a Claude Code install; other targets skip it.)
