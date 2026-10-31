@@ -113,7 +113,12 @@ def compute_sync_plan(vault, force: bool = False) -> SyncPlan:
         if not _has_frontmatter(md_file):
             continue
         rel = md_file.relative_to(vault.root).as_posix()
-        disk_files[rel] = md_file.stat().st_mtime
+        try:
+            disk_files[rel] = md_file.stat().st_mtime
+        except FileNotFoundError:
+            # Removed since the listing (a fetch that lost a race cleans up
+            # its note): it is not on disk, so an indexed one is a delete.
+            continue
 
     # Load DB state — only catch "table not found" on fresh vaults
     db_state: dict[str, tuple[float, str]] = {}
