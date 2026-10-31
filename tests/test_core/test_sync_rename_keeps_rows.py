@@ -5,16 +5,18 @@ old path deleted and a new file that declares the same id. Sync deleted the
 old row first and inserted the id again from the new path: the delete
 cascaded the note's claims, embeddings and assets rows away and set its
 sources row to NULL, so a refetch of the URL made a duplicate note. The row
-now moves in place, as an id edit at the same path does since #159.
+now moves in place, as an id edit at the same path does since #159, when the
+new file holds the bytes the row was indexed from: a move keeps them.
 """
 
 from __future__ import annotations
 
 import os
+import sqlite3
 
 import pytest
 
-from hyperresearch.core.sync import compute_sync_plan, execute_sync
+from hyperresearch.core.sync import _upsert_note_to_db, compute_sync_plan, execute_sync
 
 NOW = "2026-09-15T00:00:00"
 URL = "https://ex.org/paper"
@@ -106,14 +108,12 @@ def _kept(note_id: str) -> dict[str, list]:
 def test_sync_moves_a_moved_notes_row_in_place(tmp_vault, old, new, declared):
     research = tmp_vault.root / "research"
     _note(tmp_vault.notes_dir / "other.md", "other", "Other", "Points at [[paper]].")
-    _note(research / old, "paper" if declared else None, "Paper", "Old body [[other]].", "tags: [t1]\n")
+    _note(research / old, "paper" if declared else None, "Paper", "Moved body [[other]].", "tags: [t1]\n")
     assert _sync(tmp_vault).errors == []
     shot = _seed_db_only_rows(tmp_vault, "paper")
 
-    # The move, with an edit in the same pass.
     (research / new).parent.mkdir(parents=True, exist_ok=True)
     os.rename(research / old, research / new)
-    _note(research / new, "paper" if declared else None, "Paper", "New body [[other]].", "tags: [t2]\n")
     result = _sync(tmp_vault)
 
     assert result.errors == []
@@ -121,12 +121,12 @@ def test_sync_moves_a_moved_notes_row_in_place(tmp_vault, old, new, declared):
     assert _rows(tmp_vault) == {"paper": f"research/{new}", "other": "research/notes/other.md"}
     assert _db_only_rows(tmp_vault) == _kept("paper")
     assert shot.read_bytes() == b"png"
-    # The rows the markdown rebuilds come from the moved file.
+    # The rows the markdown rebuilds are the moved file's.
     db = tmp_vault.db
     body = db.execute("SELECT body FROM note_content WHERE note_id = 'paper'").fetchone()["body"]
-    assert "New body" in body
-    assert [r[0] for r in db.execute("SELECT tag FROM tags WHERE note_id = 'paper'")] == ["t2"]
-    hits = db.execute("SELECT id FROM notes_fts WHERE notes_fts MATCH 'new'").fetchall()
+    assert "Moved body" in body
+    assert [r[0] for r in db.execute("SELECT tag FROM tags WHERE note_id = 'paper'")] == ["t1"]
+    hits = db.execute("SELECT id FROM notes_fts WHERE notes_fts MATCH 'moved'").fetchall()
     assert [r["id"] for r in hits] == ["paper"]
     links = {
         (r["source_id"], r["target_id"]) for r in db.execute("SELECT source_id, target_id FROM links")
@@ -183,11 +183,12 @@ def test_sync_treats_an_id_change_with_the_move_as_a_delete_and_an_add(tmp_vault
 
 
 @pytest.mark.parametrize("copy_first", [False, True])
-def test_sync_gives_a_moved_row_to_the_first_new_file_that_claims_it(tmp_vault, copy_first):
+def test_sync_gives_a_moved_row_to_the_byte_identical_claimant_first_by_path(tmp_vault, copy_first):
     """The file moved and a byte-identical copy of it appeared too: two new
-    files claim the id of the row whose file is gone. Whichever the plan
-    lists first takes the row with its children and the other collides with
-    it, as the first new file took the id before."""
+    files hold the bytes of the row whose file is gone. The one first by
+    path takes the row with its children whatever order the scan lists them
+    in, so every platform picks the same file, and the other collides with
+    it."""
     notes = tmp_vault.notes_dir
     _note(notes / "paper.md", "paper", "Paper", "Body.")
     assert _sync(tmp_vault).errors == []
@@ -198,7 +199,7 @@ def test_sync_gives_a_moved_row_to_the_first_new_file_that_claims_it(tmp_vault, 
     plan = compute_sync_plan(tmp_vault)
     # The scan order is the filesystem's. Fix it, both ways round.
     plan.to_add.sort(key=lambda p: (p.name == "copy.md") != copy_first)
-    first, second = (p.relative_to(tmp_vault.root).as_posix() for p in plan.to_add)
+    first, second = "research/notes/moved.md", "research/temp/copy.md"
     result = execute_sync(tmp_vault, plan)
 
     assert [e["path"] for e in result.errors] == [second]
@@ -277,29 +278,42 @@ def test_sync_refuses_an_id_edit_that_claims_a_moved_notes_id(tmp_vault, dest):
     assert tmp_vault.db.execute("PRAGMA foreign_key_check").fetchall() == []
 
 
-def test_sync_deletes_the_row_of_a_moved_file_that_fails_to_index(tmp_vault):
-    """A moved file whose upsert fails (a duplicate alias) is not indexed,
-    and a row left behind would point at a file that is gone. The row is
-    deleted as a delete of the old path deletes it, the pass commits with
-    the error reported, and once the file is fixed the next sync indexes
-    it at its new path."""
+def test_sync_keeps_the_row_of_a_moved_file_whose_upsert_fails(tmp_vault, monkeypatch):
+    """A moved file whose upsert fails leaves its row at the new path with
+    its children, the error is reported and the pass commits the rest.
+    Deleting the row, as a delete of the old path would, cascaded the
+    claims, embedding and asset rows away for good. The row already holds
+    the file's bytes, so the next sync has nothing left to do."""
     notes = tmp_vault.notes_dir
-    _note(notes / "paper.md", "paper", "Paper", "Body.")
+    _note(notes / "paper.md", "paper", "Paper", "Body.", "tags: [t1]\n")
     assert _sync(tmp_vault).errors == []
     _seed_db_only_rows(tmp_vault, "paper")
 
     os.rename(notes / "paper.md", notes / "moved.md")
-    _note(notes / "moved.md", "paper", "Paper", "Body.", "aliases: [dup, dup]\n")
+    _note(notes / "fresh.md", "fresh", "Fresh", "Fresh body.")
+
+    def failing_upsert(conn, note, *args, **kwargs):
+        # Fail after the writes, so the savepoint has them to undo.
+        _upsert_note_to_db(conn, note, *args, **kwargs)
+        if note.meta.id == "paper":
+            raise sqlite3.IntegrityError("simulated upsert failure")
+
+    monkeypatch.setattr("hyperresearch.core.sync._upsert_note_to_db", failing_upsert)
     result = _sync(tmp_vault)
 
     assert len(result.errors) == 1 and result.errors[0]["path"].endswith("moved.md")
-    assert "aliases" in result.errors[0]["error"]
-    assert (result.added, result.updated, result.deleted) == (0, 0, 1)
-    assert _rows(tmp_vault) == {}
+    assert "simulated upsert failure" in result.errors[0]["error"]
+    assert (result.added, result.updated, result.deleted) == (1, 0, 0)
     assert not tmp_vault.db.in_transaction
-    assert tmp_vault.db.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert _rows(tmp_vault) == {"paper": "research/notes/moved.md", "fresh": "research/notes/fresh.md"}
+    assert _db_only_rows(tmp_vault) == _kept("paper")
+    db = tmp_vault.db
+    assert [r[0] for r in db.execute("SELECT tag FROM tags WHERE note_id = 'paper'")] == ["t1"]
+    assert db.execute("PRAGMA foreign_key_check").fetchall() == []
 
-    _note(notes / "moved.md", "paper", "Paper", "Body.")
+    monkeypatch.undo()
     result2 = _sync(tmp_vault)
-    assert result2.errors == [] and result2.added == 1
-    assert _rows(tmp_vault) == {"paper": "research/notes/moved.md"}
+    assert result2.errors == []
+    assert (result2.added, result2.updated, result2.deleted) == (0, 0, 0)
+    assert _rows(tmp_vault) == {"paper": "research/notes/moved.md", "fresh": "research/notes/fresh.md"}
+    assert _db_only_rows(tmp_vault) == _kept("paper")
