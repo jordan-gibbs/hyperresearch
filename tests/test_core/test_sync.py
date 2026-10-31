@@ -533,13 +533,13 @@ def test_sync_id_rewrite_whose_upsert_fails_leaves_the_row_and_its_children_alon
 
 def test_sync_stops_the_pass_once_the_transaction_is_lost(tmp_vault):
     """A whole-transaction rollback takes the pass's earlier writes with it,
-    a delete and a rename included, while the collision maps still describe
-    them. `z.md` is gone from disk, `a.md` rewrites its id from `xid` to
-    `yid`, `b.md` then fills the capped database, `d.md` is an ordinary
-    edit, and new `c.md` and `e.md` claim `xid` and `zed`, which the maps
-    call free. Neither may land on a restored row and take its claims and
-    sources rows: the pass stops at the rollback and keeps nothing, and the
-    next sync does all six files."""
+    a move and a rename included, while the collision maps still describe
+    them. `z.md` is gone from disk and new `e.md` claims its id `zed` (a
+    move), `a.md` rewrites its id from `xid` to `yid`, `b.md` then fills the
+    capped database, `d.md` is an ordinary edit, and new `c.md` claims
+    `xid`, which the maps call free. It may not land on a restored row and
+    take its claims and sources rows: the pass stops at the rollback and
+    keeps nothing, and the next sync does all six files."""
     notes = tmp_vault.notes_dir
     _note_with_id(notes / "a.md", "xid", "A", "A body.")
     _note_with_id(notes / "b.md", "bee", "B", "B body.")
@@ -590,16 +590,16 @@ def test_sync_stops_the_pass_once_the_transaction_is_lost(tmp_vault):
     assert (result.added, result.updated, result.deleted) == (0, 0, 0)
     assert not tmp_vault.db.in_transaction
 
-    # With room again, the next sync does the whole plan: the delete goes
-    # first and takes `zed`'s claim with it, the rename moves the row with
-    # its children, and `c.md` and `e.md` get rows of their own.
+    # With room again, the next sync does the whole plan: `zed`'s row moves
+    # to `e.md` with its claim, the rename moves the row with its children,
+    # and `c.md` gets a row of its own.
     tmp_vault.db.execute("PRAGMA max_page_count = 1073741823")
     plan2 = compute_sync_plan(tmp_vault)
     assert sorted(p.name for p in plan2.to_update) == ["a.md", "b.md", "d.md"]
     assert sorted(p.name for p in plan2.to_add) == ["c.md", "e.md"]
     result2 = execute_sync(tmp_vault, plan2)
     assert result2.errors == []
-    assert (result2.added, result2.updated, result2.deleted) == (2, 3, 1)
+    assert (result2.added, result2.updated, result2.deleted) == (1, 4, 0)
     rows2 = {r["id"]: r["path"] for r in tmp_vault.db.execute("SELECT id, path FROM notes")}
     assert rows2 == {
         "yid": "research/notes/a.md",
@@ -608,7 +608,8 @@ def test_sync_stops_the_pass_once_the_transaction_is_lost(tmp_vault):
         "dee": "research/notes/d.md",
         "zed": "research/notes/e.md",
     }
-    assert [r["note_id"] for r in tmp_vault.db.execute("SELECT note_id FROM claims")] == ["yid"]
+    claims2 = sorted(r["note_id"] for r in tmp_vault.db.execute("SELECT note_id FROM claims"))
+    assert claims2 == ["yid", "zed"]
     assert [r["note_id"] for r in tmp_vault.db.execute("SELECT note_id FROM sources")] == ["yid"]
     assert tmp_vault.db.execute("PRAGMA foreign_key_check").fetchall() == []
 

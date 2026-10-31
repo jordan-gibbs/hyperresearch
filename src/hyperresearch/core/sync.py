@@ -174,8 +174,10 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
     deleted_paths = set(plan.to_delete)
     id_to_path: dict[str, str] = {}
     path_to_id: dict[str, str] = {}
-    for row in conn.execute("SELECT id, path FROM notes"):
+    gone: dict[str, tuple[str, str]] = {}  # id -> (path, hash), for rows whose file is gone
+    for row in conn.execute("SELECT id, path, content_hash FROM notes"):
         if row["path"] in deleted_paths:
+            gone[row["id"]] = (row["path"], row["content_hash"])
             continue
         id_to_path[row["id"]] = row["path"]
         path_to_id[row["path"]] = row["id"]
@@ -185,6 +187,27 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
     for p in plan.to_add:
         new_files_by_stem.setdefault(p.stem, []).append(p)
     renamed_from: set[str] = set()
+
+    # A moved file (note mv, or a plain mv) is its old path deleted and a new
+    # file that declares the same id. The first new file that claims the id
+    # of a row whose file is gone takes that row in place, so the rows only
+    # the DB holds stay with it; a delete and re-add cascaded its claims,
+    # embeddings and assets away and set its sources row to NULL. A later
+    # claimant with the row's bytes beats a first one without them: it is the
+    # file that moved, and a copy that collided before the move would
+    # otherwise take the note's row and its claims.
+    moves: dict[str, tuple] = {}  # old path -> (new file, its note)
+    for p in plan.to_add if gone else ():
+        try:
+            note = read_note(p, vault.root)
+        except Exception:
+            continue  # the add loop reads it again and reports the error
+        if note.meta.id not in gone:
+            continue
+        old_path, old_hash = gone[note.meta.id]
+        held = moves.get(old_path)
+        if held is None or (held[1].content_hash != old_hash and note.content_hash == old_hash):
+            moves[old_path] = (p, note)
 
     def _new_files_claiming(note_id: str) -> list:
         """The new files named after `note_id` whose id is `note_id`.
@@ -207,8 +230,9 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
                 claimants.append(claimant)
         return claimants
 
-    def _upsert_with_collision_check(file_path: Path) -> str | None:
-        note = read_note(file_path, vault.root)
+    def _upsert_with_collision_check(file_path: Path, note=None) -> str | None:
+        if note is None:
+            note = read_note(file_path, vault.root)
         rel = file_path.relative_to(vault.root).as_posix()
         existing = id_to_path.get(note.meta.id)
         if existing is not None and existing != rel:
@@ -308,23 +332,40 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
             )
             raise _TransactionLostError from exc
 
+    def _delete_row_at(rel_path: str) -> None:
+        try:
+            row = conn.execute("SELECT id FROM notes WHERE path = ?", (rel_path,)).fetchone()
+            if row:
+                _delete_note_from_db(conn, row["id"])
+                changed_ids.add(row["id"])
+                result.deleted += 1
+        except Exception as e:
+            _record_error(rel_path, e)
+
     try:
-        # Process deletes
+        # Process deletes; a moved file's row waits for that file.
         for rel_path in plan.to_delete:
+            if rel_path not in moves:
+                _delete_row_at(rel_path)
+
+        # Moves before updates: an id edit that claims a moved note's id then
+        # collides with the moved file instead of taking its row.
+        for old_path, (file_path, note) in moves.items():
             try:
-                row = conn.execute("SELECT id FROM notes WHERE path = ?", (rel_path,)).fetchone()
-                if row:
-                    _delete_note_from_db(conn, row["id"])
-                    changed_ids.add(row["id"])
-                    result.deleted += 1
+                if _upsert_with_collision_check(file_path, note) is not None:
+                    result.updated += 1
             except Exception as e:
-                _record_error(rel_path, e)
+                _record_error(str(file_path), e)
+            # The row is still at the old path only if the file did not
+            # index; that path's file is gone, so the row goes as a delete
+            # of it would.
+            _delete_row_at(old_path)
 
         # Updates before adds: a rename frees an id that a new file in the
         # same pass may own, so this converges in one run. It also means that
         # when an id edit and a new file claim the same id, the edit wins and
         # the new file is refused as a collision, unless the new file is named
-        # after that id (see _new_files_claiming).
+        # after that id (see _new_files_claiming) or is a moved note's file.
         for file_path in plan.to_update:
             try:
                 if _upsert_with_collision_check(file_path) is not None:
@@ -333,7 +374,10 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
                 _record_error(str(file_path), e)
 
         # Process adds
+        moved_files = {file_path for file_path, _ in moves.values()}
         for file_path in plan.to_add:
+            if file_path in moved_files:
+                continue
             try:
                 if _upsert_with_collision_check(file_path) is not None:
                     result.added += 1
