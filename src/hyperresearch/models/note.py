@@ -83,8 +83,12 @@ def slugify(text: str) -> str:
 
 
 def _yaml_scalar_str(v: Any) -> Any:
-    """Hand-written YAML reads `2024` as an int and `2024-01-01` as a date."""
-    if isinstance(v, int | float | date):  # bool is an int too
+    """Hand-written YAML reads `2024` as an int and `2024-01-01` as a date.
+
+    A YAML boolean is left for validation to reject: `tags: [no, on]` read as
+    'false' and 'true' would be written back over the user's tags.
+    """
+    if isinstance(v, int | float | date) and not isinstance(v, bool):
         return str(v)
     return v
 
