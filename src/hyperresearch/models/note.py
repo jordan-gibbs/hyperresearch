@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
 
 class NoteStatus(StrEnum):
@@ -81,6 +82,17 @@ def slugify(text: str) -> str:
     return result.rstrip("-")
 
 
+def _yaml_scalar_str(v: Any) -> Any:
+    """Hand-written YAML reads `2024` as an int and `2024-01-01` as a date.
+
+    A YAML boolean is left for validation to reject: `tags: [no, on]` read as
+    'false' and 'true' would be written back over the user's tags.
+    """
+    if isinstance(v, int | float | date) and not isinstance(v, bool):
+        return str(v)
+    return v
+
+
 class NoteMeta(BaseModel):
     """YAML frontmatter schema for a hyperresearch note."""
 
@@ -124,15 +136,45 @@ class NoteMeta(BaseModel):
     # open-access copy and nothing in it came from `source`.
     oa_recovery_kind: str | None = None
 
+    # Frontmatter keys this model does not define (authors, year, url, ...),
+    # with their YAML values, and the order of every key in the file.
+    # parse_frontmatter fills both and serialize_frontmatter writes the keys
+    # back, so rewriting one field keeps the rest of the user's frontmatter.
+    # Private, so a NoteMeta built from keyword arguments (write_note given a
+    # fetch's scraped metadata) still drops unknown keys.
+    _extra: dict[Any, Any] = PrivateAttr(default_factory=dict)
+    _key_order: list[Any] = PrivateAttr(default_factory=list)
+
     @field_validator("tags", mode="before")
     @classmethod
-    def lowercase_tags(cls, v: list[str]) -> list[str]:
-        return [t.lower().strip() for t in v]
+    def lowercase_tags(cls, v: Any) -> Any:
+        # Obsidian-style `tags: research` is a comma list, not a string to
+        # iterate character by character, and an empty `tags:` is no tags.
+        if v is None:
+            return []
+        if isinstance(v, str):
+            v = v.split(",")
+        elif not isinstance(v, list | tuple | set):
+            v = [v]
+        tags = []
+        for item in v:
+            tag = _yaml_scalar_str(item)
+            if isinstance(tag, str):
+                tag = tag.lower().strip()
+            # Empty entries are dropped. Any other non-string (a mapping, a
+            # nested list) is left for pydantic to reject with a field-level
+            # message.
+            if tag is not None and tag != "":
+                tags.append(tag)
+        return tags
 
     @field_validator("id", mode="before")
     @classmethod
-    def ensure_slug(cls, v: str) -> str:
-        if v:
+    def ensure_slug(cls, v: Any) -> Any:
+        if v is None:
+            return ""
+        v = _yaml_scalar_str(v)
+        if v and isinstance(v, str):
             return slugify(v)
         return v
 

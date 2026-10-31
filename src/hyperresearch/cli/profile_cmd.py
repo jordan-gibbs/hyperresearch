@@ -17,6 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+from rich.markup import escape
 
 from hyperresearch.cli._output import console, output
 from hyperresearch.models.output import error, success
@@ -174,10 +175,17 @@ def profile_use(
         f"  [dim]sources {profile.source_target[0]}-{profile.source_target[1]}"
         f"  {profile.time_estimate}[/]"
     )
-    if actions:
-        console.print(f"  re-rendered {len(actions)} skill/agent file(s)")
+    # A hook the installer refused (an unparseable .claude/settings.json, a
+    # read-only .codex/) comes back as a "NOT installed" note, not a rendered
+    # file, and a bare count would hide it.
+    refused = [a for a in actions if "NOT installed" in a]
+    rendered = len(actions) - len(refused)
+    if rendered:
+        console.print(f"  re-rendered {rendered} skill/agent file(s)")
     else:
         console.print("  [dim]all installed prompts already at this gear[/]")
+    for note in refused:
+        console.print(f"  [yellow]{escape(note)}[/]")
     console.print("[dim]Takes effect on the next /hyperresearch run. Revert with: hyperresearch profile use full[/]")
 
 

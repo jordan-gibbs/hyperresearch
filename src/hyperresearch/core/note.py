@@ -94,6 +94,29 @@ def indexed_note_ids(conn) -> set[str]:
     return {row["id"] for row in conn.execute("SELECT id FROM notes")}
 
 
+def create_note_file(file_path: Path, content: str) -> bool:
+    """Write ``content`` to a new file at ``file_path``; False if one is there.
+
+    Exclusive create (O_CREAT|O_EXCL), not an exists() check and a write:
+    parallel writers (fetcher waves, two MCP servers, `note new`) that pick
+    the same free name would all write it, and the last one silently replaces
+    the others while every caller reports its own note. A write that fails
+    after the create removes the file, which is ours: left partial, it would
+    hold the name, and the next writer would move to another.
+    """
+    try:
+        f = file_path.open("x", encoding="utf-8")
+    except FileExistsError:
+        return False
+    try:
+        with f:
+            f.write(content)
+    except BaseException:
+        file_path.unlink(missing_ok=True)
+        raise
+    return True
+
+
 def write_note(
     notes_dir: Path,
     title: str,
@@ -161,14 +184,11 @@ def write_note(
     file_path = target_dir / f"{nid}.md"
     counter = 2
     taken = taken_ids or set()
-    while file_path.exists() or meta.id in taken:
+    while meta.id in taken or not create_note_file(file_path, render_note(meta, body)):
         candidate = _collision_id(nid, counter)
         file_path = target_dir / f"{candidate}.md"
         meta.id = candidate
         counter += 1
-
-    content = render_note(meta, body)
-    file_path.write_text(content, encoding="utf-8")
     return file_path
 
 

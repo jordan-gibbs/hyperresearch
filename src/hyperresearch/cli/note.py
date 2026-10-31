@@ -41,7 +41,7 @@ def note_new(
     import sys
     from pathlib import Path as P
 
-    from hyperresearch.core.note import indexed_note_ids, write_note
+    from hyperresearch.core.note import create_note_file, indexed_note_ids, write_note
     from hyperresearch.core.vault import Vault
     from hyperresearch.models.note import ContentType, Tier, slugify
 
@@ -109,11 +109,10 @@ def note_new(
             target_dir.mkdir(parents=True, exist_ok=True)
             file_path = target_dir / f"{nid}.md"
             counter = 2
-            while file_path.exists():
+            while not create_note_file(file_path, rendered):
                 file_path = target_dir / f"{nid}-{counter}.md"
                 nid = f"{nid}-{counter}"
                 counter += 1
-            file_path.write_text(rendered, encoding="utf-8")
             path = file_path
         else:
             console.print(f"[yellow]Template '{template}' not found, using default.[/]")

@@ -3797,20 +3797,45 @@ def _write_hook_script(vault_root: Path, hpr_path: str) -> Path:
     return hook_path
 
 
+def _load_hook_config(path: Path) -> tuple[dict, str | None]:
+    """Read a JSON config that install merges a hook into.
+
+    Returns `(settings, None)`, with `{}` for a missing file, or `({}, problem)`
+    when the file exists but is not a JSON object we can read. Such a file
+    still holds the user's settings (JSONC comments and trailing commas are
+    common in hand-edited ones), so the caller must leave it alone: writing
+    `{}` plus our hook over it would destroy them.
+    """
+    if not path.exists():
+        return {}, None
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        return {}, f"is not UTF-8 text (byte {exc.start})"
+    except OSError as exc:
+        return {}, f"could not be read ({exc.strerror or exc})"
+    try:
+        loaded = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return {}, f"is not valid JSON (line {exc.lineno}, column {exc.colno}: {exc.msg})"
+    if not isinstance(loaded, dict):
+        return {}, "is not a JSON object"
+    return loaded, None
+
+
 def _install_claude_hook(vault_root: Path, hpr_path: str) -> str | None:
     """Install PreToolUse hook into .claude/settings.json."""
-    hook_path = _write_hook_script(vault_root, hpr_path)
-
     settings_dir = vault_root / ".claude"
-    settings_dir.mkdir(exist_ok=True)
     settings_path = settings_dir / "settings.json"
+    settings, problem = _load_hook_config(settings_path)
+    if problem:
+        return (
+            f"Claude Code: .claude/settings.json {problem}, so the PreToolUse hook was "
+            "NOT installed and the file was left unchanged. Fix it, then re-run install"
+        )
 
-    settings = {}
-    if settings_path.exists():
-        try:
-            settings = json.loads(settings_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            pass
+    hook_path = _write_hook_script(vault_root, hpr_path)
+    settings_dir.mkdir(exist_ok=True)
 
     hooks = settings.setdefault("hooks", {})
     pre_tool = hooks.setdefault("PreToolUse", [])
@@ -3985,20 +4010,12 @@ def _install_codex_stop_hook(vault_root: Path, hpr_path: str) -> str | None:
         )
 
     hooks_path = codex_dir / "hooks.json"
-    settings: dict = {}
-    if hooks_path.exists():
-        # An unreadable hooks.json holds the user's hooks in a form we cannot
-        # merge into; overwriting it would destroy them.
-        try:
-            loaded = json.loads(hooks_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            loaded = None
-        if not isinstance(loaded, dict):
-            return (
-                "Codex: .codex/hooks.json is not a JSON object — Stop hook NOT "
-                "installed (fix the file, then re-run install)"
-            )
-        settings = loaded
+    settings, problem = _load_hook_config(hooks_path)
+    if problem:
+        return (
+            f"Codex: .codex/hooks.json {problem}, so the Stop hook was NOT installed "
+            "and the file was left unchanged. Fix it, then re-run install"
+        )
 
     merged = merge_stop_hook(settings, hpr_path)
     if merged == settings:

@@ -9,16 +9,23 @@ from pathlib import Path
 MIN_TITLE_LEN = 15
 
 
-def auto_link(vault, note_ids: list[str] | None = None) -> dict:
+def auto_link(vault, note_ids: list[str] | None = None, *, dry_run: bool = False) -> dict:
     """Scan notes for mentions of other notes' titles and add wiki-links.
 
     Args:
         vault: The Vault instance.
-        note_ids: If given, only process these notes. Otherwise process all.
+        note_ids: If given, only process these notes (an empty list processes
+            none). If None, process all.
+        dry_run: Find the links but write no file.
 
     Returns:
-        Dict mapping note_id -> list of note_ids that were linked to.
+        Dict mapping note_id -> list of note_ids that were (or, on a dry run,
+        would be) linked to.
     """
+    # An empty selection (a --tag no note carries) must not widen to every note.
+    if note_ids is not None and not note_ids:
+        return {}
+
     conn = vault.db
 
     # Build reference vocabulary: {lowercase_title: note_id, lowercase_alias: note_id}
@@ -56,17 +63,19 @@ def auto_link(vault, note_ids: list[str] | None = None) -> dict:
         if not note_path.exists():
             continue
 
-        linked = _link_note(note_path, nid, ref_vocab)
+        linked = _link_note(note_path, nid, ref_vocab, dry_run=dry_run)
         if linked:
             report[nid] = linked
 
     return report
 
 
-def _link_note(note_path: Path, note_id: str, ref_vocab: dict[str, str]) -> list[str]:
+def _link_note(
+    note_path: Path, note_id: str, ref_vocab: dict[str, str], *, dry_run: bool = False
+) -> list[str]:
     """Scan a single note for mentions of other notes and append a Related section.
 
-    Returns list of note IDs that were linked.
+    Returns list of note IDs that were linked (or, on a dry run, would be).
     """
     content = note_path.read_text(encoding="utf-8-sig")
 
@@ -102,6 +111,9 @@ def _link_note(note_path: Path, note_id: str, ref_vocab: dict[str, str]) -> list
 
     # Deduplicate (multiple refs can point to same note)
     found_links = list(dict.fromkeys(found_links))
+
+    if dry_run:
+        return found_links
 
     # Append Related section if we found new links
     related_lines = "\n".join(f"- [[{nid}]]" for nid in found_links)

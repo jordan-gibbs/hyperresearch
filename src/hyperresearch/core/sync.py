@@ -113,7 +113,12 @@ def compute_sync_plan(vault, force: bool = False) -> SyncPlan:
         if not _has_frontmatter(md_file):
             continue
         rel = md_file.relative_to(vault.root).as_posix()
-        disk_files[rel] = md_file.stat().st_mtime
+        try:
+            disk_files[rel] = md_file.stat().st_mtime
+        except FileNotFoundError:
+            # Removed since the listing (a fetch that lost a race cleans up
+            # its note): it is not on disk, so an indexed one is a delete.
+            continue
 
     # Load DB state — only catch "table not found" on fresh vaults
     db_state: dict[str, tuple[float, str]] = {}
@@ -169,8 +174,10 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
     deleted_paths = set(plan.to_delete)
     id_to_path: dict[str, str] = {}
     path_to_id: dict[str, str] = {}
-    for row in conn.execute("SELECT id, path FROM notes"):
+    gone: dict[str, str] = {}  # id -> content hash, for rows whose file is gone
+    for row in conn.execute("SELECT id, path, content_hash FROM notes"):
         if row["path"] in deleted_paths:
+            gone[row["id"]] = row["content_hash"]
             continue
         id_to_path[row["id"]] = row["path"]
         path_to_id[row["path"]] = row["id"]
@@ -180,6 +187,32 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
     for p in plan.to_add:
         new_files_by_stem.setdefault(p.stem, []).append(p)
     renamed_from: set[str] = set()
+
+    def _read(file_path: Path) -> tuple:
+        # The mtime goes with the read, taken just after it: the move scan
+        # reads new files long before their upserts, and an mtime taken at
+        # the upsert would hide a write made in between from the next plan.
+        return read_note(file_path, vault.root), file_path.stat().st_mtime
+
+    # A moved file (note mv, or a plain mv) is its old path deleted and a new
+    # file with the same id and the same bytes. That file takes the row in
+    # place, so the rows only the DB holds stay with it; a delete and re-add
+    # cascaded its claims, embeddings and assets away and set its sources row
+    # to NULL. The id alone is not enough: a file that was never indexed and
+    # declares it (a refused collision copy, an import) would take a removed
+    # note's rows. A move with an edit in the same pass is a delete and an
+    # add. Byte-identical claimants go by path, so every platform picks the
+    # same one, and the others collide with it.
+    scanned: dict[Path, tuple] = {}  # new file -> _read(file), for its upsert
+    moves: dict[str, Path] = {}  # gone id -> the new file that takes its row
+    for p in sorted(plan.to_add, key=Path.as_posix) if gone else ():
+        try:
+            scanned[p] = _read(p)
+        except Exception:
+            continue  # the add loop reads it again and reports the error
+        note = scanned[p][0]
+        if gone.get(note.meta.id) == note.content_hash and note.meta.id not in moves:
+            moves[note.meta.id] = p
 
     def _new_files_claiming(note_id: str) -> list:
         """The new files named after `note_id` whose id is `note_id`.
@@ -203,7 +236,7 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
         return claimants
 
     def _upsert_with_collision_check(file_path: Path) -> str | None:
-        note = read_note(file_path, vault.root)
+        note, file_mtime = scanned.pop(file_path, None) or _read(file_path)
         rel = file_path.relative_to(vault.root).as_posix()
         existing = id_to_path.get(note.meta.id)
         if existing is not None and existing != rel:
@@ -270,7 +303,7 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
         try:
             if rename:
                 _rename_note_id(conn, old_id, note.meta.id, keep_urls, keep_assets_dir)
-            _upsert_note_to_db(conn, note, now_iso, file_mtime=file_path.stat().st_mtime)
+            _upsert_note_to_db(conn, note, now_iso, file_mtime=file_mtime)
         except Exception:
             # On some errors (SQLITE_FULL among them) SQLite has already
             # rolled back the whole transaction, savepoints included, and a
@@ -304,6 +337,24 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
             raise _TransactionLostError from exc
 
     try:
+        # A moved note's row goes to its new path first: the delete of its
+        # old path then finds no row there, and an id edit that claims its id
+        # collides with it. The file syncs as an edit of that row, so a
+        # failed upsert leaves the row, with its children, at the new path.
+        to_add = list(plan.to_add)
+        to_update = list(plan.to_update)
+        for note_id, file_path in moves.items():
+            rel = file_path.relative_to(vault.root).as_posix()
+            try:
+                conn.execute("UPDATE notes SET path = ? WHERE id = ?", (rel, note_id))
+            except Exception as e:
+                _record_error(rel, e)
+                continue
+            id_to_path[note_id] = rel
+            path_to_id[rel] = note_id
+            to_add.remove(file_path)
+            to_update.append(file_path)
+
         # Process deletes
         for rel_path in plan.to_delete:
             try:
@@ -319,8 +370,8 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
         # same pass may own, so this converges in one run. It also means that
         # when an id edit and a new file claim the same id, the edit wins and
         # the new file is refused as a collision, unless the new file is named
-        # after that id (see _new_files_claiming).
-        for file_path in plan.to_update:
+        # after that id (see _new_files_claiming) or is a moved note's file.
+        for file_path in to_update:
             try:
                 if _upsert_with_collision_check(file_path) is not None:
                     result.updated += 1
@@ -328,7 +379,7 @@ def execute_sync(vault, plan: SyncPlan) -> SyncResult:
                 _record_error(str(file_path), e)
 
         # Process adds
-        for file_path in plan.to_add:
+        for file_path in to_add:
             try:
                 if _upsert_with_collision_check(file_path) is not None:
                     result.added += 1
