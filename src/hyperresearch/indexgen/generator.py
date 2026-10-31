@@ -108,22 +108,53 @@ class IndexGenerator:
         `[[<id>]]` links resolve to it. Tags that slugify alike (c, c++, c#)
         would share a page: the one whose `_tag-<tag>` is already the slug keeps
         it, so ordinary tags keep their filenames, and the others get a digest
-        of the tag text. The digest goes first because slugify caps an id's
-        length and would cut off a suffix. Collisions are decided over every
-        tag, not only those with a page, so a page is not renamed when a
-        colliding tag reaches 3 notes.
+        of the tag text. A digest name is a slug that another tag can own (c++
+        gets `_tag-cedb1bac-c`, the slug of the tag cedb1bac-c), so slugs are
+        given out first, and a digest name that is already taken gets a counter
+        after the digest until it is free. Tags are taken in sorted order so
+        every build gives the same names. The digest and counter go first
+        because slugify caps an id's length and would cut off a suffix.
+        Collisions are decided over every tag, not only those with a page, so a
+        page is not renamed when a colliding tag reaches 3 notes.
+
+        Names are compared uppercased because macOS and Windows treat names
+        that differ only in case as one file, and lower() leaves pairs such as
+        the micro sign and Greek mu, or final and medial sigma, apart. upper()
+        also joins dotless and dotted i, as Windows does, which casefold()
+        keeps apart. Of two tags whose `_tag-<tag>` are such a pair, the first
+        in sorted order keeps its name.
         """
+        rows = self.vault.db.execute("SELECT DISTINCT tag FROM tags ORDER BY tag")
+        tags = [r["tag"] for r in rows]
         by_slug: dict[str, list[str]] = {}
-        for r in self.vault.db.execute("SELECT DISTINCT tag FROM tags"):
-            by_slug.setdefault(slugify(f"_tag-{r['tag']}"), []).append(r["tag"])
+        for tag in tags:
+            by_slug.setdefault(slugify(f"_tag-{tag}"), []).append(tag)
+        # A tag whose `_tag-<tag>` is the slug claims it before a tag that is
+        # only alone in its slug group, so an ordinary tag keeps its filename.
+        claims = [
+            (slug, tag)
+            for slug, group in by_slug.items()
+            for tag in group
+            if slug == f"_tag-{tag}"
+        ]
+        claims += [(slug, group[0]) for slug, group in by_slug.items() if len(group) == 1]
         page_ids = {}
-        for slug, tags in by_slug.items():
-            for tag in tags:
-                if len(tags) == 1 or slug == f"_tag-{tag}":
-                    page_ids[tag] = slug
-                else:
-                    digest = hashlib.sha256(tag.encode("utf-8")).hexdigest()[:8]
-                    page_ids[tag] = slugify(f"_tag-{digest}-{tag}")
+        taken = set()
+        for slug, tag in claims:
+            if tag not in page_ids and slug.upper() not in taken:
+                page_ids[tag] = slug
+                taken.add(slug.upper())
+        for tag in tags:
+            if tag in page_ids:
+                continue
+            digest = hashlib.sha256(tag.encode("utf-8")).hexdigest()[:8]
+            page_id = slugify(f"_tag-{digest}-{tag}")
+            n = 1
+            while page_id.upper() in taken:
+                n += 1
+                page_id = slugify(f"_tag-{digest}-{n}-{tag}")
+            page_ids[tag] = page_id
+            taken.add(page_id.upper())
         return page_ids
 
     def _build_per_tag_indexes(self) -> list[str]:
