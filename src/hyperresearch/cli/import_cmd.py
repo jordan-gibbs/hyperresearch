@@ -16,9 +16,12 @@ def _copy_if_absent(src: Path, dest: Path) -> bool:
     """Copy `src` to `dest` as shutil.copy2 does, unless `dest` is taken.
 
     Returns whether it copied. The exclusive create refuses any entry already
-    at `dest`, a dangling symlink included, so a note there is never replaced
-    or written through.
+    at `dest`, so a note there is never replaced. A symlink is refused before
+    it: POSIX O_EXCL fails on a dangling one, but Windows CREATE_NEW follows
+    it and creates the file it points to.
     """
+    if dest.is_symlink():
+        return False
     try:
         with src.open("rb") as fsrc, dest.open("xb") as fdst:
             shutil.copyfileobj(fsrc, fdst)

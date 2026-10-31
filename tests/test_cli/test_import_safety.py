@@ -169,7 +169,13 @@ def test_import_counts_a_file_copied_through_another_spelling_of_a_directory(
 
     assert result.exit_code == 0, result.output
     data = payload["data"]
-    assert data["imported"] == [{"source": f"{spelled}/new.md", "destination": f"{spelled}/new.md"}]
+    [imported] = data["imported"]
+    assert imported["source"] == f"{spelled}/new.md"
+    # The filesystem picks the reported spelling of an existing directory:
+    # Windows resolves to the on-disk papers/, macOS keeps Papers/. Either
+    # way the destination must name the file that was written.
+    notes = vault_dir / "research" / "notes"
+    assert (notes / imported["destination"]).samefile(notes / spelled / "new.md")
     assert data["count"] == payload["count"] == 1
     [not_indexed] = data["not_indexed"]
     assert not_indexed["source"] == f"{spelled}/foo.md"
