@@ -354,6 +354,7 @@ The `[web] provider` setting in `.hyperresearch/config.toml` picks how pages are
 - **`tavily`** — search and extraction built for agents. Needs an API key. `pip install "hyperresearch[tavily]"`.
 - **`parallel`** — [Parallel](https://parallel.ai/)'s Search MCP endpoint, which needs no account or key. Search only — bulk fetch waves degrade to per-URL, so it is a good search provider rather than a replacement for the crawl4ai fetch path. Every request from one process carries a random session ID that Parallel uses for correlation and rate limiting on its side. `pip install "hyperresearch[parallel]"`.
 - **`serply`** — [Serply](https://serply.io)'s Google search API, with page fetch through the same key ([API docs](https://serply.io/docs)). Search results are fetched to full page text, falling back to the snippet when a page cannot be fetched. Needs an API key; no extra install.
+- **`keenable`**: [Keenable](https://keenable.ai)'s search API, with page fetch through the same API ([API docs](https://docs.keenable.ai)). Search results already carry page text, so there is no per-result fetch. Works without a key, rate limited per IP (10 requests per second, 1000 per hour); setting `KEENABLE_API_KEY` lifts the limits. No extra install.
 
 ```toml
 # .hyperresearch/config.toml

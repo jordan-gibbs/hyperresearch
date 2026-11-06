@@ -236,7 +236,12 @@ def get_provider(
 
         return SerplyProvider()
 
+    if name == "keenable":
+        from hyperresearch.web.keenable_provider import KeenableProvider
+
+        return KeenableProvider()
+
     raise ValueError(
         f"Unknown web provider: {name!r}. "
-        "Available: builtin, crawl4ai, exa, tavily, parallel, serply"
+        "Available: builtin, crawl4ai, exa, tavily, parallel, serply, keenable"
     )
