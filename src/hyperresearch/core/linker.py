@@ -48,12 +48,19 @@ def auto_link(vault, note_ids: list[str] | None = None) -> dict:
     else:
         rows = conn.execute("SELECT id, path FROM notes WHERE type != 'index'").fetchall()
 
+    from hyperresearch.core.frontmatter import is_frontmatterless_report
+
     # Process each note
     report: dict[str, list[str]] = {}
     for row in rows:
         nid = row["id"]
         note_path = vault.root / row["path"]
         if not note_path.exists():
+            continue
+        # The header-less final report is indexed so other notes can link to
+        # it, but its body is the deliverable: never append a Related section
+        # (_link_note splices text, so write_frontmatter cannot refuse for it).
+        if is_frontmatterless_report(note_path):
             continue
 
         linked = _link_note(note_path, nid, ref_vocab)
