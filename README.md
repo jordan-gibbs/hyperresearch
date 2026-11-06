@@ -16,13 +16,13 @@
 
 ---
 
-**Hyperresearch turns Claude Code into a deep research agent, and it's #1 on the DRACO deep research benchmark, ahead of Claude Research, ChatGPT, Gemini and Perplexity. It runs in OpenAI Codex too.** A tier-adaptive 16-step pipeline takes one prompt and produces an adversarially-audited report with full source provenance. Every source it reads lands in a persistent, searchable vault, so each session starts smarter than the last.
+**Hyperresearch turns Claude Code into a deep research agent, and it runs in OpenAI Codex too. Its hosted version, Hyperresearch Deep, is #1 on the DRACO deep research benchmark at 77.7 (10 tasks), ahead of Claude Research, ChatGPT, Gemini and Perplexity.** A tier-adaptive 16-step pipeline takes one prompt and produces an adversarially-audited report with full source provenance. Every source it reads lands in a persistent, searchable vault, so each session starts smarter than the last.
 
 <p align="center">
   <img src="assets/how-it-works.gif" alt="hyperresearch in Claude Code: /hyperresearch splits the question, gathers 214 sources from web, OpenAlex, Crossref, SEC EDGAR, FRED and CORE into research/notes, cite-checks every claim and fixes the unsupported one, then writes the final cited report" width="780">
 </p>
 
-**Don't want to run it locally?** [Hyperresearch](https://hyperresearch.ai/?utm_source=github&utm_medium=readme) is the hosted version: the same pipeline, with no Claude Code or Codex install needed.
+**Don't want to run it locally?** [Hyperresearch](https://hyperresearch.ai/?utm_source=github&utm_medium=readme) is the hosted version: the same pipeline, with no Claude Code or Codex install needed, plus a REST API, a remote MCP server and a citation-verification API.
 
 > [!NOTE]
 > **New: hyperresearch runs on OpenAI Codex.** One command installs the full pipeline for Codex: entry skill, step procedures, the subagent roster as Codex custom agents, and a Stop hook that keeps Codex from skipping steps. Same vault, same ship gate as on Claude Code.
@@ -45,8 +45,9 @@ Read a full report before you install anything. These are unedited Deep runs fro
 - [Toast vs Square vs Clover](https://hyperresearch.ai/samples/restaurant-pos-competitor-analysis?utm_source=github&utm_medium=readme): a restaurant POS competitor analysis, built mostly from SEC filings (241 sources)
 - [Buying a $2M HVAC business](https://hyperresearch.ai/samples/buying-an-hvac-business?utm_source=github&utm_medium=readme): multiples, SBA loans and diligence (213 sources)
 - [Who is winning AI coding agents, October 2026](https://hyperresearch.ai/samples/ai-coding-agents?utm_source=github&utm_medium=readme) (259 sources)
+- [Snowflake vs Databricks](https://hyperresearch.ai/samples/snowflake-vs-databricks?utm_source=github&utm_medium=readme): a costed first year for a 2,000-person AWS buyer, from filings and both rate cards (259 sources)
 
-These are the same kind of Deep runs that put Hyperresearch at #1 on DRACO. Method and per-task scores are on the [benchmark page](https://hyperresearch.ai/benchmarks/draco?utm_source=github&utm_medium=readme).
+These are the same kind of hosted Deep runs that put Hyperresearch at #1 on DRACO, at 77.7 (10 tasks). Our Finance, Academic and Law reports were produced by our current Deep writer from the research each task's run collected. Method and per-task scores are on the [benchmark page](https://hyperresearch.ai/benchmarks/draco?utm_source=github&utm_medium=readme).
 
 ## Why it wins
 
