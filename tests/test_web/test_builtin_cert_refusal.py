@@ -204,11 +204,13 @@ def test_cli_single_fetch_reports_the_cert_refusal(cert_vault):
     payload = json.loads(result.stdout)
     assert result.exit_code == 1
     assert payload["ok"] is False
+    assert payload["error_code"] == "TLS_CERT_INVALID"
     assert "certificate verification failed" in payload["error"]
-    assert rescues == ["10.1234/x"]
-    # Two connections: the fetch, then the rescue's attempt at the same host.
-    # Neither completed a handshake, so neither lane skipped verification.
-    assert stats["connections"] == 2
+    # The refusal never reaches the open-access rescue, so the rescue's
+    # attempt at the same host never happens: one connection, the fetch, and
+    # it completed no handshake.
+    assert rescues == []
+    assert stats["connections"] == 1
     assert stats["handshakes_completed"] == 0
 
 
@@ -222,8 +224,10 @@ def test_cli_batch_fetch_reports_the_cert_refusal(cert_vault):
     failed = payload["data"]["failed_urls"]
     assert [f["url"] for f in failed] == [f"{base}/paper"]
     assert "certificate verification failed" in failed[0]["error"]
-    assert rescues == ["10.1234/x"]
-    # Two connections: the fetch, then the rescue's attempt at the same host.
-    # Neither completed a handshake, so neither lane skipped verification.
-    assert stats["connections"] == 2
+    # The refusal never reaches the open-access rescue, so the rescue's
+    # attempt at the same host never happens: one connection, the fetch, and
+    # it completed no handshake.
+    assert rescues == []
+    assert stats["connections"] == 1
     assert stats["handshakes_completed"] == 0
+    assert failed[0]["reason"] == "tls_cert_invalid"
