@@ -57,3 +57,9 @@ def test_list_notes_keeps_wildcard_siblings_out(
     monkeypatch.setattr(server, "_vault", parent_vault)
 
     assert {row["id"] for row in json.loads(server.list_notes(parent=PARENT))} == MATCHES
+
+def test_topic_show_keeps_wildcard_siblings_out(parent_vault: Vault) -> None:
+    result = CliRunner().invoke(app, ["topic", "show", PARENT, "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert {row["id"] for row in json.loads(result.output)["data"]["notes"]} == MATCHES
