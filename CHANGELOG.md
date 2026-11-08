@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`specstream` web provider.** SpecStream Search API results (ranked sources and result rows, with the answer when a question has one) and page fetch through the Extract API, on one `SPECSTREAM_API_KEY`; opt-in via `[web] provider = "specstream"`, no new dependency.
+
 ## [0.13.2] - 2026-11-12
 
 ### Fixed
