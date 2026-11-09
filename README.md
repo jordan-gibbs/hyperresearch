@@ -1,4 +1,4 @@
-<img width="1280" height="400" alt="hyperresearch-readme-hero-1280x400" src="https://github.com/user-attachments/assets/320680fc-bc56-4eac-9ec2-7ec46d4bde98" />
+<img width="1280" height="400" alt="hyperresearch: Research built on evidence. It searches the web, scholarly papers, SEC filings, clinical trials, economic data and more. It checks the citations and keeps every source, so each run builds on the last." src="https://raw.githubusercontent.com/jordan-gibbs/hyperresearch/main/assets/readme-hero.png" />
 
 <h3 align="center">The Most Powerful Deep Research Harness: a deep research skill for Claude Code and OpenAI Codex</h3>
 

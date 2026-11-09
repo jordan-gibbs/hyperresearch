@@ -6,6 +6,7 @@ import typer
 
 from hyperresearch.cli._output import console, output
 from hyperresearch.models.output import success
+from hyperresearch.search.filters import parent_subtree_filter
 
 app = typer.Typer()
 
@@ -127,15 +128,15 @@ def topic_show(
     vault = Vault.discover()
     vault.auto_sync()
 
-    # Match exact and subtopics
+    clause, values = parent_subtree_filter(topic)
     rows = vault.db.execute(
-        """SELECT n.id, n.title, n.parent, n.status, n.word_count, n.summary,
+        f"""SELECT n.id, n.title, n.parent, n.status, n.word_count, n.summary,
            (SELECT GROUP_CONCAT(t.tag, ',') FROM tags t WHERE t.note_id = n.id) as tag_list
         FROM notes n
-        WHERE (n.parent = ? OR n.parent LIKE ?)
+        WHERE {clause}
           AND n.type NOT IN ('index')
         ORDER BY n.parent, n.title""",
-        (topic, topic + "/%"),
+        values,
     ).fetchall()
 
     notes = []

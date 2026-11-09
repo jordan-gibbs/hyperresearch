@@ -102,6 +102,41 @@ class TestClaimsIngest:
         payload = json.loads(result.stdout)
         assert payload["count"] == 1
 
+    def test_claims_matrix_key_finding_matches_run(self, claims_vault, monkeypatch, tmp_path):
+        from typer.testing import CliRunner
+
+        from hyperresearch.cli import app
+
+        monkeypatch.chdir(claims_vault.root)
+        runner = CliRunner()
+        note_id = "python-async-patterns"
+        finding_a = "Async IO improves throughput for network-bound workloads"
+        finding_b = "Run B finding"
+        _write_claims(tmp_path, note_id, finding_b)
+
+        result = runner.invoke(app, ["claims", "ingest", "--tag", "run-a", "--json"])
+        assert result.exit_code == 0, result.stdout
+        assert json.loads(result.stdout)["data"]["ingested"] == 2
+        result = runner.invoke(
+            app, ["claims", "ingest", str(tmp_path / f"claims-{note_id}.json"), "--tag", "run-b", "--json"],
+        )
+        assert result.exit_code == 0, result.stdout
+        assert json.loads(result.stdout)["data"]["ingested"] == 1
+
+        out = tmp_path / "matrix.md"
+        for tag_args, n_claims, key_claim in [
+            (["--tag", "run-a"], 2, finding_a),
+            ([], 3, finding_a),
+            (["--tag", "run-b"], 1, finding_b),
+        ]:
+            result = runner.invoke(app, ["claims", "matrix", "--out", str(out), "--json", *tag_args])
+            assert result.exit_code == 0, result.stdout
+            (row,) = json.loads(result.stdout)["data"]["rows"]
+            assert row["n_claims"] == n_claims
+            assert row["key_claim"] == key_claim
+            assert key_claim in out.read_text(encoding="utf-8")
+        assert finding_a not in out.read_text(encoding="utf-8")
+
 
 def _write_claims(directory, note_id: str, *claims: str) -> None:
     directory.mkdir(parents=True, exist_ok=True)
