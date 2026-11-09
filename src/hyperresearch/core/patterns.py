@@ -189,9 +189,13 @@ _SYMBOL_FOOTNOTE_RE = re.compile(
 
 # Figure / table / equation references: [[fig-3]], [[tab-1]], [[eq-2]],
 # [[table1]], [[figure-4b]], [[eq:7]], [[scheme-3]]. These are cross-
-# references within a document, not wiki-links to other notes.
+# references within a document, not wiki-links to other notes. The number
+# (optionally after one letter, as in [[table-A1]] or [[fig-S3]])
+# after the prefix is required: without it the prefix alone matched the
+# start of ordinary words, so [[equity]], [[tablet]], [[figma]] and
+# [[boxing]] were all dropped as cross-references.
 _DOC_REF_PREFIX_RE = re.compile(
-    r"^(?:fig(?:ure)?|tab(?:le)?|eq(?:uation)?|scheme|chart|plate|box|chart|algo(?:rithm)?)[-_:]?\w*$",
+    r"^(?:fig(?:ure)?|tab(?:le)?|eq(?:uation)?|scheme|chart|plate|box|chart|algo(?:rithm)?)[-_:]?[a-z]?\d\w*$",
     re.IGNORECASE,
 )
 

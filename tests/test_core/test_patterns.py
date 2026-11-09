@@ -134,6 +134,28 @@ def test_document_cross_references_rejected():
     assert not is_valid_wiki_link_target("scheme-3")
     assert not is_valid_wiki_link_target("algorithm-2")
     assert not is_valid_wiki_link_target("Fig-1")  # case-insensitive
+    assert not is_valid_wiki_link_target("table1")
+    assert not is_valid_wiki_link_target("eq:7")
+    assert not is_valid_wiki_link_target("table-A1")
+    assert not is_valid_wiki_link_target("fig-S3")
+
+
+def test_words_starting_with_a_cross_reference_prefix_are_accepted():
+    # The prefix must be followed by a number to be a cross-reference;
+    # ordinary words that merely start with fig/tab/eq/box/... are notes.
+    for word in (
+        "equity",
+        "Equity",
+        "tablet",
+        "tables",
+        "figma",
+        "boxing",
+        "chartreuse",
+        "plateau",
+        "Algorithms",
+        "schemes",
+    ):
+        assert is_valid_wiki_link_target(word), word
 
 
 def test_real_words_that_look_like_roman_are_accepted():
