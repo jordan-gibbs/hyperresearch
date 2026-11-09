@@ -32,7 +32,7 @@ def test_sync_detects_updates(tmp_vault):
     # Modify the file
     import time
     time.sleep(0.1)
-    path.write_text(path.read_text().replace("Original", "Updated"), encoding="utf-8")
+    path.write_text(path.read_text(encoding="utf-8").replace("Original", "Updated"), encoding="utf-8")
 
     plan2 = compute_sync_plan(tmp_vault)
     assert len(plan2.to_update) == 1

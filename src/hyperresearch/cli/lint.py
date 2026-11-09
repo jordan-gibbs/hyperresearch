@@ -46,7 +46,7 @@ RULES = {
 
 def _run_dirs_newest_first(vault) -> list:
     """Run workspaces under research/runs/, newest manifest first."""
-    runs_dir = vault.root / "research" / "runs"
+    runs_dir = vault.research_dir / "runs"
     if not runs_dir.is_dir():
         return []
     dirs = [d for d in runs_dir.iterdir() if d.is_dir() and (d / "run.json").exists()]
@@ -66,7 +66,7 @@ def _run_artifact(vault, *relparts: str):
         p = d.joinpath(*relparts)
         if p.exists():
             return p
-    return (vault.root / "research").joinpath(*relparts)
+    return (vault.research_dir).joinpath(*relparts)
 
 
 def _query_files(vault) -> list:
@@ -76,13 +76,13 @@ def _query_files(vault) -> list:
         q = d / "query.md"
         if q.exists():
             files.append(q)
-    files.extend(sorted((vault.root / "research").glob("query-*.md")))
+    files.extend(sorted((vault.research_dir).glob("query-*.md")))
     return files
 
 
 def _latest_report(vault):
     """Newest final_report*.md, or (None, None) when no report exists."""
-    notes_dir = vault.root / "research" / "notes"
+    notes_dir = vault.research_dir / "notes"
     if not notes_dir.is_dir():
         return None, None
     candidates = sorted(notes_dir.glob("final_report*.md"), key=lambda p: p.stat().st_mtime)
@@ -586,7 +586,7 @@ def lint(
             r"^\s*##\s+User\s+Prompt\s*\(\s*VERBATIM.*gospel\s*\)",
             _re.IGNORECASE,
         )
-        prompt_path = vault.root / "research" / "prompt.txt"
+        prompt_path = vault.research_dir / "prompt.txt"
         canonical_prompt: str | None = None
         # Check for query files first (runs/<tag>/query.md, then legacy
         # research/query-*.md), fall back to legacy prompt.txt
@@ -718,9 +718,9 @@ def lint(
         # verbatim. No wrapper declared => skip the terminal-section check
         # but still enforce scaffold-leak hygiene (always wrong regardless
         # of wrapper).
-        prompt_path = vault.root / "research" / "prompt.txt"
+        prompt_path = vault.research_dir / "prompt.txt"
         query_files_exist = bool(_query_files(vault))
-        contract_path = vault.root / "research" / "wrapper_contract.json"
+        contract_path = vault.research_dir / "wrapper_contract.json"
         wrapper_contract: dict | None = None
         if contract_path.exists():
             try:
@@ -744,7 +744,7 @@ def lint(
             # Reports are now named final_report_<vault_tag>.md. Glob to find
             # any matching report; fall back to the legacy bare name for
             # back-compat with pre-0.8.5 runs.
-            notes_dir = vault.root / "research" / "notes"
+            notes_dir = vault.research_dir / "notes"
             report_candidates = sorted(
                 notes_dir.glob("final_report*.md"),
                 key=lambda p: p.stat().st_mtime,
@@ -1267,7 +1267,7 @@ def lint(
                     except (json.JSONDecodeError, OSError):
                         pass
 
-            notes_dir = vault.root / "research" / "notes"
+            notes_dir = vault.research_dir / "notes"
             report_matches = sorted(notes_dir.glob("final_report*.md")) if notes_dir.exists() else []
             final_report_exists = bool(report_matches)
             if (
@@ -1308,7 +1308,7 @@ def lint(
         # audit. This lint rule is the final post-patch gate that catches
         # items the critic flagged but the patcher couldn't apply.
         decomp_path = _run_artifact(vault, "prompt-decomposition.json")
-        notes_dir = vault.root / "research" / "notes"
+        notes_dir = vault.research_dir / "notes"
         report_candidates = sorted(
             notes_dir.glob("final_report*.md"),
             key=lambda p: p.stat().st_mtime,
@@ -1417,7 +1417,7 @@ def lint(
 
         # Wrapper contract overrides the decomposition's citation_style
         # (read at lint time, so a mid-pipeline wrapper change wins naturally).
-        contract_path = vault.root / "research" / "wrapper_contract.json"
+        contract_path = vault.research_dir / "wrapper_contract.json"
         if contract_path.exists():
             try:
                 contract = json.loads(contract_path.read_text(encoding="utf-8-sig"))
@@ -1434,7 +1434,7 @@ def lint(
                 "AND n.id NOT LIKE '\\_%' ESCAPE '\\' "
                 "AND n.type NOT IN ('index','raw','moc')"
             ).fetchone()
-            notes_dir = vault.root / "research" / "notes"
+            notes_dir = vault.research_dir / "notes"
             report_candidates = sorted(
                 notes_dir.glob("final_report*.md"),
                 key=lambda p: p.stat().st_mtime,
@@ -1513,7 +1513,7 @@ def lint(
         # Walk research/raw/ and flag files whose stem doesn't match any note
         # id in the vault. These are leftovers from the pre-Batch-2.5 `note rm`
         # which never touched raw files. A cheap disk-leak detector.
-        raw_dir = vault.root / "research" / "raw"
+        raw_dir = vault.research_dir / "raw"
         if raw_dir.is_dir():
             note_ids = {r["id"] for r in conn.execute("SELECT id FROM notes")}
             for raw_file in raw_dir.iterdir():

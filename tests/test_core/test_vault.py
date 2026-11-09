@@ -59,7 +59,7 @@ def test_config_loaded(tmp_vault: Vault):
 def test_agent_docs_created(tmp_path: Path):
     vault = Vault.init(tmp_path / "kb")
     assert (vault.root / "CLAUDE.md").exists()
-    content = (vault.root / "CLAUDE.md").read_text()
+    content = (vault.root / "CLAUDE.md").read_text(encoding="utf-8")
     assert "hyperresearch" in content
 
 

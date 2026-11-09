@@ -304,19 +304,30 @@ def render_shims(vault, vault_tag: str) -> dict:
         path.write_text(shims[role], encoding="utf-8")
         written.append(str(path))
 
-    from hyperresearch.core.runs import RunError, _save, load_manifest, record_event
+    from hyperresearch.core.runs import (
+        RunError,
+        _save,
+        load_manifest,
+        manifest_lock,
+        manifest_path,
+        record_event,
+    )
 
-    try:
-        manifest = load_manifest(vault, vault_tag)
-    except RunError:
-        manifest = None
+    manifest = None
+    if manifest_path(vault, vault_tag).exists():
+        with manifest_lock(vault, vault_tag):
+            try:
+                manifest = load_manifest(vault, vault_tag)
+            except RunError:
+                manifest = None
+            if manifest is not None:
+                manifest["levers"] = {
+                    "register": levers["register"],
+                    "inference_depth": levers["inference_depth"],
+                    "domain_notes": levers.get("domain_notes", ""),
+                }
+                _save(vault, vault_tag, manifest)
     if manifest is not None:
-        manifest["levers"] = {
-            "register": levers["register"],
-            "inference_depth": levers["inference_depth"],
-            "domain_notes": levers.get("domain_notes", ""),
-        }
-        _save(vault, vault_tag, manifest)
         record_event(
             vault,
             vault_tag,

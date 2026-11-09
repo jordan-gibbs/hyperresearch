@@ -191,7 +191,7 @@ def fetch_batch(
         if save_assets:
             from hyperresearch.cli.fetch import _save_assets as _save_assets_fn
 
-            assets_dir = vault.root / "research" / "assets" / note_id
+            assets_dir = vault.research_dir / "assets" / note_id
             _save_assets_fn(
                 conn, result, note_id, assets_dir,
                 settings=vault.config.assets,

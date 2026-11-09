@@ -158,18 +158,59 @@ class Vault:
 
     @staticmethod
     def discover(start: Path | None = None) -> Vault:
-        """Walk up from start (default: cwd) to find a vault root."""
-        current = (start or Path.cwd()).resolve()
+        """Walk up from start (default: cwd) to find a vault root.
+
+        The walk never climbs INTO the user's home directory or above it. A
+        vault at `~` (typically from running `hyperresearch install` in the
+        home folder) would otherwise capture every directory under home —
+        temp dirs, unrelated projects — and silently receive their fetches.
+        Starting AT home still finds a vault there; set
+        HYPERRESEARCH_VAULT=<path> to point at one explicitly.
+        """
+        import os
+
+        explicit = os.environ.get("HYPERRESEARCH_VAULT")
+        if explicit:
+            root = Path(explicit).expanduser().resolve()
+            if (root / HYPERRESEARCH_DIR).is_dir():
+                return Vault(root)
+            raise VaultError(
+                f"HYPERRESEARCH_VAULT={explicit} does not contain a hyperresearch vault."
+            )
+
+        start_dir = (start or Path.cwd()).resolve()
+        ceiling = Vault._discovery_ceiling()
+        current = start_dir
         while True:
             if (current / HYPERRESEARCH_DIR).is_dir():
                 return Vault(current)
             parent = current.parent
             if parent == current:
                 break
+            if ceiling is not None and parent in (ceiling, *ceiling.parents):
+                break
             current = parent
+
+        hint = ""
+        if (
+            ceiling is not None
+            and start_dir != ceiling
+            and (ceiling / HYPERRESEARCH_DIR).is_dir()
+        ):
+            hint = (
+                f" (A vault exists at your home directory {ceiling}; it is not "
+                "used for subdirectories. Run from there or set HYPERRESEARCH_VAULT.)"
+            )
         raise VaultError(
-            "No hyperresearch vault found. Run 'hyperresearch init' to create one."
+            "No hyperresearch vault found. Run 'hyperresearch init' to create one." + hint
         )
+
+    @staticmethod
+    def _discovery_ceiling() -> Path | None:
+        try:
+            return Path.home().resolve()
+        except (RuntimeError, OSError):
+            return None
 
     def auto_sync(self) -> None:
         """Run an incremental sync if auto_sync is enabled."""

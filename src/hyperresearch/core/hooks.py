@@ -1197,7 +1197,7 @@ them on first use (inline parenthetical or dedicated glossary), emit:
 **Check R2: Citation density.**
 Count cited-source references in the body (excluding the ## Sources
 section) — a grouped marker like `[7, 12]` counts as two. Count total
-body characters. If the ratio is below **1.5 citations per 1000
+body characters. If the ratio is below **<< p.citation_density_min >> citations per 1000
 characters**, emit:
   - `failure_mode`: `"low-citation-density"`
   - `severity`: `major`

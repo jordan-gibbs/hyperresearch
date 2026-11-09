@@ -129,7 +129,7 @@ def fetch_and_save(
         }
         ext = ext_map.get(result.raw_content_type, "")
         if ext:
-            raw_dir = vault.root / "research" / "raw"
+            raw_dir = vault.research_dir / "raw"
             raw_dir.mkdir(parents=True, exist_ok=True)
             raw_filename = note_path.stem + ext
             raw_file = raw_dir / raw_filename
@@ -171,7 +171,7 @@ def fetch_and_save(
     if save_assets:
         from hyperresearch.cli.fetch import _save_assets
 
-        assets_dir = vault.root / "research" / "assets" / note_id
+        assets_dir = vault.research_dir / "assets" / note_id
         saved_assets = _save_assets(
             conn, result, note_id, assets_dir,
             settings=vault.config.assets, image_timeout_s=vault.config.fetch.image_timeout_s,

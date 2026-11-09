@@ -9,6 +9,12 @@ import pytest
 from hyperresearch.core.vault import Vault
 
 
+@pytest.fixture(autouse=True)
+def _no_explicit_vault(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A developer's HYPERRESEARCH_VAULT must never leak into vault discovery."""
+    monkeypatch.delenv("HYPERRESEARCH_VAULT", raising=False)
+
+
 @pytest.fixture
 def tmp_vault(tmp_path: Path) -> Vault:
     """Create a temporary vault for testing."""

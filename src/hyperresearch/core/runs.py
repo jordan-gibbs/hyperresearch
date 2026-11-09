@@ -23,8 +23,17 @@ vault. Final reports ship to `research/notes/final_report_<vault_tag>.md`.
 from __future__ import annotations
 
 import json
+import os
+import sys
+import threading
+import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypeVar
+
+T = TypeVar("T")
 
 MANIFEST_VERSION = 1
 MANIFEST_NAME = "run.json"
@@ -36,6 +45,25 @@ STEP_STATUSES = ("pending", "running", "done", "skipped", "failed")
 # A run whose manifest hasn't been touched in this long is flagged
 # possibly-stalled by `hpr run status`.
 STALL_MINUTES = 30
+
+LOCK_NAME = "run.json.lock"
+# How long a writer waits for the manifest lock before giving up. Writers hold
+# it for one JSON read + write, so contention beyond this means a hung process.
+LOCK_TIMEOUT_S = 30.0
+
+# Reentrancy bookkeeping: set_step -> record_event both take the lock, and an
+# OS file lock taken a second time on a new fd blocks against itself. Depth is
+# tracked per thread and per lock path, so a nested call on the SAME thread
+# passes through while other threads still contend on the OS lock (separate
+# fds conflict with each other under both flock and msvcrt).
+_LOCK_STATE = threading.local()
+
+
+def _lock_depths() -> dict[str, int]:
+    depths = getattr(_LOCK_STATE, "depths", None)
+    if depths is None:
+        depths = _LOCK_STATE.depths = {}
+    return depths
 
 
 class RunError(Exception):
@@ -100,14 +128,98 @@ def init_run(
     return manifest
 
 
+def _os_try_lock(fd: int) -> bool:
+    """Try once to take an exclusive lock on byte 0 of fd. True on success."""
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def _os_unlock(fd: int) -> None:
+    if sys.platform == "win32":
+        import msvcrt
+
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+@contextmanager
+def manifest_lock(vault, vault_tag: str, timeout: float = LOCK_TIMEOUT_S) -> Iterator[None]:
+    """Serialize read-modify-write cycles on one run's manifest.
+
+    `_save` is atomic (tmp + replace), so the file is never torn — but two
+    writers that both load, mutate, and save still lose one update (parallel
+    chapter workers both calling `run spend`, say). Every mutator holds this
+    lock across its whole load → save cycle. Cross-process via an OS file lock
+    on `run.json.lock`; reentrant within one process.
+    """
+    run_dir = vault.run_dir(vault_tag)
+    lock_path = run_dir / LOCK_NAME
+    key = str(lock_path)
+    depths = _lock_depths()
+    if depths.get(key):
+        depths[key] += 1
+        try:
+            yield
+        finally:
+            depths[key] -= 1
+        return
+
+    if not run_dir.is_dir():
+        raise RunError(f"no run '{vault_tag}' (missing {run_dir})")
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        deadline = time.monotonic() + timeout
+        while not _os_try_lock(fd):
+            if time.monotonic() >= deadline:
+                raise RunError(f"timed out after {timeout:.0f}s waiting for {lock_path}")
+            time.sleep(0.05)
+        depths[key] = 1
+        try:
+            yield
+        finally:
+            depths.pop(key, None)
+            _os_unlock(fd)
+    finally:
+        os.close(fd)
+
+
 def load_manifest(vault, vault_tag: str) -> dict:
     mpath = manifest_path(vault, vault_tag)
     if not mpath.exists():
         raise RunError(f"no run '{vault_tag}' (missing {mpath})")
     try:
-        return json.loads(mpath.read_text(encoding="utf-8"))
+        return json.loads(_retry_sharing_violation(lambda: mpath.read_text(encoding="utf-8")))
     except json.JSONDecodeError as e:
         raise RunError(f"corrupt manifest for run '{vault_tag}': {e}") from e
+
+
+def _retry_sharing_violation(fn: Callable[[], T], attempts: int = 40, delay: float = 0.025) -> T:
+    """Windows only: a reader holding run.json open makes os.replace (and a
+    read racing the replace) fail with PermissionError. Both sides are
+    momentary, so a short retry resolves it. Elsewhere, call through once."""
+    for i in range(attempts):
+        try:
+            return fn()
+        except PermissionError:
+            if sys.platform != "win32" or i == attempts - 1:
+                raise
+            time.sleep(delay)
+    raise AssertionError("unreachable")
 
 
 def _save(vault, vault_tag: str, manifest: dict) -> None:
@@ -115,7 +227,7 @@ def _save(vault, vault_tag: str, manifest: dict) -> None:
     mpath = manifest_path(vault, vault_tag)
     tmp = mpath.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    tmp.replace(mpath)  # atomic on same filesystem
+    _retry_sharing_violation(lambda: tmp.replace(mpath))  # atomic on same filesystem
 
 
 def record_event(vault, vault_tag: str, event: dict) -> None:
@@ -126,8 +238,9 @@ def record_event(vault, vault_tag: str, event: dict) -> None:
     event = {"at": _now(), **event}
     with open(run_dir / EVENTS_NAME, "a", encoding="utf-8") as f:
         f.write(json.dumps(event) + "\n")
-    manifest = load_manifest(vault, vault_tag)
-    _save(vault, vault_tag, manifest)  # heartbeat
+    with manifest_lock(vault, vault_tag):
+        manifest = load_manifest(vault, vault_tag)
+        _save(vault, vault_tag, manifest)  # heartbeat
 
 
 def set_step(
@@ -140,28 +253,30 @@ def set_step(
     """Mark a step's status. Steps are keyed as strings ("1", "1.5", "11g")."""
     if status not in STEP_STATUSES:
         raise RunError(f"invalid step status '{status}' (one of {STEP_STATUSES})")
-    manifest = load_manifest(vault, vault_tag)
-    entry = manifest["steps"].setdefault(str(step), {})
-    entry["status"] = status
-    if status == "running" and "started_at" not in entry:
-        entry["started_at"] = _now()
-    if status in ("done", "skipped", "failed"):
-        entry["finished_at"] = _now()
-    if chapter:
-        entry["chapter"] = chapter
-        ch = manifest["chapters"].setdefault(chapter, {})
-        ch["status"] = f"step-{step}-{status}"
-    _save(vault, vault_tag, manifest)
+    with manifest_lock(vault, vault_tag):
+        manifest = load_manifest(vault, vault_tag)
+        entry = manifest["steps"].setdefault(str(step), {})
+        entry["status"] = status
+        if status == "running" and "started_at" not in entry:
+            entry["started_at"] = _now()
+        if status in ("done", "skipped", "failed"):
+            entry["finished_at"] = _now()
+        if chapter:
+            entry["chapter"] = chapter
+            ch = manifest["chapters"].setdefault(chapter, {})
+            ch["status"] = f"step-{step}-{status}"
+        _save(vault, vault_tag, manifest)
     record_event(vault, vault_tag, {"type": "step", "step": str(step), "status": status, "chapter": chapter})
     return manifest
 
 
 def set_chapter(vault, vault_tag: str, chapter: str, **fields) -> dict:
     """Create/update a chapter entry (title, status, sources, ...)."""
-    manifest = load_manifest(vault, vault_tag)
-    ch = manifest["chapters"].setdefault(chapter, {})
-    ch.update({k: v for k, v in fields.items() if v is not None})
-    _save(vault, vault_tag, manifest)
+    with manifest_lock(vault, vault_tag):
+        manifest = load_manifest(vault, vault_tag)
+        ch = manifest["chapters"].setdefault(chapter, {})
+        ch.update({k: v for k, v in fields.items() if v is not None})
+        _save(vault, vault_tag, manifest)
     return manifest
 
 
@@ -173,31 +288,37 @@ def add_spend(
     notes_written: int = 0,
     agents_spawned: int = 0,
 ) -> dict:
-    manifest = load_manifest(vault, vault_tag)
-    spend = manifest["spend"]
-    spend["estimated_usd"] = round(spend.get("estimated_usd", 0.0) + estimated_usd, 4)
-    spend["sources_fetched"] = spend.get("sources_fetched", 0) + sources_fetched
-    spend["notes_written"] = spend.get("notes_written", 0) + notes_written
-    spend["agents_spawned"] = spend.get("agents_spawned", 0) + agents_spawned
+    with manifest_lock(vault, vault_tag):
+        manifest = load_manifest(vault, vault_tag)
+        spend = manifest["spend"]
+        spend["estimated_usd"] = round(spend.get("estimated_usd", 0.0) + estimated_usd, 4)
+        spend["sources_fetched"] = spend.get("sources_fetched", 0) + sources_fetched
+        spend["notes_written"] = spend.get("notes_written", 0) + notes_written
+        spend["agents_spawned"] = spend.get("agents_spawned", 0) + agents_spawned
 
-    # Budget governor: crossing the ceiling flips the run to blocked. The
-    # orchestrator checks `hpr run status` at step boundaries and must pause
-    # (never silently skip tier-mandated steps — shrink fan-out instead).
-    budget = manifest.get("budget_usd")
-    if budget is not None and spend["estimated_usd"] >= budget and manifest["status"] == "running":
-        manifest["status"] = "blocked"
-        manifest["blocked_on"] = "budget"
-    _save(vault, vault_tag, manifest)
+        # Budget governor: crossing the ceiling flips the run to blocked. The
+        # orchestrator checks `hpr run status` at step boundaries and must pause
+        # (never silently skip tier-mandated steps — shrink fan-out instead).
+        budget = manifest.get("budget_usd")
+        if (
+            budget is not None
+            and spend["estimated_usd"] >= budget
+            and manifest["status"] == "running"
+        ):
+            manifest["status"] = "blocked"
+            manifest["blocked_on"] = "budget"
+        _save(vault, vault_tag, manifest)
     return manifest
 
 
 def set_status(vault, vault_tag: str, status: str, blocked_on: str | None = None) -> dict:
     if status not in RUN_STATUSES:
         raise RunError(f"invalid run status '{status}' (one of {RUN_STATUSES})")
-    manifest = load_manifest(vault, vault_tag)
-    manifest["status"] = status
-    manifest["blocked_on"] = blocked_on if status == "blocked" else None
-    _save(vault, vault_tag, manifest)
+    with manifest_lock(vault, vault_tag):
+        manifest = load_manifest(vault, vault_tag)
+        manifest["status"] = status
+        manifest["blocked_on"] = blocked_on if status == "blocked" else None
+        _save(vault, vault_tag, manifest)
     return manifest
 
 
@@ -348,7 +469,7 @@ def verify_run(vault, vault_tag: str) -> dict:
     def check(name: str, ok: bool, detail: str) -> None:
         checks.append({"name": name, "ok": bool(ok), "detail": detail})
 
-    report_path = vault.root / "research" / "notes" / f"final_report_{vault_tag}.md"
+    report_path = vault.research_dir / "notes" / f"final_report_{vault_tag}.md"
     check("report-exists", report_path.exists(), str(report_path))
 
     report_text = ""
@@ -410,7 +531,7 @@ def verify_run(vault, vault_tag: str) -> dict:
             for g in _re.findall(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\]", report_text)
         ) + len(_re.findall(r"\[\[[^\]]+\]\]", report_text))
         density = cites / max(1, len(report_text)) * 1000
-        floor = 1.5  # instruction-critic's re-count trigger
+        floor = profile.citation_density_min
         check(
             "citation-density",
             density >= floor,
@@ -502,19 +623,20 @@ def finish_run(vault, vault_tag: str) -> dict:
     earned it.
     """
     result = verify_run(vault, vault_tag)
-    manifest = load_manifest(vault, vault_tag)
-    manifest["verify"] = {
-        "passed": result["passed"],
-        "at": _now(),
-        "failed_checks": [c["name"] for c in result["checks"] if not c["ok"]],
-    }
-    if result["passed"]:
-        manifest["status"] = "done"
-        manifest["blocked_on"] = None
-    else:
-        manifest["status"] = "blocked"
-        manifest["blocked_on"] = "verify"
-    _save(vault, vault_tag, manifest)
+    with manifest_lock(vault, vault_tag):
+        manifest = load_manifest(vault, vault_tag)
+        manifest["verify"] = {
+            "passed": result["passed"],
+            "at": _now(),
+            "failed_checks": [c["name"] for c in result["checks"] if not c["ok"]],
+        }
+        if result["passed"]:
+            manifest["status"] = "done"
+            manifest["blocked_on"] = None
+        else:
+            manifest["status"] = "blocked"
+            manifest["blocked_on"] = "verify"
+        _save(vault, vault_tag, manifest)
     record_event(vault, vault_tag, {
         "type": "finish",
         "passed": result["passed"],

@@ -103,7 +103,7 @@ def ingest_claims_dir(vault, temp_dir: Path | None = None, vault_tag: str | None
     """Ingest every claims-*.json under research/temp/. Returns a summary."""
     conn = vault.db
     if temp_dir is None:
-        temp_dir = vault.root / "research" / "temp"
+        temp_dir = vault.research_dir / "temp"
     files = sorted(temp_dir.glob("claims-*.json")) if temp_dir.is_dir() else []
     summary = {"files": len(files), "ingested": 0, "skipped": 0, "errors": []}
     for f in files:

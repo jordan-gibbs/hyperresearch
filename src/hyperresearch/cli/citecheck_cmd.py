@@ -39,7 +39,7 @@ def citecheck_extract(
 
     vault.auto_sync()
     report_path = Path(report) if report else (
-        vault.root / "research" / "notes" / f"final_report_{vault_tag}.md"
+        vault.research_dir / "notes" / f"final_report_{vault_tag}.md"
     )
     if not report_path.exists():
         msg = f"report not found: {report_path}"

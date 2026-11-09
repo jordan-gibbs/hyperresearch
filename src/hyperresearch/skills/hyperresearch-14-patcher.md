@@ -38,7 +38,7 @@ Before spawning the patcher, check whether `research/runs/<vault_tag>/skip-patch
 python -c "
 import json, pathlib
 files = ['research/runs/<vault_tag>/critic-findings-dialectic.json','research/runs/<vault_tag>/critic-findings-depth.json','research/runs/<vault_tag>/critic-findings-width.json','research/runs/<vault_tag>/critic-findings-instruction.json']
-total = sum(len(json.loads(pathlib.Path(f).read_text()).get('findings',[])) for f in files if pathlib.Path(f).exists())
+total = sum(len(json.loads(pathlib.Path(f).read_text(encoding='utf-8')).get('findings',[])) for f in files if pathlib.Path(f).exists())
 pathlib.Path('research/runs/<vault_tag>/patch-log.json').write_text(json.dumps({'total_findings': total, 'applied': [], 'skipped': [{'reason': 'patcher-skipped-by-invoker'}], 'conflicts': [], 'orchestrator_escalated': []}))
 "
 ```

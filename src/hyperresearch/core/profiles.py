@@ -226,7 +226,7 @@ _FULL: dict = {
     "single_draft_reads": (8, 15),
     "must_read": {"argumentative": (35, 50), "structured": (25, 40), "short": (20, 30)},
     "word_targets": {"short": (500, 2000), "structured": (2000, 5000), "argumentative": (5000, 10000)},
-    "citation_density_min": 2.0,
+    "citation_density_min": 1.5,  # citations per 1000 body chars; enforced by `run verify` + instruction critic
     "citation_totals": {"argumentative": (80, 150), "structured": (40, 80), "short": (15, 30)},
     "critic_finding_caps": {"dialectic": 12, "depth": 12, "width": 10, "instruction": 15},
     "gap_fetch_cap": 5,
