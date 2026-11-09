@@ -223,6 +223,14 @@ def get_provider(
         except ImportError:
             raise ImportError("tavily provider requires: pip install \"hyperresearch[tavily]\"")
 
+    if name == "firecrawl":
+        try:
+            from hyperresearch.web.firecrawl_provider import FirecrawlProvider
+
+            return FirecrawlProvider()
+        except ImportError:
+            raise ImportError('firecrawl provider requires: pip install "hyperresearch[firecrawl]"')
+
     if name == "parallel":
         try:
             from hyperresearch.web.parallel_provider import ParallelProvider
@@ -238,5 +246,5 @@ def get_provider(
 
     raise ValueError(
         f"Unknown web provider: {name!r}. "
-        "Available: builtin, crawl4ai, exa, tavily, parallel, serply"
+        "Available: builtin, crawl4ai, exa, tavily, firecrawl, parallel, serply"
     )
