@@ -328,3 +328,13 @@ def test_mask_code_blanks_spans_at_their_own_length():
     assert "[1]" not in masked and "[4]" not in masked
     # strip_code is unchanged: a span still becomes one space.
     assert strip_code("Run `a [1]` now") == "Run   now"
+
+
+def test_tilde_fenced_links_are_not_prose():
+    text = "Before [[real]]\n~~~text\n[[example]]\n~~~\nAfter [[other]]"
+    assert strip_code(text) == "Before [[real]]\n\n\n\nAfter [[other]]"
+
+
+def test_tilde_fence_requires_matching_marker_and_length():
+    text = "~~~~text\n[[example]]\n```\n~~~\n[[still_code]]\n~~~~\n[[real]]"
+    assert strip_code(text).strip() == "[[real]]"
