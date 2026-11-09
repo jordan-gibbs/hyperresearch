@@ -27,6 +27,7 @@
 
 ### Fixed
 
+- **`claims matrix --tag` keeps each key finding within the selected run.** The finding and row counts now use the same tag filter.
 - **`research` no longer crashes when every search result is skipped.** If all results were login walls or already in the vault, the closing summary indexed `created_notes[-1]` and raised `IndexError`. It now prints "No notes created". `--json` already returned an empty `notes_created` list and still does.
 - **`research` reads the vault's `[junk]` config.** Its login-wall check used the built-in defaults, so `extra_login_signals` and the other `[junk]` thresholds were ignored. `fetch` and `fetch-batch` already applied them.
 - **`research` builds its provider with the vault's `[fetch]` settings and `[junk]` gates.** It called `get_provider` without `settings` / `gates`, so research fetches ignored settings such as `browser_verify_tls` and `allow_private_hosts`. It now passes them the way `fetch` and `fetch-batch` do.
