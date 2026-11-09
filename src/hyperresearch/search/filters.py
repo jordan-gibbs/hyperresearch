@@ -5,6 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+def parent_subtree_filter(parent: str) -> tuple[str, tuple[str, str]]:
+    """Match the exact parent and its slash-delimited descendants."""
+    escaped = parent.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+    return "(n.parent = ? OR n.parent LIKE ? ESCAPE '!')", (parent, escaped + "/%")
+
+
 @dataclass
 class SearchFilters:
     tags: list[str] | None = None

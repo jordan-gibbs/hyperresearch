@@ -9,6 +9,7 @@ import typer
 
 from hyperresearch.cli._output import console, output
 from hyperresearch.models.output import success
+from hyperresearch.search.filters import parent_subtree_filter
 
 app = typer.Typer()
 
@@ -83,9 +84,9 @@ def export_vault(
         clauses.append("n.status = ?")
         params.append(status)
     if parent:
-        clauses.append("(n.parent = ? OR n.parent LIKE ?)")
-        params.append(parent)
-        params.append(parent + "/%")
+        clause, values = parent_subtree_filter(parent)
+        clauses.append(clause)
+        params.extend(values)
 
     where = " AND ".join(clauses)
     rows = vault.db.execute(f"SELECT id, path, title FROM notes n WHERE {where}", params).fetchall()
