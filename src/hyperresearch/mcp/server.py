@@ -10,6 +10,8 @@ import json
 
 from mcp.server.fastmcp import FastMCP
 
+from hyperresearch.search.filters import parent_subtree_filter
+
 server = FastMCP("hyperresearch", instructions=(
     "hyperresearch is an agent-driven research knowledge base. Use these tools to search, read, "
     "and navigate research notes with wiki-links, tags, and summaries. Notes live in the research/ "
@@ -153,8 +155,9 @@ def list_notes(status: str = "", tag: str = "", parent: str = "", sort: str = "u
         clauses.append("n.id IN (SELECT note_id FROM tags WHERE tag = ?)")
         params.append(tag.lower())
     if parent:
-        clauses.append("(n.parent = ? OR n.parent LIKE ?)")
-        params.extend([parent, parent + "/%"])
+        clause, values = parent_subtree_filter(parent)
+        clauses.append(clause)
+        params.extend(values)
     where = " AND ".join(clauses)
     sort_map = {"created": "n.created DESC", "updated": "COALESCE(n.updated, n.created) DESC",
                 "title": "n.title ASC", "words": "n.word_count DESC"}

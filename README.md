@@ -16,13 +16,13 @@
 
 ---
 
-**Hyperresearch turns Claude Code into a deep research agent, and it's #1 on the DRACO deep research benchmark, ahead of Claude Research, ChatGPT, Gemini and Perplexity. It runs in OpenAI Codex too.** A tier-adaptive 16-step pipeline takes one prompt and produces an adversarially-audited report with full source provenance. Every source it reads lands in a persistent, searchable vault, so each session starts smarter than the last.
+**Hyperresearch turns Claude Code into a deep research agent, and it runs in OpenAI Codex too. Its hosted version, Hyperresearch Deep, is #1 on the DRACO deep research benchmark at 77.7 (10 tasks), ahead of Claude Research, ChatGPT, Gemini and Perplexity.** A tier-adaptive 16-step pipeline takes one prompt and produces an adversarially-audited report with full source provenance. Every source it reads lands in a persistent, searchable vault, so each session starts smarter than the last.
 
 <p align="center">
   <img src="assets/how-it-works.gif" alt="hyperresearch in Claude Code: /hyperresearch splits the question, gathers 214 sources from web, OpenAlex, Crossref, SEC EDGAR, FRED and CORE into research/notes, cite-checks every claim and fixes the unsupported one, then writes the final cited report" width="780">
 </p>
 
-**Don't want to run it locally?** [Hyperresearch](https://hyperresearch.ai/?utm_source=github&utm_medium=readme) is the hosted version: the same pipeline, with no Claude Code or Codex install needed.
+**Don't want to run it locally?** [Hyperresearch](https://hyperresearch.ai/?utm_source=github&utm_medium=readme) is the hosted version: the same pipeline, with no Claude Code or Codex install needed, plus a REST API, a remote MCP server and a citation-verification API.
 
 > [!NOTE]
 > **New: hyperresearch runs on OpenAI Codex.** One command installs the full pipeline for Codex: entry skill, step procedures, the subagent roster as Codex custom agents, and a Stop hook that keeps Codex from skipping steps. Same vault, same ship gate as on Claude Code.
@@ -45,8 +45,9 @@ Read a full report before you install anything. These are unedited Deep runs fro
 - [Toast vs Square vs Clover](https://hyperresearch.ai/samples/restaurant-pos-competitor-analysis?utm_source=github&utm_medium=readme): a restaurant POS competitor analysis, built mostly from SEC filings (241 sources)
 - [Buying a $2M HVAC business](https://hyperresearch.ai/samples/buying-an-hvac-business?utm_source=github&utm_medium=readme): multiples, SBA loans and diligence (213 sources)
 - [Who is winning AI coding agents, October 2026](https://hyperresearch.ai/samples/ai-coding-agents?utm_source=github&utm_medium=readme) (259 sources)
+- [Snowflake vs Databricks](https://hyperresearch.ai/samples/snowflake-vs-databricks?utm_source=github&utm_medium=readme): a costed first year for a 2,000-person AWS buyer, from filings and both rate cards (259 sources)
 
-These are the same kind of Deep runs that put Hyperresearch at #1 on DRACO. Method and per-task scores are on the [benchmark page](https://hyperresearch.ai/benchmarks/draco?utm_source=github&utm_medium=readme).
+These are the same kind of hosted Deep runs that put Hyperresearch at #1 on DRACO, at 77.7 (10 tasks). Our Finance, Academic and Law reports were produced by our current Deep writer from the research each task's run collected. Method and per-task scores are on the [benchmark page](https://hyperresearch.ai/benchmarks/draco?utm_source=github&utm_medium=readme).
 
 ## Why it wins
 
@@ -355,6 +356,7 @@ The `[web] provider` setting in `.hyperresearch/config.toml` picks how pages are
 - **`firecrawl`**: [Firecrawl](https://www.firecrawl.dev/?utm_source=hyperresearch&utm_medium=integration)'s search and scrape API. Search results carry each page's Markdown, and fetch returns the page's main content as Markdown. There is no batch fetch, so fetch waves go one URL at a time, and PDFs are extracted on Firecrawl's side, so no raw file is saved. Needs an API key (`FIRECRAWL_API_KEY`). `pip install "hyperresearch[firecrawl]"`.
 - **`parallel`** — [Parallel](https://parallel.ai/)'s Search MCP endpoint, which needs no account or key. Search only — bulk fetch waves degrade to per-URL, so it is a good search provider rather than a replacement for the crawl4ai fetch path. Every request from one process carries a random session ID that Parallel uses for correlation and rate limiting on its side. `pip install "hyperresearch[parallel]"`.
 - **`serply`** — [Serply](https://serply.io)'s Google search API, with page fetch through the same key ([API docs](https://serply.io/docs)). Search results are fetched to full page text, falling back to the snippet when a page cannot be fetched. Needs an API key; no extra install.
+- **`keenable`**: [Keenable](https://keenable.ai)'s search API, with page fetch through the same API ([API docs](https://docs.keenable.ai)). Search results already carry page text, so there is no per-result fetch. Works without a key, rate limited per IP (10 requests per second, 1000 per hour); setting `KEENABLE_API_KEY` lifts the limits. No extra install.
 
 ```toml
 # .hyperresearch/config.toml
