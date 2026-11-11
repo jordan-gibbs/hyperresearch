@@ -241,7 +241,12 @@ def get_provider(
 
         return KeenableProvider()
 
+    if name == "sofya":
+        from hyperresearch.web.sofya_provider import SofyaProvider
+
+        return SofyaProvider()
+
     raise ValueError(
         f"Unknown web provider: {name!r}. "
-        "Available: builtin, crawl4ai, exa, tavily, parallel, serply, keenable"
+        "Available: builtin, crawl4ai, exa, tavily, parallel, serply, keenable, sofya"
     )

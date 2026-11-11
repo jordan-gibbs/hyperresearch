@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **`sofya` web provider.** Web search that returns page content, plus page and document fetch, through one `SOFYA_API_KEY`; opt-in via `[web] provider = "sofya"`, no new dependency.
+
 ## [0.13.1] - 2026-11-09
 
 - **`hpr search --semantic` scores every note with one numpy matmul instead of one Python `cosine()` call each (#59).** `cosine()` did three generator passes per candidate in pure Python; at 512-dim that's ~49µs/vector, so a one-second query capped out around 15k notes (5k at 1536-dim) — well past any real vault, but the module docstring's "fine to ~50k notes" was already off by about an order of magnitude, having been written as if the vectorized loop it never got already existed. `semantic_search` now loads the stored vectors with `np.frombuffer` and scores the whole set in a single matmul, which is unaffected by a note embedded under a stale model/dimension mid-migration — it scores 0, same as `cosine()` did on a length mismatch, instead of joining the matrix. The scholarly-metadata filters and index-note exclusion added in #119 are applied in the SQL fetch before the matmul, so a filtered semantic search still only scores the filtered candidate set. Measured sub-second up to ~50k notes; larger vaults are untested. A stored all-zero vector, or an all-zero query, scores 0 with no NaN. numpy was already an unlisted transitive dependency via Crawl4AI; it's now declared directly. `cosine()` itself is untouched and still covered by its own test.
