@@ -236,6 +236,11 @@ def get_provider(
 
         return SerplyProvider()
 
+    if name == "keenable":
+        from hyperresearch.web.keenable_provider import KeenableProvider
+
+        return KeenableProvider()
+
     if name == "sofya":
         from hyperresearch.web.sofya_provider import SofyaProvider
 
@@ -243,5 +248,5 @@ def get_provider(
 
     raise ValueError(
         f"Unknown web provider: {name!r}. "
-        "Available: builtin, crawl4ai, exa, tavily, parallel, serply, sofya"
+        "Available: builtin, crawl4ai, exa, tavily, parallel, serply, keenable, sofya"
     )

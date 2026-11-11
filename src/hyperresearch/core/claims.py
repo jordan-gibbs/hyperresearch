@@ -305,15 +305,16 @@ def literature_matrix(conn, vault_tag: str | None = None) -> list[dict]:
     rows = [dict(r) for r in conn.execute(query, params).fetchall()]
 
     # Attach each source's single highest-signal claim (empirical + quantified first)
+    claim_scope = " AND vault_tag = ?" if vault_tag else ""
     for row in rows:
         top = conn.execute(
-            """SELECT claim FROM claims WHERE note_id = ?
+            f"""SELECT claim FROM claims WHERE note_id = ?{claim_scope}
                ORDER BY (CASE WHEN evidence_type IN ('empirical','statistical') THEN 0 ELSE 1 END),
                         (CASE WHEN numbers IS NOT NULL THEN 0 ELSE 1 END),
                         (CASE WHEN confidence = 'high' THEN 0 ELSE 1 END),
                         id
                LIMIT 1""",
-            (row["id"],),
+            (row["id"], *params),
         ).fetchone()
         row["key_claim"] = top["claim"] if top else None
 
