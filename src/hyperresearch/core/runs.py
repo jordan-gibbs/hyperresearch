@@ -544,21 +544,32 @@ def verify_run(vault, vault_tag: str) -> dict:
 
         from hyperresearch.core.patterns import WIKI_LINK_RE
 
+        # ponytail: Sources/References entries ("[7] Chen et al. 2025",
+        # link-reference defs "[7]: https://...") are citation *listings*,
+        # not citations in the body. citecheck.py already strips this
+        # section before counting (and the instruction critic's spec says
+        # "excluding the ## Sources section"); this gate didn't, so a long
+        # Sources list alone could push a thinly-cited body over the floor.
+        cited_body = _re.split(
+            r"^##\s+(?:Sources|References)\b", report_text, maxsplit=1,
+            flags=_re.M | _re.I,
+        )[0]
+
         # Grouped markers ([7, 12]) count one citation per source number,
         # so consolidating stacks never lowers measured density. Wiki-link
         # citations use the shared pattern so this gate and the lint/cite-
         # check rules agree on what a [[...]] citation is.
         cites = sum(
             len(g.split(","))
-            for g in _re.findall(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\]", report_text)
-        ) + len(WIKI_LINK_RE.findall(report_text))
+            for g in _re.findall(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\]", cited_body)
+        ) + len(WIKI_LINK_RE.findall(cited_body))
         # Per 1000 *effective* words, not characters: a character floor
         # means a different amount of content per script (CJK packs ~3x
         # the content per character), so the same number would be a
         # different bar for a Japanese report than for an English one.
-        no_boundaries = _lacks_word_boundaries(report_text)
+        no_boundaries = _lacks_word_boundaries(cited_body)
         effective_words = _effective_word_count(
-            report_text, profile.chars_per_word_no_word_boundary
+            cited_body, profile.chars_per_word_no_word_boundary
         )
         density = cites * 1000 / max(1.0, effective_words)
         floor = profile.citation_density_min  # also the instruction critic's re-count trigger
