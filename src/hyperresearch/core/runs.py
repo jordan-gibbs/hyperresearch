@@ -544,7 +544,7 @@ def verify_run(vault, vault_tag: str) -> dict:
 
         from hyperresearch.core.patterns import WIKI_LINK_RE
 
-        # ponytail: Sources/References entries ("[7] Chen et al. 2025",
+        # Sources/References entries ("[7] Chen et al. 2025",
         # link-reference defs "[7]: https://...") are citation *listings*,
         # not citations in the body. citecheck.py already strips this
         # section before counting (and the instruction critic's spec says
