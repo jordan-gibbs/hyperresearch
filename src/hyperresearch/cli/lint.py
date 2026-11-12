@@ -114,6 +114,13 @@ def _check_quote_integrity(vault, conn, report_path, report_text) -> list[dict]:
     noise doesn't false-positive) and reports the nearest fuzzy match for
     fast fixing. Hallucinated quotes are error severity — they are the one
     thing a research report can never ship.
+
+    The evidence pool is every indexed note EXCEPT a final report, matched by
+    the glob _latest_report uses (anchored to research/notes/, since a GLOB
+    `*` also matches `/`): the header-less deliverable is itself an indexed
+    note (and a report that carries a header always was), so without the
+    exclusion every quote in the report would verify against its own body
+    and the rule would be silent exactly when it matters.
     """
     import re as _re
 
@@ -126,7 +133,10 @@ def _check_quote_integrity(vault, conn, report_path, report_text) -> list[dict]:
         phrase = quote.replace('"', " ").replace("'", "''")
         try:
             hit = conn.execute(
-                'SELECT id FROM notes_fts WHERE notes_fts MATCH ? LIMIT 1',
+                "SELECT notes_fts.id FROM notes_fts JOIN notes ON notes.id = notes_fts.id "
+                "WHERE notes_fts MATCH ? "
+                "AND notes.path NOT GLOB 'research/notes/final_report*.md' "
+                "LIMIT 1",
                 (f'body_plain: "{phrase}"',),
             ).fetchone()
         except Exception:
@@ -258,6 +268,10 @@ def lint(
     vault.auto_sync()
     conn = vault.db
 
+    # The header-less final report is indexed from metadata derived at read
+    # time; the missing-summary, workflow and uncurated rules leave it out.
+    from hyperresearch.core.frontmatter import is_frontmatterless_report
+
     issues: list[dict] = []
 
     rules_to_run = [rule] if rule else list(RULES.keys())
@@ -298,6 +312,10 @@ def lint(
             "WHERE n.type NOT IN ('index','raw') "
             "AND (n.summary IS NULL OR LENGTH(TRIM(n.summary)) = 0)"
         ):
+            # The report's summary is derived (none when no prose line
+            # qualifies) and `note update --summary` on it refuses.
+            if is_frontmatterless_report(vault.root / row["path"]):
+                continue
             issues.append({
                 "rule": "missing-summary",
                 "severity": "warning",
@@ -1555,12 +1573,21 @@ def lint(
             ).fetchone()
             return row["c"] if row else 0
 
-        has_research_output = conn.execute("""
-            SELECT COUNT(*) as c FROM notes n
-            WHERE n.id LIKE '%final_report%'
-               OR n.type = 'moc'
-               OR n.id IN (SELECT note_id FROM tags WHERE tag = 'synthesis')
-        """).fetchone()["c"]
+        # The header-less final report is left out of the count: the scaffold
+        # lookup below cannot see a legacy scaffold that archive-run moved
+        # under research/runs/archive-<ts>/ (no run.json there), so letting
+        # the report trigger the rule would turn every such vault red for
+        # good. The rule fires exactly when it did before the report indexed.
+        has_research_output = sum(
+            1
+            for row in conn.execute("""
+                SELECT n.path FROM notes n
+                WHERE n.id LIKE '%final_report%'
+                   OR n.type = 'moc'
+                   OR n.id IN (SELECT note_id FROM tags WHERE tag = 'synthesis')
+            """)
+            if not is_frontmatterless_report(vault.root / row["path"])
+        )
 
         scaffold_count = _count_by_tag("scaffold")
         scaffold_md_exists = _run_artifact(vault, "scaffold.md").exists()
@@ -1644,8 +1671,10 @@ def lint(
     if "uncurated" in rules_to_run:
         # Any note that has moved past draft without tier/content_type classification
         # is a curation failure. Exempt: draft notes (expected raw), index/raw/moc
-        # types (not sources), and notes whose id starts with _ (auto-generated
-        # index notes like _most-linked, _stale, _orphans).
+        # types (not sources), notes whose id starts with _ (auto-generated
+        # index notes like _most-linked, _stale, _orphans), and the header-less
+        # final report (indexed as `review` with neither field, and `note update
+        # --tier` on it refuses: the rule must not ask for what the tool forbids).
         for row in conn.execute(
             "SELECT n.id, n.path, n.status, n.tier, n.content_type FROM notes n "
             "WHERE n.type NOT IN ('index','raw','moc') "
@@ -1654,6 +1683,8 @@ def lint(
             "AND (n.tier IS NULL OR n.tier = 'unknown' "
             "     OR n.content_type IS NULL OR n.content_type = 'unknown')"
         ):
+            if is_frontmatterless_report(vault.root / row["path"]):
+                continue
             missing = []
             if not row["tier"] or row["tier"] == "unknown":
                 missing.append("tier")
@@ -1668,8 +1699,13 @@ def lint(
             })
 
     if "singleton-tags" in rules_to_run:
+        from hyperresearch.core.note import FINAL_REPORT_TAG
+
+        # The final-report tag is derived for the one file the tool refuses to
+        # retag, so "consider merging" is not actionable for it.
         for row in conn.execute(
-            "SELECT tag, COUNT(*) as c FROM tags GROUP BY tag HAVING c = 1"
+            "SELECT tag, COUNT(*) as c FROM tags WHERE tag != ? GROUP BY tag HAVING c = 1",
+            (FINAL_REPORT_TAG,),
         ):
             issues.append({
                 "rule": "singleton-tags",
