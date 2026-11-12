@@ -2,6 +2,7 @@
 
 import os
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -975,3 +976,21 @@ def test_sync_id_rewrite_takes_a_new_file_without_frontmatter_as_a_claimant(tmp_
     assert result.errors == [] and (result.added, result.updated) == (1, 1)
     rows = {r["id"]: r["path"] for r in tmp_vault.db.execute("SELECT id, path FROM notes")}
     assert rows == {"topic": "research/notes/topic.md", "topic-2": "research/notes/topic-2.md"}
+
+
+@pytest.mark.parametrize("reverse_scan", [False, True])
+def test_duplicate_id_winner_is_stable_across_scan_orders(tmp_vault, monkeypatch, reverse_scan):
+    paths = [tmp_vault.notes_dir / name / "note.md" for name in ["a", "b"]]
+    for path in paths:
+        path.parent.mkdir()
+        path.write_text(
+            "---\nid: shared\ntitle: " + path.parent.name + "\n---\nbody\n", encoding="utf-8"
+        )
+    listed = paths[::-1] if reverse_scan else paths
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "rglob", lambda *_args, **_kwargs: iter(listed))
+        plan = compute_sync_plan(tmp_vault)
+    result = execute_sync(tmp_vault, plan)
+    assert result.added == 1
+    row = tmp_vault.db.execute("SELECT path FROM notes WHERE id = 'shared'").fetchone()
+    assert row["path"] == "research/notes/a/note.md"

@@ -100,7 +100,7 @@ def compute_sync_plan(vault, force: bool = False) -> SyncPlan:
 
     runs_dir = kb_dir / "runs"
     disk_files: dict[str, float] = {}
-    for md_file in kb_dir.rglob("*.md"):
+    for md_file in sorted(kb_dir.rglob("*.md"), key=Path.as_posix):
         # Skip staging files at the research/ root. Real notes live in
         # research/notes/** or research/index/**.
         if md_file.parent == kb_dir:
