@@ -918,6 +918,37 @@ class TestTelemetryAndVerify:
         assert by_name["citation-density"]["ok"]
         assert "citations/1000 words" in by_name["citation-density"]["detail"]
 
+    def test_verify_density_excludes_sources_section_entries(self, tmp_vault):
+        """citecheck.py and the instruction critic's spec both exclude the
+        Sources/References section before counting citations (a numbered
+        Sources listing is a bibliography entry, not a citation in the
+        body). The citation-density gate must agree: a body with no real
+        citations must not pass just because its Sources section lists
+        many numbered entries."""
+        init_run(tmp_vault, "vf-05", profile="light")
+        run_dir = tmp_vault.run_dir("vf-05")
+        (run_dir / "prompt-decomposition.json").write_text(json.dumps({
+            "response_format": "short",
+            "required_section_headings": ["## Findings"],
+        }), encoding="utf-8")
+        report = tmp_vault.root / "research" / "notes" / "final_report_vf-05.md"
+        nl = chr(10)
+        # Body: plenty of prose, zero citation markers.
+        filler = "Uncited prose filler describing the finding at length here. " * 30
+        sources = nl.join(
+            f"[{i}] Source Title Number {i}. https://example.com/{i}" for i in range(1, 60)
+        ) + nl
+        report.write_text(
+            "## Findings" + nl + nl + filler + nl + nl + "## Sources" + nl + nl + sources,
+            encoding="utf-8",
+        )
+
+        result = verify_run(tmp_vault, "vf-05")
+        by_name = {c["name"]: c for c in result["checks"]}
+        # The body cites nothing; 59 bracketed Sources entries must not be
+        # counted as citations just because they match `[N]`.
+        assert not by_name["citation-density"]["ok"], by_name["citation-density"]["detail"]
+
     @staticmethod
     def _density_check(tmp_vault, tag: str, body: str, heading: str = "## Findings") -> dict:
         init_run(tmp_vault, tag, profile="light")
