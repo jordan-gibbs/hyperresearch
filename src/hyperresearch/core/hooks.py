@@ -1127,14 +1127,14 @@ prompt. No block = this prompt's defaults apply unchanged.
    - For EACH mismatch (missing heading, extra heading, out-of-order
      heading, heading with wrong wording), emit ONE finding with:
      ```json
-     {{
+     {
        "severity": "critical",
        "atomic_item": "required_section_headings[<index>]: <expected heading>",
        "failure_mode": "wrong-order",
        "location": "",
        "issue": "Expected H2 at position <N>: '<expected>'. Got: '<actual or MISSING>'. Full heading diff: <list both ordered arrays>.",
        "requires_orchestrator_restructure": true
-     }}
+     }
      ```
    - Set `requires_orchestrator_restructure: true` on every
      structural-mirror finding. The patcher's tool-lock means it
@@ -1156,10 +1156,10 @@ prompt. No block = this prompt's defaults apply unchanged.
 5. **Emit findings.** Use the **Write tool** to save findings JSON to `output_path`. Do NOT use Bash heredocs — the Write tool handles escaping automatically. For each failure, produce a structured finding:
 
 ```json
-{{
+{
   "critic_type": "instruction",
   "findings": [
-    {{
+    {
       "severity": "critical|major|minor",
       "atomic_item": "the specific prompt fragment that isn't honored — quote it verbatim from research_query",
       "failure_mode": "missing|under-covered|wrong-order|wrong-format|vague-recommendation",
@@ -1167,9 +1167,9 @@ prompt. No block = this prompt's defaults apply unchanged.
       "issue": "One sentence: what the prompt asked and what the draft does instead",
       "requires_orchestrator_restructure": false,
       "recommendation": "What the fix should accomplish — e.g., 'Add a dedicated subsection on X after Section III' or 'Expand the single sentence on Y into a full paragraph with the evidence from note Z'. Be specific about WHAT to add/change, but the revisor decides the exact wording."
-    }}
+    }
   ]
-}}
+}
 ```
 
 **Do NOT include `old_text` / `new_text` exact patches.** The revisor agent handles the exact wording dynamically.
@@ -1224,14 +1224,14 @@ citing the vault evidence.
 Example finding:
 
 ```json
-{{
+{
   "severity": "major",
   "atomic_item": "Propose specific regulatory guidelines for manufacturer data access",
   "failure_mode": "vague-recommendation",
   "location": "Section on regulatory recommendations — paragraph starting with 'Standardized data recording requirements'",
   "issue": "Draft recommends 'standardized recording' abstractly; vault contains Zhang 2022 + EU PLD reform evidence supporting specific 30—60s pre-crash + 10—15s post-crash windows.",
   "recommendation": "Replace the abstract 'standardized data recording requirements' with the specific time windows from Zhang 2022: 30—60 seconds pre-crash plus 10—15 seconds post-crash, with sensor-fusion state and handover timestamps. Align with EU PLD reform timing disclosure requirements."
-}}
+}
 ```
 
 Abstract recommendations where the evidence genuinely doesn't support
@@ -2665,9 +2665,9 @@ every list / table / blockquote.
 Write a single JSON file to `recommendations_path`. Schema:
 
 ```json
-{{
+{
   "recommendations": [
-    {{
+    {
       "id": "rec-1",
       "category": "merge-paragraphs|break-paragraph|make-list|make-table|bold-keyterms|split-sentence|remove-hr|add-whitespace",
       "severity": "minor|moderate|major",
@@ -2675,11 +2675,11 @@ Write a single JSON file to `recommendations_path`. Schema:
       "current": "<exact existing text — copied verbatim, including non-ASCII chars>",
       "recommended": "<exact replacement text the orchestrator should Edit in>",
       "rationale": "<one sentence: why this change improves readability>"
-    }}
+    }
   ],
-  "summary": {{
+  "summary": {
     "total_recommendations": <int>,
-    "by_category": {{
+    "by_category": {
       "merge-paragraphs": <int>,
       "break-paragraph": <int>,
       "make-list": <int>,
@@ -2688,11 +2688,11 @@ Write a single JSON file to `recommendations_path`. Schema:
       "split-sentence": <int>,
       "remove-hr": <int>,
       "add-whitespace": <int>
-    }},
+    },
     "highest_severity": "minor|moderate|major",
     "expected_net_char_delta": <int — positive if recommendations expand, negative if they cut>
-  }}
-}}
+  }
+}
 ```
 
 ## Procedure
@@ -3313,9 +3313,9 @@ prompt. No block = this prompt's defaults apply unchanged.
 
 6. **Produce output** at `output_path`:
    ```json
-   {{
+   {
      "gaps": [
-       {{
+       {
          "id": "cc-1",
          "type": "overturning|strengthening|independent-verification",
          "target_position": "which claim/position this source would test",
@@ -3323,9 +3323,9 @@ prompt. No block = this prompt's defaults apply unchanged.
          "source_type": "academic|government|industry|investigative",
          "priority": "critical|high|medium",
          "rationale": "why finding this source matters for the draft"
-       }}
+       }
      ]
-   }}
+   }
    ```
 
    **Cap: << p.corpus_critic_gaps|hyphen >> gaps.** Only `critical` and `high` priority. Do not
@@ -4107,8 +4107,7 @@ def _install_width_critic_agent(vault_root: Path, hpr_path: str) -> str | None:
 
 
 def _install_instruction_critic_agent(vault_root: Path, hpr_path: str) -> str | None:
-    # Instruction-critic prompt has no {hpr_path} placeholder currently,
-    # but the .format() call is harmless — it leaves the text untouched.
+    # No str.format() pass: JSON examples in this template use literal braces.
     content = INSTRUCTION_CRITIC_AGENT
     return _write_agent_file(
         vault_root,
