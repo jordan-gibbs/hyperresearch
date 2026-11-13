@@ -49,8 +49,9 @@ mcp = ["mcp>=1.6,<2"]
 parallel = ["mcp>=1.8,<2"]
 exa = ["exa-py>=2.0.0"]
 tavily = ["tavily-python>=0.3"]
+firecrawl = ["firecrawl-py>=4.46.0"]
 watch = ["watchdog>=4.0"]
-all = ["hyperresearch[crawl4ai,mcp,parallel,exa,tavily,watch]"]
+all = ["hyperresearch[crawl4ai,mcp,parallel,exa,tavily,firecrawl,watch]"]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",

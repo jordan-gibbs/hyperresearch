@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **`firecrawl` web provider.** Web search whose results carry page Markdown, and page fetch as Markdown, through `FIRECRAWL_API_KEY`; opt-in via `[web] provider = "firecrawl"` and `pip install "hyperresearch[firecrawl]"`. A key is required.
+
 ## [0.13.2] - 2026-11-12
 
 ### Fixed
