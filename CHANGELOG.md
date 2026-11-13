@@ -4,6 +4,14 @@
 
 - **`firecrawl` web provider.** Web search whose results carry page Markdown, and page fetch as Markdown, through `FIRECRAWL_API_KEY`; opt-in via `[web] provider = "firecrawl"` and `pip install "hyperresearch[firecrawl]"`. A key is required.
 
+## [0.13.2] - 2026-11-12
+
+### Fixed
+
+- **Installed agents show valid JSON in their output examples (#203, from @rsloveless).** The instruction-critic, readability-recommender and corpus-critic templates kept `str.format()` brace escapes, but none of the three goes through `.format()`, so a clean install wrote `{{` and `}}` into their JSON schema examples, on both the Claude and Codex targets. An agent that copied its example emitted invalid JSON. The escapes are gone from those three templates, and a new test installs every agent for both targets and parses each fenced `json` example.
+- **`run verify` leaves the Sources section out of citation density (#202, from @SID-6921).** The `citation-density` gate counted every `[N]` and `[[...]]` in the whole report, including the numbered entries of `## Sources` / `## References`, so a long source list could carry a thinly cited body over the floor. The gate now counts citations and words in the body only, matching cite-check and the instruction critic. The length, heading and scaffold-leak checks still read the full report.
+- **Sync picks the same winner for duplicate note ids on every filesystem (#201, from @jackiectl2).** Sync scanned notes in `rglob` order, so when two files declared the same `id:` the one kept depended on directory traversal order; an import of `a/note.md` and `b/note.md` could keep `b`. Sync now scans in lexical path order.
+
 ## [0.13.1] - 2026-11-09
 
 - **`hpr search --semantic` scores every note with one numpy matmul instead of one Python `cosine()` call each (#59).** `cosine()` did three generator passes per candidate in pure Python; at 512-dim that's ~49µs/vector, so a one-second query capped out around 15k notes (5k at 1536-dim) — well past any real vault, but the module docstring's "fine to ~50k notes" was already off by about an order of magnitude, having been written as if the vectorized loop it never got already existed. `semantic_search` now loads the stored vectors with `np.frombuffer` and scores the whole set in a single matmul, which is unaffected by a note embedded under a stale model/dimension mid-migration — it scores 0, same as `cosine()` did on a length mismatch, instead of joining the matrix. The scholarly-metadata filters and index-note exclusion added in #119 are applied in the SQL fetch before the matmul, so a filtered semantic search still only scores the filtered candidate set. Measured sub-second up to ~50k notes; larger vaults are untested. A stored all-zero vector, or an all-zero query, scores 0 with no NaN. numpy was already an unlisted transitive dependency via Crawl4AI; it's now declared directly. `cosine()` itself is untouched and still covered by its own test.
