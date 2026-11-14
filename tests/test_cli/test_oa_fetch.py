@@ -18,6 +18,7 @@ from typer.testing import CliRunner
 
 from hyperresearch.cli import app
 from hyperresearch.web.base import WebResult
+from hyperresearch.web.base import get_provider as _real_get_provider
 
 runner = CliRunner()
 
@@ -56,6 +57,26 @@ class _BlockedProvider:
 
     def fetch_many(self, urls):
         raise RuntimeError("Client error '403 Forbidden'")
+
+
+class _CertRefusingProvider:
+    """The certificate did not verify, so the fetch was refused rather than
+    failing. Both entry points raise, as the PDF lane does."""
+
+    name = "fake-cert"
+
+    def fetch(self, url):
+        from hyperresearch.web.safe_http import CertVerificationError
+
+        # The PDF lane's wording: the opt-out names a config section.
+        raise CertVerificationError(
+            f"certificate verification failed for {url!r}: CERTIFICATE_VERIFY_FAILED. "
+            "If this host is a known cert-broken mirror you trust, set "
+            "pdf_verify_tls = false under [fetch] in config.toml."
+        )
+
+    def fetch_many(self, urls):
+        return [self.fetch(u) for u in urls]
 
 
 class _LoginWallProvider:
@@ -245,6 +266,268 @@ def test_blocked_fetch_without_a_copy_still_fails(vault_dir: Path, monkeypatch):
     result = runner.invoke(app, ["fetch", PAPER_URL, "--json"])
     assert result.exit_code == 1
     assert json.loads(result.output)["error_code"] == "FETCH_ERROR"
+
+
+def _rescue_spy(monkeypatch) -> list[str]:
+    """Record every rescue attempt without performing one."""
+    from hyperresearch.core import oa
+
+    calls: list[str] = []
+
+    def fake_rescue(vault, prov, url, doi):
+        calls.append(url)
+        return None, None
+
+    monkeypatch.setattr(oa, "rescue_full_text", fake_rescue)
+    return calls
+
+
+def test_cert_refusal_is_not_rescued(vault_dir: Path, monkeypatch):
+    """A refused certificate must stay a refusal: the command fails with
+    TLS_CERT_INVALID and writes no note. Offered to the rescue, it came back
+    as an ordinary rescued note (exit 0, `kind: "rescued"`), with the refusal
+    only as free text in `oa.blocked_reason`. Under this vault's stubs the
+    rescue WOULD succeed, so the spy proves the guard, not a missing copy."""
+    os.chdir(vault_dir)
+    monkeypatch.setattr(
+        "hyperresearch.web.base.get_provider", lambda *a, **k: _CertRefusingProvider()
+    )
+    attempts = _rescue_spy(monkeypatch)
+
+    result = runner.invoke(app, ["fetch", PAPER_URL, "--json"])
+    assert attempts == []  # the refusal never reached the rescue
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["error_code"] == "TLS_CERT_INVALID"
+    assert "pdf_verify_tls" in payload["error"]
+    assert list((vault_dir / "research" / "notes").glob("*.md")) == []
+
+
+def test_batch_cert_refusal_is_a_loud_skip_not_a_rescue(vault_dir: Path, monkeypatch):
+    """Same rule on the batch path, which reaches the rescue by a different
+    route: a per-URL failure is recorded and every recorded failure is then
+    offered to the rescue. A cert refusal is held back from that list and stays
+    in `failed_urls`, so the caller still sees the URL it lost."""
+    os.chdir(vault_dir)
+    monkeypatch.setattr(
+        "hyperresearch.web.base.get_provider", lambda *a, **k: _CertRefusingProvider()
+    )
+    attempts = _rescue_spy(monkeypatch)
+
+    result = runner.invoke(app, ["fetch-batch", PAPER_URL, "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)["data"]
+
+    assert attempts == []
+    assert data["oa_rescued"] == 0
+    assert data["notes_created"] == []
+    assert [f["url"] for f in data["failed_urls"]] == [PAPER_URL]
+    assert "certificate" in data["failed_urls"][0]["error"]
+    # The one machine-readable signal: `error` is free text and `phase` is
+    # shared with every other failure.
+    assert data["failed_urls"][0]["reason"] == "tls_cert_invalid"
+
+
+def test_batch_skip_line_survives_brackets_in_the_url(vault_dir: Path, monkeypatch):
+    """The URL is external text too. A bracketed query parameter is a tag to
+    Rich, and a closing one (`[/b]`) raised MarkupError inside the handler,
+    which ended the whole batch."""
+    os.chdir(vault_dir)
+    monkeypatch.setattr(
+        "hyperresearch.web.base.get_provider", lambda *a, **k: _CertRefusingProvider()
+    )
+    _rescue_spy(monkeypatch)
+
+    query = "?filter[type]=pdf&x=[/b]"
+    result = runner.invoke(app, ["fetch-batch", PAPER_URL + query])
+    assert result.exit_code == 0
+    assert "SKIPPED (TLS certificate invalid):" in result.output
+    # Twice inside the message (the fallback line, then the skip), once bare.
+    assert result.output.count(query) == 3
+
+
+def test_batch_failure_line_survives_brackets_in_the_url_and_message(
+    vault_dir: Path, monkeypatch
+):
+    """The per-URL failure line prints two pieces of external text, the URL
+    and the exception message, and escapes both: a closing tag in either one
+    raised MarkupError inside the handler."""
+    os.chdir(vault_dir)
+
+    class _BracketFailingProvider:
+        name = "fake-brackets"
+
+        def fetch(self, url):
+            raise RuntimeError("upstream said [/i] no")
+
+        def fetch_many(self, urls):
+            raise RuntimeError("batch lane down")
+
+    monkeypatch.setattr(
+        "hyperresearch.web.base.get_provider", lambda *a, **k: _BracketFailingProvider()
+    )
+    _rescue_spy(monkeypatch)
+
+    query = "?filter[type]=pdf&x=[/b]"
+    result = runner.invoke(app, ["fetch-batch", PAPER_URL + query])
+    assert result.exit_code == 0
+    # Rich wraps at the terminal width, so compare with whitespace collapsed.
+    flat = " ".join(result.output.split())
+    assert f"Failed (batch-fallback): {PAPER_URL + query} — upstream said [/i] no" in flat
+
+
+def test_batch_rescue_lines_survive_brackets_in_the_failure(vault_dir: Path, monkeypatch):
+    """With the failure line escaped the batch goes on to the rescue, whose
+    lines print external text after the note is written: the URL, the
+    copy's title, URL and version, and the failure. A closing tag in any of
+    them raised MarkupError with the note file on disk and no index row, and
+    the next run wrote a second note. Each field carries its own tag here."""
+    os.chdir(vault_dir)
+    from hyperresearch.core import scholar
+    from hyperresearch.web import pdf as pdf_lane
+
+    oa_pdf = UNPAYWALL["best_oa_location"]["url_for_pdf"] + "?v=[/u]"
+    unpaywall = {
+        "is_oa": True,
+        "best_oa_location": {
+            **UNPAYWALL["best_oa_location"], "url_for_pdf": oa_pdf, "version": "accepted[/v]Version"
+        },
+    }
+    monkeypatch.setattr(
+        scholar, "_http_get_json", lambda url: unpaywall if "unpaywall" in url else None
+    )
+    monkeypatch.setattr(
+        pdf_lane,
+        "fetch_pdf",
+        lambda url, settings: WebResult(url=url, title="Widget [/b] Paper", content=FULL_TEXT),
+    )
+    url = PAPER_URL + "?x=[/s]"
+
+    class _BracketBlockedProvider:
+        name = "fake-blocked-brackets"
+
+        def fetch(self, url):
+            raise RuntimeError("Client error '403 Forbidden' [/i]")
+
+        def fetch_many(self, urls):
+            raise RuntimeError("Client error '403 Forbidden' [/i]")
+
+    monkeypatch.setattr(
+        "hyperresearch.web.base.get_provider", lambda *a, **k: _BracketBlockedProvider()
+    )
+
+    result = runner.invoke(app, ["fetch-batch", url])
+    assert result.exit_code == 0, result.output
+    flat = " ".join(result.output.split())
+    assert f"Blocked — recovered an open-access copy: {url}" in flat
+    assert "+ Widget [/b] Paper" in flat
+    assert f"body from: {oa_pdf} (accepted[/v]Version," in flat
+    assert "source never read (fetch failed: Client error '403 Forbidden' [/i])" in flat
+    notes = list((vault_dir / "research" / "notes").glob("*.md"))
+    assert len(notes) == 1
+    listed = json.loads(runner.invoke(app, ["search", "Widget", "--json"]).output)["data"]
+    assert len(listed["results"]) == 1
+
+
+@pytest.mark.parametrize(
+    ("command", "lines"),
+    [
+        (["fetch", PAPER_URL], ["Fetch refused (TLS certificate invalid):"]),
+        (
+            ["fetch-batch", PAPER_URL],
+            ["Batch fetch failed:", "SKIPPED (TLS certificate invalid):"],
+        ),
+    ],
+)
+def test_cert_refusal_console_line_keeps_the_config_hint(
+    vault_dir: Path, monkeypatch, command, lines
+):
+    """The opt-out reads "[fetch]", which Rich takes for a markup tag and
+    drops, leaving "under  in config.toml". Every line that prints the
+    message escapes it: the provider's `fetch_many` raises first, so the
+    batch's fallback line prints the message before the skip does."""
+    os.chdir(vault_dir)
+    monkeypatch.setattr(
+        "hyperresearch.web.base.get_provider", lambda *a, **k: _CertRefusingProvider()
+    )
+    _rescue_spy(monkeypatch)
+
+    result = runner.invoke(app, command)
+    for line in lines:
+        assert line in result.output
+    assert result.output.count("[fetch]") == len(lines)
+
+
+# Shaped like a PDF, so the PDF lane takes it, and on doi.org, the one host whose
+# URL `extract_doi` reads a DOI from: after a failed fetch there is no page to
+# read one out of, and without a DOI there is no rescue.
+PDF_URL = "https://doi.org/10.1234/abc.pdf"
+LANDING_PAGE = "https://repo.example.org/widgets"
+UNPAYWALL_LANDING_ONLY = {
+    "is_oa": True,
+    "best_oa_location": {"url": LANDING_PAGE, "version": "publishedVersion"},
+}
+
+
+def test_visible_fetch_cert_refusal_never_reaches_the_unverified_lane(
+    vault_dir: Path, monkeypatch
+):
+    """The route on which a certificate refusal led to an unverified fetch. With
+    --visible (or an auto-visible domain) and a login profile, the crawl4ai
+    provider fetches pages through `_fetch_visible`, a Playwright window
+    launched with ignore_https_errors=True by design (#137: some walled sites
+    have broken chains), while its PDF lane verifies first. The rescue reuses
+    that provider for landing-page candidates, so a certificate refusal on
+    the PDF lane was followed by an unverified fetch of the open-access
+    landing page. The source has to be a URL the PDF lane takes whose DOI is
+    in the URL, a doi.org link ending in .pdf here. Hermetic: the real
+    provider with the PDF lane and the window stubbed; no browser starts."""
+    c4 = pytest.importorskip(
+        "hyperresearch.web.crawl4ai_provider", reason="crawl4ai not importable"
+    )
+    from hyperresearch.core import scholar
+    from hyperresearch.web.safe_http import CertVerificationError
+
+    os.chdir(vault_dir)
+    cfg = vault_dir / ".hyperresearch" / "config.toml"
+    text = cfg.read_text(encoding="utf-8")
+    assert text.count('provider = "builtin"\nprofile = ""\n') == 1
+    cfg.write_text(
+        text.replace(
+            'provider = "builtin"\nprofile = ""\n', 'provider = "crawl4ai"\nprofile = "tester"\n'
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("hyperresearch.web.base.get_provider", _real_get_provider)
+
+    def refuse_pdf(url, settings=None):
+        raise CertVerificationError(
+            f"certificate verification failed for {url!r}: CERTIFICATE_VERIFY_FAILED. "
+            "If this host is a known cert-broken mirror you trust, set "
+            "pdf_verify_tls = false under [fetch] in config.toml."
+        )
+
+    windows: list[str] = []
+
+    async def fake_visible(self, url):
+        windows.append(url)
+        return WebResult(url=url, title="Widget Paper", content=FULL_TEXT)
+
+    monkeypatch.setattr(c4, "_fetch_pdf", refuse_pdf)
+    monkeypatch.setattr(c4.Crawl4AIProvider, "_fetch_visible", fake_visible)
+    # A landing page only, so the candidate goes through the provider rather
+    # than the PDF lane.
+    monkeypatch.setattr(
+        scholar,
+        "_http_get_json",
+        lambda url: UNPAYWALL_LANDING_ONLY if "unpaywall" in url else None,
+    )
+
+    result = runner.invoke(app, ["fetch", PDF_URL, "--visible", "--json"])
+    assert windows == []  # the landing page never went through the window
+    assert result.exit_code == 1
+    assert json.loads(result.output)["error_code"] == "TLS_CERT_INVALID"
+    assert list((vault_dir / "research" / "notes").glob("*.md")) == []
 
 
 def test_batch_rescues_blocked_urls_and_clears_them_from_failures(
