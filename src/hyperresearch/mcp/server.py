@@ -21,6 +21,15 @@ server = FastMCP("hyperresearch", instructions=(
 
 _vault = None
 
+# Most rows one tool call returns. search_notes ships full note bodies, and
+# SQLite reads a negative LIMIT as "no limit", so an unchecked value (from a
+# prompt-injected agent, say) dumps the whole vault into one response.
+_MAX_RESULTS = 200
+
+
+def _clamp_limit(limit: int) -> int:
+    return max(1, min(limit, _MAX_RESULTS))
+
 
 def _get_vault():
     global _vault
@@ -49,8 +58,9 @@ def search_notes(
         tag: Filter by tag (comma-separated for multiple, AND logic)
         status: Filter by status (draft, review, evergreen, stale, deprecated, archive)
         parent: Filter by parent topic (e.g. "ml/deep-learning")
-        limit: Max results to return (default 10)
+        limit: Max results to return (default 10, at most 200)
     """
+    limit = _clamp_limit(limit)
     vault = _get_vault()
     vault.auto_sync()
     from hyperresearch.search.filters import SearchFilters
@@ -197,8 +207,9 @@ def get_hubs(limit: int = 20) -> str:
     """Get the most-linked-to notes in the research base (hub notes).
 
     Args:
-        limit: Max results (default 20)
+        limit: Max results (default 20, at most 200)
     """
+    limit = _clamp_limit(limit)
     vault = _get_vault()
     vault.auto_sync()
     rows = vault.db.execute(
@@ -280,8 +291,9 @@ def list_sources(domain: str = "", limit: int = 50) -> str:
 
     Args:
         domain: Filter by domain (e.g. "arxiv.org"). Leave empty for all.
-        limit: Max results (default 50)
+        limit: Max results (default 50, at most 200)
     """
+    limit = _clamp_limit(limit)
     vault = _get_vault()
     if domain:
         rows = vault.db.execute(

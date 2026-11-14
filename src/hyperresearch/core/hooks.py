@@ -3777,7 +3777,7 @@ def _prune_global_step_skills(home: Path) -> str | None:
         suffix = name[len("hyperresearch-"):]
         if not suffix or not suffix[0].isdigit():
             continue
-        if not _is_our_skill_dir(child):
+        if not _is_our_step_skill_dir(child):
             continue
         _remove_skill_dir(child)
         pruned.append(name)
@@ -4260,6 +4260,25 @@ def _is_our_skill_dir(path: Path) -> bool:
     return any(marker in text for marker in _OWNED_SKILL_MARKERS)
 
 
+def _is_our_step_skill_dir(path: Path) -> bool:
+    """`_is_our_skill_dir` for a dir matched only by its `hyperresearch-` prefix.
+
+    A hand-written `hyperresearch-my-notes` mentions hyperresearch too, so the
+    content marker alone deleted it. Ours carry the provenance header
+    (render.render_header), or, from installs predating it, a step name the
+    package ships: every step name it has ever shipped is still in the roster.
+    """
+    if not _is_our_skill_dir(path):
+        return False
+    if path.name in _HYPERRESEARCH_STEP_SKILLS:
+        return True
+    try:
+        text = (path / "SKILL.md").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return "rendered from profile" in text
+
+
 def _remove_skill_dir(path: Path) -> None:
     """Delete a skill directory and everything under it."""
     import shutil
@@ -4507,7 +4526,8 @@ def _install_hyperresearch_step_skills(
         is_legacy_layercake = child.name.startswith("layercake-")
         if not (is_stale_hpr or is_legacy_layercake):
             continue
-        if not _is_our_skill_dir(child):
+        owned = _is_our_step_skill_dir if is_stale_hpr else _is_our_skill_dir
+        if not owned(child):
             continue
         _remove_skill_dir(child)
         pruned.append(child.name)
