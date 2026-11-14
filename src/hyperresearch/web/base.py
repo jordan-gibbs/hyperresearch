@@ -241,7 +241,12 @@ def get_provider(
 
         return KeenableProvider()
 
+    if name == "specstream":
+        from hyperresearch.web.specstream_provider import SpecStreamProvider
+
+        return SpecStreamProvider()
+
     raise ValueError(
         f"Unknown web provider: {name!r}. "
-        "Available: builtin, crawl4ai, exa, tavily, parallel, serply, keenable"
+        "Available: builtin, crawl4ai, exa, tavily, parallel, serply, keenable, specstream"
     )
