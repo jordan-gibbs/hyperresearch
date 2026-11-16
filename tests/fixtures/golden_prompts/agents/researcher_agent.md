@@ -86,10 +86,8 @@ If you get a browser crash or "failed to launch" error:
 
 ## Commands
 
-On Windows, ALWAYS prefix commands with `PYTHONIOENCODING=utf-8`:
-
 ```bash
-PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> -j
+{hpr_path} fetch "<url>" --tag <topic> -j
 ```
 
 ### Utility flag — `--utility-score`
@@ -99,7 +97,7 @@ When your assigned batch carries a utility score next to a URL (e.g.
 frontmatter and feeds the vault's composite quality ranking:
 
 ```bash
-PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> --utility-score 14 -j
+{hpr_path} fetch "<url>" --tag <topic> --utility-score 14 -j
 ```
 
 DOIs and arXiv ids are captured automatically during fetch — you do not
@@ -111,7 +109,7 @@ When fetching a URL that was referenced by a source you already processed,
 pass `--suggested-by <note-id>` to create the citation chain in the vault:
 
 ```bash
-PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" \
+{hpr_path} fetch "<url>" \
   --tag <topic> \
   --suggested-by <source-note-id> \
   --suggested-by-reason "<one-line reason>" \
@@ -126,17 +124,17 @@ If you're fetching a seed source directly from the parent agent's URL list
 For each URL the parent agent gave you:
 
 1. Check if it's already fetched:
-   `PYTHONIOENCODING=utf-8 {hpr_path} sources check "<url>" -j`
+   `{hpr_path} sources check "<url>" -j`
 
 2. If not already fetched, fetch it:
-   `PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> -j`
+   `{hpr_path} fetch "<url>" --tag <topic> -j`
 
 3. After fetching, read the note content:
-   `PYTHONIOENCODING=utf-8 {hpr_path} note show <note-id> -j`
+   `{hpr_path} note show <note-id> -j`
 
 4. **Quality check** — read the content and decide:
    - Is this actually relevant to the research topic? If completely off-topic, deprecate it:
-     `PYTHONIOENCODING=utf-8 {hpr_path} note update <note-id> --status deprecated -j`
+     `{hpr_path} note update <note-id> --status deprecated -j`
    - Is the content meaningful (not junk)? If junk, deprecate it.
    - Is this a duplicate? If so, deprecate the worse copy.
 
@@ -145,8 +143,8 @@ For each URL the parent agent gave you:
    and fetch the primary sources in Phase 2.
 
 5. If the content is good, write a real summary and add tags:
-   `PYTHONIOENCODING=utf-8 {hpr_path} note update <note-id> --summary "<specific summary>" -j`
-   `PYTHONIOENCODING=utf-8 {hpr_path} note update <note-id> --add-tag <specific-tag> -j`
+   `{hpr_path} note update <note-id> --summary "<specific summary>" -j`
+   `{hpr_path} note update <note-id> --add-tag <specific-tag> -j`
 
    **Summary length is proportional to the source's substantive density.**
    - **Short/thin:** 1-2 specific sentences.
@@ -220,8 +218,8 @@ those primaries gives the pipeline higher-authority sources to cite.
    - If you have a direct URL from the citation, fetch it with the
      hyperresearch CLI (same commands as Phase 1):
      ```
-     PYTHONIOENCODING=utf-8 {hpr_path} sources check "<url>" -j
-     PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> --suggested-by <note-id-that-cited-it> --suggested-by-reason "cited as primary source" -j
+     {hpr_path} sources check "<url>" -j
+     {hpr_path} fetch "<url>" --tag <topic> --suggested-by <note-id-that-cited-it> --suggested-by-reason "cited as primary source" -j
      ```
    - If you only have author + title (no URL), use WebSearch to locate it:
      search for `"<author> <title> <year>"` or `"<title> filetype:pdf"`

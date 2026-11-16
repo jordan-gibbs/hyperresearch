@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **Generated instructions no longer prefix commands with `PYTHONIOENCODING=utf-8` (#205, reported by @vik-borisov).** That is bash syntax; Windows PowerShell reads `PYTHONIOENCODING=utf-8` as a command name and fails before hyperresearch starts, and every reinstall wrote the prefix back into the fetcher, cite-checker, corpus-critic, draft-orchestrator, source-analyst and browser-fetcher agents and steps 2 and 8. The prefix was never needed: on Windows the CLI already switches its own stdout and stderr to UTF-8 at startup. A test installs both targets and checks that no installed instruction carries the prefix.
+
 ## [0.13.2] - 2026-11-12
 
 ### Fixed

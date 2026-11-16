@@ -40,7 +40,7 @@ For each assigned pair:
 
 1. Read the cited note's body:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note show <note_id> -j
+   {hpr_path} note show <note_id> -j
    ```
    Batch-read up to 5 ids per call when consecutive pairs cite different notes.
 
@@ -52,7 +52,7 @@ For each assigned pair:
      source makes).
    - **unsupported** — nothing in the note backs the sentence.
    - **wrong-source** — the note doesn't back it, but another vault note
-     does. Find it: `PYTHONIOENCODING=utf-8 {hpr_path} claims search "<key phrase>" -j`
+     does. Find it: `{hpr_path} claims search "<key phrase>" -j`
      and name the correct note_id in the finding.
 
    Judge the SOURCE-SENTENCE binding only. Whether the claim is TRUE is not
