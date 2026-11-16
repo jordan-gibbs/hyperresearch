@@ -417,6 +417,60 @@ def test_prune_retired_agents_spares_a_dir_with_no_skill_file(tmp_vault):
     assert (mine / "scratch.txt").exists()
 
 
+_USERS_OWN_SKILL = (
+    "---\nname: {name}\ndescription: My notes on using hyperresearch\n---\n\nStep 1...\n"
+)
+_OUR_STALE_SKILL = (
+    "---\nname: {name}\n---\n"
+    '<!-- rendered from profile "full" (hyperresearch 0.12.0) '
+    "— edit the profile or the package template, not this file -->\n\n# Old step\n"
+)
+
+
+def test_step_skill_prune_spares_a_users_hyperresearch_named_skill(tmp_vault):
+    """A hand-written `hyperresearch-*` skill mentions hyperresearch too, so the
+    content marker alone is no evidence it was ours."""
+    from hyperresearch.core.hooks import _install_hyperresearch_step_skills
+
+    skills_dir = tmp_vault.root / ".claude" / "skills"
+    mine = skills_dir / "hyperresearch-my-notes"
+    mine.mkdir(parents=True)
+    (mine / "SKILL.md").write_text(
+        _USERS_OWN_SKILL.format(name=mine.name), encoding="utf-8"
+    )
+    stale = skills_dir / "hyperresearch-99-retired-step"
+    stale.mkdir(parents=True)
+    (stale / "SKILL.md").write_text(_OUR_STALE_SKILL.format(name=stale.name), encoding="utf-8")
+
+    _install_hyperresearch_step_skills(tmp_vault.root)
+
+    assert (mine / "SKILL.md").exists()
+    assert not stale.exists()
+
+
+def test_global_step_skill_prune_spares_a_users_digit_named_skill(tmp_path):
+    from hyperresearch.core.hooks import _prune_global_step_skills
+
+    skills_dir = tmp_path / ".claude" / "skills"
+    mine = skills_dir / "hyperresearch-2024-reading-list"
+    mine.mkdir(parents=True)
+    (mine / "SKILL.md").write_text(
+        _USERS_OWN_SKILL.format(name=mine.name), encoding="utf-8"
+    )
+    # Global step skills from <=0.8.2 predate the provenance header.
+    legacy = skills_dir / "hyperresearch-1-decompose"
+    legacy.mkdir(parents=True)
+    (legacy / "SKILL.md").write_text(
+        "---\nname: hyperresearch-1-decompose\n---\n\nRun the hyperresearch step.\n",
+        encoding="utf-8",
+    )
+
+    _prune_global_step_skills(tmp_path)
+
+    assert (mine / "SKILL.md").exists()
+    assert not legacy.exists()
+
+
 # ---------------------------------------------------------------------------
 # PreToolUse hook — the reminder must reach the model (#94)
 # ---------------------------------------------------------------------------
