@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **`run verify` has no unit cliff for mixed Chinese/English reports (#71, reported by @redmyapple).** Length and citation density switched from whitespace words to characters / 3 at a spaceless-script ratio of exactly 0.3, so a mixed report 0.1% under the cutoff was measured at about a third of its length and blocked on `length-in-range`, while ~600 more characters of Chinese made the same report pass. Across a band from 0.2 to 0.4 the count now blends linearly between the two measures, and so does the length target. Text below 0.2 (English, Korean) and above 0.4 (Chinese, Japanese, Thai) is counted exactly as before. A blended check says so in its detail (`mixed script, N% counted as chars / 3`).
+
 ## [0.13.2] - 2026-11-12
 
 ### Fixed
