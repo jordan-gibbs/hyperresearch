@@ -2,8 +2,14 @@
 
 ## [Unreleased]
 
+## [0.13.3] - 2026-11-16
+
+### Fixed
+
 - **`run verify` has no unit cliff for mixed Chinese/English reports (#71, reported by @redmyapple).** Length and citation density switched from whitespace words to characters / 3 at a spaceless-script ratio of exactly 0.3, so a mixed report 0.1% under the cutoff was measured at about a third of its length and blocked on `length-in-range`, while ~600 more characters of Chinese made the same report pass. Across a band from 0.2 to 0.4 the count now blends linearly between the two measures, and so does the length target. Text below 0.2 (English, Korean) and above 0.4 (Chinese, Japanese, Thai) is counted exactly as before. A blended check says so in its detail (`mixed script, N% counted as chars / 3`).
 - **Generated instructions no longer prefix commands with `PYTHONIOENCODING=utf-8` (#205, reported by @vik-borisov).** That is bash syntax; Windows PowerShell reads `PYTHONIOENCODING=utf-8` as a command name and fails before hyperresearch starts, and every reinstall wrote the prefix back into the fetcher, cite-checker, corpus-critic, draft-orchestrator, source-analyst and browser-fetcher agents and steps 2 and 8. The prefix was never needed: on Windows the CLI already switches its own stdout and stderr to UTF-8 at startup. A test installs both targets and checks that no installed instruction carries the prefix.
+- **Install no longer deletes a user's own `hyperresearch-*` skill folder (#206, from @ray910408).** The step-skill prunes treated any `SKILL.md` that mentions hyperresearch as ours, so a hand-written `.claude/skills/hyperresearch-my-notes/` (or a `~/.claude/skills/hyperresearch-2024-...` under `--global`) was deleted with everything in it. A prefix-matched folder is now removed only when its `SKILL.md` carries the rendered-install provenance header or its name is a step the package ships.
+- **MCP `search_notes`, `get_hubs` and `list_sources` cap `limit` at 1-200 (#206, from @ray910408).** The value went straight into SQL, and SQLite reads a negative `LIMIT` as no limit, so one call could return every note with its full body. `list_notes` keeps its documented `limit=0` for all, since it returns summaries only.
 
 ## [0.13.2] - 2026-11-12
 
