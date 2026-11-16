@@ -59,3 +59,18 @@ def test_installed_agent_json_examples_parse(installed_agents):
                 pytest.fail(f"{name}, JSON example {number}: {exc}")
             examples += 1
     assert examples > 0, "no fenced JSON examples were checked"
+
+
+@pytest.mark.parametrize("platform", ["claude", "codex"])
+def test_installed_instructions_have_no_posix_env_prefix(tmp_path: Path, platform):
+    """`VAR=value cmd` is bash syntax; PowerShell reads it as a command name and
+    fails before hyperresearch starts (#205). The CLI sets UTF-8 output itself."""
+    install_hooks(tmp_path, hpr_path="hyperresearch", platform=platform)
+    hits = [
+        f"{path.relative_to(tmp_path)}:{number}"
+        for path in tmp_path.rglob("*")
+        if path.is_file() and path.suffix in {".md", ".toml"}
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if "PYTHONIOENCODING=" in line
+    ]
+    assert not hits, f"POSIX env prefix in installed instructions: {hits}"

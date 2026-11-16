@@ -171,7 +171,7 @@ Append a few lines with `Edit` or `Write` every 30-60 seconds. Productive thinki
 
 **Vault count check** — once every 60 seconds max:
 ```bash
-PYTHONIOENCODING=utf-8 {hpr_path} note list --tag <vault_tag> --all --json | python -c "import sys,json; d=json.load(sys.stdin); print(f'Notes in vault: {len(d.get(\"data\",[]))}')"
+{hpr_path} note list --tag <vault_tag> --all --json | python -c "import sys,json; d=json.load(sys.stdin); print(f'Notes in vault: {len(d.get(\"data\",[]))}')"
 ```
 
 The wave is done when the vault note count is ≥80% of total URLs queued.
