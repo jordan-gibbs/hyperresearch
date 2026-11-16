@@ -36,7 +36,7 @@ For each `time_period` entry:
 
 1. Search the vault for a primary source matching the `primary_source` description and the `issuer`:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} search "<period> <issuer>" --tag <vault_tag> --include-body -j
+   {hpr_path} search "<period> <issuer>" --tag <vault_tag> --include-body -j
    ```
 2. Open the candidate notes (`note show <id> -j`) and verify the document's actual reporting period — the filing must cover the SPECIFIC period named in the prompt, not an adjacent one. A Q1 2025 10-Q does NOT satisfy "Q3 2024" — different period, different tabular data.
 3. **If the period-pinned filing is missing, add it to `research/runs/<vault_tag>/temp/period-pinned-gaps.json` (`{"gaps": [...]}`) as a `priority: critical` gap of type `period-pinned-primary` BEFORE spawning the corpus-critic subagent.** This is the orchestrator's OWN file — the subagent writes elsewhere (below) and the two are merged in Procedure step 2, so nothing here gets overwritten. Number the ids `pp-1`, `pp-2`, ... Schema:
