@@ -36,6 +36,11 @@ _SPACELESS_RUN_MIN_CHARS = 15
 # Fraction of ALL characters that must sit in such non-ASCII runs before
 # str.split() word counts stop being trustworthy for the text as a whole.
 _SPACELESS_CHAR_RATIO = 0.3
+# Counting doesn't switch units at that ratio: across this band around it
+# the word count blends linearly from str.split() to characters / ratio, so
+# mixed CN/EN prose near 0.3 can't flip ~3x in measured length on a 0.1%
+# change (#71). Below the band the count is str.split(); above it, chars.
+_SPACELESS_BLEND_BAND = (0.2, 0.4)
 
 
 def _lacks_word_boundaries(text: str) -> bool:
@@ -53,27 +58,37 @@ def _lacks_word_boundaries(text: str) -> bool:
     only non-ASCII characters are tallied; space-delimited scripts like
     Korean don't count because their words are short tokens.
     """
+    return _spaceless_ratio(text) >= _SPACELESS_CHAR_RATIO
+
+
+def _spaceless_ratio(text: str) -> float:
+    """Share of `text`'s characters that are non-ASCII inside long
+    whitespace-delimited tokens (see `_lacks_word_boundaries`)."""
     if not text:
-        return False
+        return 0.0
     spaceless_in_runs = sum(
         sum(1 for c in t if ord(c) > 0x7F)
         for t in text.split()
         if len(t) >= _SPACELESS_RUN_MIN_CHARS
     )
-    total_chars = len(text)
-    if total_chars == 0:
-        return False
-    return spaceless_in_runs / total_chars >= _SPACELESS_CHAR_RATIO
+    return spaceless_in_runs / len(text)
+
+
+def _spaceless_weight(text: str) -> float:
+    """0.0 below the blend band (count words), 1.0 above it (count
+    characters), linear in between."""
+    lo, hi = _SPACELESS_BLEND_BAND
+    return min(1.0, max(0.0, (_spaceless_ratio(text) - lo) / (hi - lo)))
 
 
 def _effective_word_count(text: str, chars_per_word: float) -> float:
     """Script-neutral word count: `str.split()` where whitespace delimits
-    words, else characters / `chars_per_word` (the profile's ratio for
-    scripts like Chinese, Japanese or Thai). Korean is space-delimited and
+    words, characters / `chars_per_word` (the profile's ratio for scripts
+    like Chinese, Japanese or Thai) where it doesn't, and a linear blend of
+    the two for text inside the blend band. Korean is space-delimited and
     takes the split path."""
-    if _lacks_word_boundaries(text):
-        return len(text) / chars_per_word
-    return len(text.split())
+    w = _spaceless_weight(text)
+    return (1 - w) * len(text.split()) + w * (len(text) / chars_per_word)
 
 
 EVENTS_NAME = "events.jsonl"
@@ -725,31 +740,34 @@ def verify_run(vault, vault_tag: str) -> dict:
             )
 
         if response_format and response_format in profile.word_targets:
-            if _lacks_word_boundaries(report_text):
-                # char_targets_no_word_boundary is profile-configurable per
-                # response_format; falls back to word_target * chars_per_word
-                # if a format has no explicit target.
-                char_targets = profile.char_targets_no_word_boundary
-                if response_format in char_targets:
-                    low, high = char_targets[response_format]
-                else:
-                    low_w, high_w = profile.word_targets[response_format]
-                    ratio = profile.chars_per_word_no_word_boundary
-                    low, high = int(low_w * ratio), int(high_w * ratio)
-                count = len(report_text)
-                check(
-                    "length-in-range",
-                    low * 0.8 <= count <= high * 1.2,
-                    f"{count} chars vs target {low}-{high} ({response_format}; char-based; ±20% tolerance)",
-                )
+            # Measured in words, chars or a blend of the two by how much of
+            # the report is unspaced script (_spaceless_weight), so there is
+            # no single ratio where the unit jumps (#71). Targets blend the
+            # same way: char_targets_no_word_boundary is profile-configurable
+            # per response_format and falls back to word_target *
+            # chars_per_word for a format with no explicit target.
+            ratio = profile.chars_per_word_no_word_boundary
+            w_low, w_high = profile.word_targets[response_format]
+            char_targets = profile.char_targets_no_word_boundary
+            c_low, c_high = char_targets.get(
+                response_format, (int(w_low * ratio), int(w_high * ratio))
+            )
+            weight = _spaceless_weight(report_text)
+            if weight >= 1.0:
+                low, high, count = c_low, c_high, len(report_text)
+                detail = f"{count} chars vs target {low}-{high} ({response_format}; char-based; ±20% tolerance)"
+            elif weight <= 0.0:
+                low, high, count = w_low, w_high, len(report_text.split())
+                detail = f"{count} words vs target {low}-{high} ({response_format}; ±20% tolerance)"
             else:
-                low, high = profile.word_targets[response_format]
-                wc = len(report_text.split())
-                check(
-                    "length-in-range",
-                    low * 0.8 <= wc <= high * 1.2,
-                    f"{wc} words vs target {low}-{high} ({response_format}; ±20% tolerance)",
+                count = round(_effective_word_count(report_text, ratio))
+                low = round((1 - weight) * w_low + weight * c_low / ratio)
+                high = round((1 - weight) * w_high + weight * c_high / ratio)
+                detail = (
+                    f"{count} words vs target {low}-{high} ({response_format}; "
+                    f"mixed script, {weight:.0%} counted as chars / {ratio:g}; ±20% tolerance)"
                 )
+            check("length-in-range", low * 0.8 <= count <= high * 1.2, detail)
 
         missing = [h for h in required_headings if h not in report_text]
         check(
@@ -785,17 +803,19 @@ def verify_run(vault, vault_tag: str) -> dict:
         # means a different amount of content per script (CJK packs ~3x
         # the content per character), so the same number would be a
         # different bar for a Japanese report than for an English one.
-        no_boundaries = _lacks_word_boundaries(cited_body)
+        weight = _spaceless_weight(cited_body)
         effective_words = _effective_word_count(
             cited_body, profile.chars_per_word_no_word_boundary
         )
         density = cites * 1000 / max(1.0, effective_words)
         floor = profile.citation_density_min  # also the instruction critic's re-count trigger
-        unit = (
-            f"words (chars / {profile.chars_per_word_no_word_boundary:g}; no word boundaries)"
-            if no_boundaries
-            else "words"
-        )
+        cpw = profile.chars_per_word_no_word_boundary
+        if weight >= 1.0:
+            unit = f"words (chars / {cpw:g}; no word boundaries)"
+        elif weight > 0.0:
+            unit = f"words (mixed script, {weight:.0%} counted as chars / {cpw:g})"
+        else:
+            unit = "words"
         check(
             "citation-density",
             density >= floor,

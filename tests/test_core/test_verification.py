@@ -762,6 +762,55 @@ class TestCJKLengthCheck:
         assert "chars" in by_name["length-in-range"]["detail"]
         assert result["passed"] is True
 
+    # Mixed CN/EN prose: short CJK tokens around ASCII terms, plus one long
+    # unspaced run per paragraph. Six paragraphs of this sit at a spaceless
+    # ratio of ~0.2997, just under the 0.3 classification cutoff (#71).
+    _MIX = "在 2025 年的 基准测试中， GPT-4 模型的 准确率 提升了 12% [3]。 "  # noqa: RUF001
+    _RUN = "这一结果在多个独立数据集上得到了重复验证并且效应稳定。"
+
+    def _mixed_report(self) -> str:
+        return "## 结果\n\n" + (self._MIX * 20 + self._RUN * 14 + "\n\n") * 6
+
+    def test_effective_word_count_has_no_cliff_at_the_cutoff(self):
+        """Crossing the 0.3 ratio by a few characters used to switch the unit
+        from words to chars / 3, a ~2x jump in measured length here (#71)."""
+        from hyperresearch.core.runs import _effective_word_count, _spaceless_ratio
+
+        below = self._mixed_report()
+        above = below + self._RUN * 2
+        assert _spaceless_ratio(below) < 0.3 <= _spaceless_ratio(above)
+        lo, hi = _effective_word_count(below, 3.0), _effective_word_count(above, 3.0)
+        assert hi > lo and hi / lo < 1.05
+
+    def test_effective_word_count_is_unchanged_outside_the_band(self):
+        from hyperresearch.core.runs import _effective_word_count
+
+        english = "Replicated measurements support the committed position here. " * 40
+        assert _effective_word_count(english, 3.0) == len(english.split())
+        chinese = "这一结果在多个独立数据集上得到了重复验证并且效应稳定。" * 40
+        assert _effective_word_count(chinese, 3.0) == len(chinese) / 3.0
+
+    def test_verify_mixed_script_report_just_under_the_cutoff_passes_length(
+        self, tmp_vault
+    ):
+        """1,208 whitespace tokens but 7,567 characters: the old English path
+        failed it against 2000-5000 words although it is inside the CJK
+        6000-15000 char target (#71)."""
+        init_run(tmp_vault, "mix-01", profile="light")
+        run_dir = tmp_vault.run_dir("mix-01")
+        (run_dir / "prompt-decomposition.json").write_text(json.dumps({
+            "response_format": "structured",
+            "required_section_headings": ["## 结果"],
+        }), encoding="utf-8")
+        body = self._mixed_report()
+        assert len(body.split()) < 1600  # under 2000 * 0.8
+        report = tmp_vault.root / "research" / "notes" / "final_report_mix-01.md"
+        report.write_text(body, encoding="utf-8")
+
+        by_name = {c["name"]: c for c in verify_run(tmp_vault, "mix-01")["checks"]}
+        assert by_name["length-in-range"]["ok"] is True, by_name["length-in-range"]
+        assert "mixed script" in by_name["length-in-range"]["detail"]
+
     def test_verify_still_fails_cjk_report_far_outside_char_target(self, tmp_vault):
         init_run(tmp_vault, "cjk-02", profile="light")
         run_dir = tmp_vault.run_dir("cjk-02")
