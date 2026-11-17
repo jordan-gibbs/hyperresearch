@@ -7,9 +7,14 @@ import sys
 from urllib.parse import urlparse
 
 import typer
+from rich.markup import escape
 
 from hyperresearch.cli._output import console, output
-from hyperresearch.core.fetcher import existing_live_note_for_url, reclaim_orphaned_source_row
+from hyperresearch.core.fetcher import (
+    discard_unindexed_note,
+    existing_live_note_for_url,
+    reclaim_orphaned_source_row,
+)
 from hyperresearch.models.output import error, success
 
 
@@ -24,7 +29,7 @@ def fetch_batch(
 ) -> None:
     """Fetch multiple URLs and save each as a research note. Batched sync for speed."""
     from hyperresearch.core.enrich import enrich_note_file
-    from hyperresearch.core.note import write_note
+    from hyperresearch.core.note import indexed_note_ids, write_note
     from hyperresearch.core.oa import (
         oa_frontmatter,
         recover_full_text,
@@ -187,6 +192,8 @@ def fetch_batch(
 
     # Phase 1: Write all note files to disk (no sync yet)
     note_files = []  # (note_path, url, result, domain, content_hash, oa_location, rescue_reason)
+    # Ids written in this batch exist on disk, which write_note checks itself.
+    taken_ids = indexed_note_ids(conn)
     for url, result, oa_location, rescue_reason in pending:
         # Open-access recovery. This path writes its own notes rather than
         # going through cli.fetch, so the DOI capture and the OA swap both have
@@ -240,6 +247,7 @@ def fetch_batch(
             source=url,
             parent=parent,
             extra_frontmatter=extra_meta,
+            taken_ids=taken_ids,
         )
 
         # Auto-enrich before sync
@@ -267,6 +275,20 @@ def fetch_batch(
     plan = compute_sync_plan(vault)
     if plan.to_add or plan.to_update:
         execute_sync(vault, plan)
+
+    # A note sync did not index under its own id gets no source row: the row
+    # would point at whichever file holds that id. Checked before Phase 3,
+    # whose inserts open a transaction the clean-up's re-sync cannot nest in.
+    indexed_files = []
+    for entry in note_files:
+        refused = discard_unindexed_note(vault, entry[0])
+        if refused is None:
+            indexed_files.append(entry)
+            continue
+        failed_urls.append({"url": entry[1], "error": refused, "phase": "index"})
+        if not json_output:
+            console.print(f"  [red]Not indexed:[/] {escape(refused)}")
+    note_files = indexed_files
 
     # Phase 3: Bulk-insert source records
     created_notes = []

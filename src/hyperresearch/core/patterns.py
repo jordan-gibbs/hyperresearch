@@ -42,7 +42,7 @@ WIKI_LINK_RE = re.compile(r"\[\[([^\]\[|]+)(?:\|[^\]\[]+)?\]\](?!\()")
 #   would then drop the rest of the note from links and search. The builtin
 #   provider always closes its fences, so #140 does not depend on the
 #   unclosed case. Any indentation is accepted (fences inside list items).
-#   Tilde fences are not recognised, as before.
+#   Tilde fences follow the same matching-marker and minimum-length rules.
 # - An inline span opened by N backticks closes at the next run of EXACTLY
 #   N backticks; an unmatched run is literal text. Spans may cross lines,
 #   as the old regex allowed. Backtick runs that are not fences (mid-line
@@ -62,43 +62,45 @@ _BACKTICK_RUN_RE = re.compile(r"`+")
 
 def _strip_fenced_blocks(text: str) -> str:
     lines = text.split("\n")
-    runs: list[int] = []
-    closers: list[int] = []  # run length if the line could close a fence, else 0
+    runs: list[tuple[str, int]] = []
+    closers: list[int] = []
     for line in lines:
-        s = line.lstrip(" \t")
-        run = len(s) - len(s.lstrip("`"))
-        runs.append(run)
-        closers.append(run if run >= 3 and not s[run:].strip(" \t\r") else 0)
-    # longest_after[i]: the longest closer on any line after line i. An opener
-    # whose run nothing after it can match stays literal text, so each check
-    # is O(1) and the pass stays linear.
-    longest_after = [0] * len(lines)
-    best = 0
+        content = line.lstrip(" \t")
+        marker = content[:1] if content[:1] in ("`", "~") else ""
+        run = len(content) - len(content.lstrip(marker)) if marker else 0
+        runs.append((marker, run))
+        closers.append(run if run >= 3 and not content[run:].strip(" \t\r") else 0)
+    # Track each marker separately so a tilde fence cannot close a backtick fence.
+    longest_after: list[dict[str, int]] = [{} for _ in lines]
+    best = {"`": 0, "~": 0}
     for i in range(len(lines) - 1, -1, -1):
-        longest_after[i] = best
-        best = max(best, closers[i])
+        longest_after[i] = best.copy()
+        marker, _ = runs[i]
+        if marker:
+            best[marker] = max(best[marker], closers[i])
 
     out: list[str] = []
-    fence = 0  # length of the open fence's backtick run; 0 = not in a block
+    fence_marker = ""
+    fence = 0
     for i, line in enumerate(lines):
-        run = runs[i]
+        marker, run = runs[i]
         if fence:
-            if closers[i] >= fence:
+            if marker == fence_marker and closers[i] >= fence:
                 fence = 0
             out.append("")
         elif (
             run >= 3
-            and "`" not in line.lstrip(" \t")[run:]
-            and longest_after[i] >= run
+            and (marker == "~" or "`" not in line.lstrip(" \t")[run:])
+            and longest_after[i][marker] >= run
         ):
-            fence = run
+            fence_marker, fence = marker, run
             out.append("")
         else:
             out.append(line)
     return "\n".join(out)
 
 
-def _strip_inline_code(text: str) -> str:
+def _strip_inline_code(text: str, keep_length: bool = False) -> str:
     runs = [m.span() for m in _BACKTICK_RUN_RE.finditer(text)]
     if len(runs) < 2:
         return text
@@ -127,7 +129,10 @@ def _strip_inline_code(text: str) -> str:
         end = runs[j][1]
         newlines = text.count("\n", a, end)
         out.append(text[pos:a])
-        out.append("\n" * newlines if newlines else " ")
+        if keep_length:
+            out.append(re.sub(r"[^\n]", " ", text[a:end]))
+        else:
+            out.append("\n" * newlines if newlines else " ")
         pos = end
         i = j + 1
     out.append(text[pos:])
@@ -141,6 +146,13 @@ def strip_code(text: str) -> str:
     the length of the text, including on backtick floods.
     """
     return _strip_inline_code(_strip_fenced_blocks(text))
+
+
+def mask_code(text: str) -> str:
+    """strip_code, but each inline code span becomes spaces of its own length
+    (newlines kept), so an offset into a line outside a fenced block points at
+    the same character in both texts. Fenced block lines become empty."""
+    return _strip_inline_code(_strip_fenced_blocks(text), keep_length=True)
 
 
 # Citation-footnote patterns that should NOT be treated as wiki-links even
@@ -179,9 +191,13 @@ _SYMBOL_FOOTNOTE_RE = re.compile(
 
 # Figure / table / equation references: [[fig-3]], [[tab-1]], [[eq-2]],
 # [[table1]], [[figure-4b]], [[eq:7]], [[scheme-3]]. These are cross-
-# references within a document, not wiki-links to other notes.
+# references within a document, not wiki-links to other notes. The number
+# (optionally after one letter, as in [[table-A1]] or [[fig-S3]])
+# after the prefix is required: without it the prefix alone matched the
+# start of ordinary words, so [[equity]], [[tablet]], [[figma]] and
+# [[boxing]] were all dropped as cross-references.
 _DOC_REF_PREFIX_RE = re.compile(
-    r"^(?:fig(?:ure)?|tab(?:le)?|eq(?:uation)?|scheme|chart|plate|box|chart|algo(?:rithm)?)[-_:]?\w*$",
+    r"^(?:fig(?:ure)?|tab(?:le)?|eq(?:uation)?|scheme|chart|plate|box|chart|algo(?:rithm)?)[-_:]?[a-z]?\d\w*$",
     re.IGNORECASE,
 )
 

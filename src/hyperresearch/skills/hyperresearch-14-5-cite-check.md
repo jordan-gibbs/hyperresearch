@@ -14,7 +14,7 @@ description: >
 
 **Tier gate:** Runs for `full` and `dissertation`. SKIP for `light` — a light report's citation volume doesn't justify the pass; the `quote-integrity` and `numeric-consistency` lint rules still cover it mechanically at the step-15 gate.
 
-**Goal:** every citation that ships either supports its sentence or gets fixed. This is the difference between "has citations" and "citations are true bindings" — the single thing external fact-checkers actually measure.
+**Goal:** every citation the check covers — all dangling citations, every number-bearing sentence, and a sample of the rest — either supports its sentence or gets fixed. This is the difference between "has citations" and "citations are true bindings" — the single thing external fact-checkers actually measure.
 
 ---
 
@@ -32,12 +32,14 @@ Read these inputs:
 {hpr_path} citecheck extract <vault_tag> -j
 ```
 
-This parses every (sentence, citation) pair from the report — `[N]` markers (including grouped `[7, 12]`, one pair per source number) and `[[note-id]]` styles — and auto-passes pairs whose numbers or wording the cited note's extracted claims already confirm. Output: `research/runs/<vault_tag>/cite-check-pairs.json` with:
+This parses every (sentence, citation) pair from the report — `[N]` markers (including grouped `[7, 12]`, one pair per source number) and `[[note-id]]` styles — and auto-passes a pair only when the cited note's extracted claims already confirm it: a sentence carrying a figure of 2+ digits must match one claim or quote in full (a shared number alone can describe a different entity or metric), while a sentence with no such figure passes on a long shared run of words. Single-digit tokens such as "Step 1" or the "4" in "GPT-4" are labels, not figures. Output: `research/runs/<vault_tag>/cite-check-pairs.json` with:
 - `summary` — total / auto-passed / dangling / needs-llm counts
 - `sampled_for_llm` — the pairs the agent must judge (100% of number-bearing sentences; sampled for the rest)
-- `dangling` — citations that resolve to NO vault note
+- `dangling` — citations that resolve to NO vault note, each with an `unresolved` reason and its `marker`
 
-**Dangling citations are findings immediately** — no agent needed. Each one becomes a `critical` finding (fabricated or mangled citation).
+**Handle dangling citations by their `unresolved` reason.** No agent is needed, but the reasons are not equal:
+- `no-sources-entry` (a `[N]` with no `[N]` line in the Sources (or References) section) and `unknown-note-id` (a `[[note-id]]` naming no vault note): each becomes a `critical` finding (fabricated or mangled citation).
+- `unresolved-entry`: the Sources entry exists, but its URL and title match no vault note. That is a lookup miss, not evidence against the citation. Check the entry first: `{hpr_path} search "<distinctive title words>" -j`, and `{hpr_path} note show` the hit to confirm it is the cited work. If a note covers it, the citation stands and there is no finding. Only if the vault holds no such source does it become a `major` finding (a citation the vault cannot back).
 
 **If `sampled_for_llm` is empty and there are no dangling citations:** write an empty findings file `[]` to `research/runs/<vault_tag>/cite-check-findings.json`, record `{hpr_path} run step <vault_tag> 14.5 --status done -j`, and proceed to step 15. Done.
 

@@ -117,9 +117,9 @@ every list / table / blockquote.
 Write a single JSON file to `recommendations_path`. Schema:
 
 ```json
-{{
+{
   "recommendations": [
-    {{
+    {
       "id": "rec-1",
       "category": "merge-paragraphs|break-paragraph|make-list|make-table|bold-keyterms|split-sentence|remove-hr|add-whitespace",
       "severity": "minor|moderate|major",
@@ -127,11 +127,11 @@ Write a single JSON file to `recommendations_path`. Schema:
       "current": "<exact existing text — copied verbatim, including non-ASCII chars>",
       "recommended": "<exact replacement text the orchestrator should Edit in>",
       "rationale": "<one sentence: why this change improves readability>"
-    }}
+    }
   ],
-  "summary": {{
+  "summary": {
     "total_recommendations": <int>,
-    "by_category": {{
+    "by_category": {
       "merge-paragraphs": <int>,
       "break-paragraph": <int>,
       "make-list": <int>,
@@ -140,11 +140,11 @@ Write a single JSON file to `recommendations_path`. Schema:
       "split-sentence": <int>,
       "remove-hr": <int>,
       "add-whitespace": <int>
-    }},
+    },
     "highest_severity": "minor|moderate|major",
     "expected_net_char_delta": <int — positive if recommendations expand, negative if they cut>
-  }}
-}}
+  }
+}
 ```
 
 ## Procedure

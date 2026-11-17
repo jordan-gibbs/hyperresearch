@@ -46,6 +46,37 @@ def _run(coro):
     return box["result"]
 
 
+def test_fetch_many_skips_malformed_url_and_fetches_the_rest(monkeypatch, caplog):
+    """A URL check_url cannot parse must be skipped like a refused one. urlparse
+    raises ValueError for unbalanced IPv6 brackets, and httpx.URL raises
+    UnicodeEncodeError for a lone surrogate (a non-UTF-8 byte in a
+    command-line argument becomes one); if either escapes check_url as
+    anything but SafeHTTPError, the per-URL handler in _fetch_many_async
+    does not catch it and every other URL in the batch is lost with it."""
+    fetched: list[str] = []
+
+    def fake_fetch_pdf(url, settings=None):
+        fetched.append(url)
+        return WebResult(url=url, title="ok", content="pdf text")
+
+    monkeypatch.setattr(provider, "_fetch_pdf", fake_fetch_pdf)
+
+    inst = provider.Crawl4AIProvider.__new__(provider.Crawl4AIProvider)
+    inst._settings = provider.FetchSettings()
+
+    urls = [
+        "http://[::1/broken.pdf",
+        "http://8.8.8.8/pa\udcffper.pdf",
+        "http://8.8.8.8/paper.pdf",
+    ]
+    with caplog.at_level(logging.WARNING, logger="hyperresearch.web"):
+        results = _run(inst._fetch_many_async(urls))
+
+    assert [r.url for r in results] == ["http://8.8.8.8/paper.pdf"]
+    assert fetched == ["http://8.8.8.8/paper.pdf"]
+    assert "refused batch fetch" in caplog.text
+
+
 def test_fetch_many_skips_refused_urls_and_fetches_the_rest(monkeypatch, caplog):
     fetched: list[str] = []
 

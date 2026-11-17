@@ -122,7 +122,7 @@ Write `research/runs/<vault_tag>/temp/synthesis-outline.md`. This is the per-sec
 ...
 
 ## Conclusion / Opinionated synthesis
-<1-2 sentences: the committed reading, the strongest forward-looking implication>
+<1-2 sentences: the committed reading, the strongest forward-looking implication. For `short` response_format, name the closing beat only — `short` has no Opinionated Synthesis section.>
 
 ## Sources
 <only emitted when citation_style == "inline" — N numbered entries, deduplicated. For "wikilink" style (default), the wiki-link markers in the body are self-resolving and no separate Sources section is needed.>

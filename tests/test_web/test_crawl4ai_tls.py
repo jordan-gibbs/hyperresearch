@@ -1,7 +1,8 @@
 """The crawl4ai headless lane verifies TLS certificates by default (#137).
 
-crawl4ai defaults ``BrowserConfig.ignore_https_errors`` to True AND launches
-Chromium with ``--ignore-certificate-errors`` unconditionally, so verifying
+crawl4ai defaults ``BrowserConfig.ignore_https_errors`` to True AND, through
+0.9.4, launches Chromium with ``--ignore-certificate-errors`` unconditionally
+(0.9.5 adds it only when ignore_https_errors is on), so verifying
 takes both a config value and stripping those launch flags. These tests pin
 both halves, the ``[fetch] browser_verify_tls = false`` opt-out, and the
 refusal message. All offline: object construction and fake crawlers only,
@@ -119,20 +120,33 @@ def test_managed_browser_launch_drops_cert_ignore_flags():
 
 
 def test_stripping_is_per_instance_not_global():
-    """The override must not leak into crawl4ai's classes or other crawlers."""
-    from crawl4ai.browser_manager import ManagedBrowser
+    """The override must not leak into crawl4ai's classes or other crawlers.
 
+    Checked by identity rather than by the flags crawl4ai emits: 0.9.5 stopped
+    adding --ignore-certificate-errors to every launch, so the class builders
+    no longer carry the flags on newer releases either way."""
+    from crawl4ai.browser_manager import BrowserManager, ManagedBrowser
+
+    before = (
+        ManagedBrowser.__dict__["build_browser_flags"],
+        BrowserManager.__dict__["_build_browser_args"],
+    )
     inst = provider.Crawl4AIProvider(headless=True, user_data_dir="/tmp/does-not-matter")
-    inst._make_crawler()
-    assert set(ManagedBrowser.build_browser_flags(inst._browser_config)) >= CERT_FLAGS
+    bm = inst._make_crawler().crawler_strategy.browser_manager
+    assert "_build_browser_args" in vars(bm)  # the override sits on the instance
+    assert (
+        ManagedBrowser.__dict__["build_browser_flags"],
+        BrowserManager.__dict__["_build_browser_args"],
+    ) == before
 
 
 def test_opt_out_keeps_crawl4ai_launch_flags():
     inst = provider.Crawl4AIProvider(
         headless=True, settings=FetchSettings(browser_verify_tls=False)
     )
-    args = inst._make_crawler().crawler_strategy.browser_manager._build_browser_args()["args"]
-    assert set(args) >= CERT_FLAGS
+    bm = inst._make_crawler().crawler_strategy.browser_manager
+    assert inst._browser_config.ignore_https_errors is True
+    assert "_build_browser_args" not in vars(bm)  # crawl4ai's builder, untouched
 
 
 def test_missing_flag_builder_fails_closed():

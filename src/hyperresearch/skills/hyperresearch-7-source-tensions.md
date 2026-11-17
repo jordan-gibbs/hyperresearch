@@ -32,7 +32,7 @@ Read these inputs:
 
 ## Procedure
 
-1. **Re-read `comparisons.md`.** Each tension there is already a candidate source tension. Extract: the two positions, the strongest evidence for each, your preliminary reading of which side has the better case.
+1. **Re-read `comparisons.md`** (absent when step 4 justified zero loci via `skip_loci`; go straight to the orphan scan). Each tension there is already a candidate source tension. Extract: the two positions, the strongest evidence for each, your preliminary reading of which side has the better case.
 
 2. **Scan the width corpus for orphan tensions.** For the << p.tension_survey|dash >> highest-quality non-deprecated sources, then **read the full body** of the top << p.tension_full_reads|dash >> sources most likely to contain disagreements — use `{hpr_path} note show <id1> <id2> ... -j` in batches. **Tensions hide in nuance that summaries flatten:** a source's "however" clause, a footnote caveat, a methodological critique buried in a discussion section. You cannot extract tensions you haven't read. Look for:
    - Sources that explicitly disagree with each other (different conclusions from similar evidence)
@@ -87,7 +87,7 @@ This artifact feeds directly into step 10's mandatory Source Tensions section. E
 
 ## Exit criterion
 
-- `research/runs/<vault_tag>/temp/source-tensions.json` exists with << p.source_tensions|dash >> tensions
+- `research/runs/<vault_tag>/temp/source-tensions.json` exists with << p.source_tensions|dash >> tensions. Fewer, down to zero, is allowed only when the corpus genuinely lacks real disagreements (the case where step 4 justified `skip_loci` with a univocal corpus): write the tensions you did find plus a top-level `"shortfall_reason"` naming what you read and why no further tensions exist. Never invent a tension to reach the range.
 - Each tension has both sides with proponents, a committed resolution, and decision_relevance
 
 ---

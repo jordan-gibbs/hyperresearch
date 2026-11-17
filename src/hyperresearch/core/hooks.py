@@ -1127,14 +1127,14 @@ prompt. No block = this prompt's defaults apply unchanged.
    - For EACH mismatch (missing heading, extra heading, out-of-order
      heading, heading with wrong wording), emit ONE finding with:
      ```json
-     {{
+     {
        "severity": "critical",
        "atomic_item": "required_section_headings[<index>]: <expected heading>",
        "failure_mode": "wrong-order",
        "location": "",
        "issue": "Expected H2 at position <N>: '<expected>'. Got: '<actual or MISSING>'. Full heading diff: <list both ordered arrays>.",
        "requires_orchestrator_restructure": true
-     }}
+     }
      ```
    - Set `requires_orchestrator_restructure: true` on every
      structural-mirror finding. The patcher's tool-lock means it
@@ -1156,10 +1156,10 @@ prompt. No block = this prompt's defaults apply unchanged.
 5. **Emit findings.** Use the **Write tool** to save findings JSON to `output_path`. Do NOT use Bash heredocs — the Write tool handles escaping automatically. For each failure, produce a structured finding:
 
 ```json
-{{
+{
   "critic_type": "instruction",
   "findings": [
-    {{
+    {
       "severity": "critical|major|minor",
       "atomic_item": "the specific prompt fragment that isn't honored — quote it verbatim from research_query",
       "failure_mode": "missing|under-covered|wrong-order|wrong-format|vague-recommendation",
@@ -1167,9 +1167,9 @@ prompt. No block = this prompt's defaults apply unchanged.
       "issue": "One sentence: what the prompt asked and what the draft does instead",
       "requires_orchestrator_restructure": false,
       "recommendation": "What the fix should accomplish — e.g., 'Add a dedicated subsection on X after Section III' or 'Expand the single sentence on Y into a full paragraph with the evidence from note Z'. Be specific about WHAT to add/change, but the revisor decides the exact wording."
-    }}
+    }
   ]
-}}
+}
 ```
 
 **Do NOT include `old_text` / `new_text` exact patches.** The revisor agent handles the exact wording dynamically.
@@ -1224,14 +1224,14 @@ citing the vault evidence.
 Example finding:
 
 ```json
-{{
+{
   "severity": "major",
   "atomic_item": "Propose specific regulatory guidelines for manufacturer data access",
   "failure_mode": "vague-recommendation",
   "location": "Section on regulatory recommendations — paragraph starting with 'Standardized data recording requirements'",
   "issue": "Draft recommends 'standardized recording' abstractly; vault contains Zhang 2022 + EU PLD reform evidence supporting specific 30—60s pre-crash + 10—15s post-crash windows.",
   "recommendation": "Replace the abstract 'standardized data recording requirements' with the specific time windows from Zhang 2022: 30—60 seconds pre-crash plus 10—15 seconds post-crash, with sensor-fusion state and handover timestamps. Align with EU PLD reform timing disclosure requirements."
-}}
+}
 ```
 
 Abstract recommendations where the evidence genuinely doesn't support
@@ -1558,13 +1558,14 @@ You are the polish auditor. Last pass before the draft ships.
 
 ## Pipeline position
 
-You are **Layer 7** — the final step of the 7-phase hyperresearch pipeline.
+You are **Layer 7** — the last pass that edits the report's text.
 Everything is done: width sweep, loci analysis, depth investigation,
 cross-locus reconciliation, the single draft, the four critics, and the
 patcher (Layer 6) have all run. The draft now has the patcher's applied
 findings in it. Your job: final hygiene + readability pass.
 
-After you finish, the report ships. There is no layer after you. If you
+After you finish, only the readability audit (layout suggestions the
+orchestrator applies selectively) and the ship gate remain. If you
 find a structural problem this hunk pass cannot fix, escalate — do not
 attempt it yourself.
 
@@ -1588,6 +1589,10 @@ prompt. No block = this prompt's defaults apply unchanged.
   tool lock is `[Read, Edit]` only. If the stub is missing when you
   arrive, STOP and report back so the orchestrator can re-stub and
   retry.
+- **wrapper_contract_path** (optional): `research/wrapper_contract.json`,
+  passed only when that file exists. It is the only way you learn whether
+  a wrapper requires the YAML frontmatter block (section 1a). Absent =
+  no wrapper requirement.
 
 ## What you check
 
@@ -1599,7 +1604,8 @@ are planning artifacts that leaked from the orchestrator's scratch work:
 {scaffold_only_sections}
 
 Also strip:
-- YAML frontmatter at the top of the file (the `---\\n...\\n---\\n` block)
+- YAML frontmatter at the top of the file (the `---\\n...\\n---\\n` block),
+  unless `wrapper_contract_path` requires it — then fix it per section 1a
 - Literal prompt echoes ("User prompt:", "The query is:", etc.)
 - Leftover backticks around section headings
 - Stray "Here is the report:" / "Below is the draft:" preamble lines
@@ -1622,7 +1628,8 @@ the offending block entirely.
 
 ### 1a. Frontmatter hygiene (YAML metadata block)
 
-If the file keeps a YAML frontmatter block (some wrappers require it),
+If the wrapper contract at `wrapper_contract_path` requires a YAML
+frontmatter block,
 fix these specific failures — they are reader-visible metadata that
 graders and downstream consumers see:
 
@@ -1637,9 +1644,9 @@ graders and downstream consumers see:
 - `summary:` ending in `...` (truncated) — rewrite to a complete
   one-sentence description of the report's thesis.
 
-If the entire frontmatter block is safe to remove (no wrapper requires
-it), prefer stripping it. If a wrapper requires it, fix the fields
-above in place.
+If no `wrapper_contract_path` was passed, or the contract does not
+require frontmatter, strip the whole block (section 1). If it does,
+fix the fields above in place.
 
 ### 1b. Inline scaffold vocabulary strip (reader-facing prose)
 
@@ -2001,7 +2008,7 @@ the 20-50 sources most relevant to YOUR angle.
 
 1. **Batch-read in chunks of 5-8 IDs.** Stay within output limits:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note show <id1> <id2> <id3> <id4> <id5> -j
+   {hpr_path} note show <id1> <id2> <id3> <id4> <id5> -j
    ```
    Repeat until every ID in `must_read_note_ids` has been read. If a
    batch returns truncated bodies, re-read those IDs individually with
@@ -2658,9 +2665,9 @@ every list / table / blockquote.
 Write a single JSON file to `recommendations_path`. Schema:
 
 ```json
-{{
+{
   "recommendations": [
-    {{
+    {
       "id": "rec-1",
       "category": "merge-paragraphs|break-paragraph|make-list|make-table|bold-keyterms|split-sentence|remove-hr|add-whitespace",
       "severity": "minor|moderate|major",
@@ -2668,11 +2675,11 @@ Write a single JSON file to `recommendations_path`. Schema:
       "current": "<exact existing text — copied verbatim, including non-ASCII chars>",
       "recommended": "<exact replacement text the orchestrator should Edit in>",
       "rationale": "<one sentence: why this change improves readability>"
-    }}
+    }
   ],
-  "summary": {{
+  "summary": {
     "total_recommendations": <int>,
-    "by_category": {{
+    "by_category": {
       "merge-paragraphs": <int>,
       "break-paragraph": <int>,
       "make-list": <int>,
@@ -2681,11 +2688,11 @@ Write a single JSON file to `recommendations_path`. Schema:
       "split-sentence": <int>,
       "remove-hr": <int>,
       "add-whitespace": <int>
-    }},
+    },
     "highest_severity": "minor|moderate|major",
     "expected_net_char_delta": <int — positive if recommendations expand, negative if they cut>
-  }}
-}}
+  }
+}
 ```
 
 ## Procedure
@@ -2827,14 +2834,14 @@ prompt. No block = this prompt's defaults apply unchanged.
 
 1. **Check for an existing analysis.** Before writing anything, search:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note list --tag <vault_tag> --type source-analysis --all --json
+   {hpr_path} note list --tag <vault_tag> --type source-analysis --all --json
    ```
    Then filter for any note whose body contains `[[<source_note_id>]]`.
    If one exists, report back to the parent — do NOT duplicate.
 
 2. **Read the source.** Pull the full body:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note show <source_note_id> -j
+   {hpr_path} note show <source_note_id> -j
    ```
    Hold the full body in your context. Most sources fit comfortably —
    even 500-page PDFs usually extract to <300K words. If the source
@@ -2884,7 +2891,7 @@ prompt. No block = this prompt's defaults apply unchanged.
 
 5. **Create the source-analysis note:**
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note new "Source Analysis — <short title>" \\
+   {hpr_path} note new "Source Analysis — <short title>" \\
      --type source-analysis \\
      --tag <vault_tag> \\
      --tag source-analysis \\
@@ -3041,10 +3048,8 @@ If you get a browser crash or "failed to launch" error:
 
 ## Commands
 
-On Windows, ALWAYS prefix commands with `PYTHONIOENCODING=utf-8`:
-
 ```bash
-PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> -j
+{hpr_path} fetch "<url>" --tag <topic> -j
 ```
 
 ### Utility flag — `--utility-score`
@@ -3054,7 +3059,7 @@ When your assigned batch carries a utility score next to a URL (e.g.
 frontmatter and feeds the vault's composite quality ranking:
 
 ```bash
-PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> --utility-score 14 -j
+{hpr_path} fetch "<url>" --tag <topic> --utility-score 14 -j
 ```
 
 DOIs and arXiv ids are captured automatically during fetch — you do not
@@ -3066,7 +3071,7 @@ When fetching a URL that was referenced by a source you already processed,
 pass `--suggested-by <note-id>` to create the citation chain in the vault:
 
 ```bash
-PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" \\
+{hpr_path} fetch "<url>" \\
   --tag <topic> \\
   --suggested-by <source-note-id> \\
   --suggested-by-reason "<one-line reason>" \\
@@ -3081,17 +3086,17 @@ If you're fetching a seed source directly from the parent agent's URL list
 For each URL the parent agent gave you:
 
 1. Check if it's already fetched:
-   `PYTHONIOENCODING=utf-8 {hpr_path} sources check "<url>" -j`
+   `{hpr_path} sources check "<url>" -j`
 
 2. If not already fetched, fetch it:
-   `PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> -j`
+   `{hpr_path} fetch "<url>" --tag <topic> -j`
 
 3. After fetching, read the note content:
-   `PYTHONIOENCODING=utf-8 {hpr_path} note show <note-id> -j`
+   `{hpr_path} note show <note-id> -j`
 
 4. **Quality check** — read the content and decide:
    - Is this actually relevant to the research topic? If completely off-topic, deprecate it:
-     `PYTHONIOENCODING=utf-8 {hpr_path} note update <note-id> --status deprecated -j`
+     `{hpr_path} note update <note-id> --status deprecated -j`
    - Is the content meaningful (not junk)? If junk, deprecate it.
    - Is this a duplicate? If so, deprecate the worse copy.
 
@@ -3100,8 +3105,8 @@ For each URL the parent agent gave you:
    and fetch the primary sources in Phase 2.
 
 5. If the content is good, write a real summary and add tags:
-   `PYTHONIOENCODING=utf-8 {hpr_path} note update <note-id> --summary "<specific summary>" -j`
-   `PYTHONIOENCODING=utf-8 {hpr_path} note update <note-id> --add-tag <specific-tag> -j`
+   `{hpr_path} note update <note-id> --summary "<specific summary>" -j`
+   `{hpr_path} note update <note-id> --add-tag <specific-tag> -j`
 
    **Summary length is proportional to the source's substantive density.**
    - **Short/thin:** 1-2 specific sentences.
@@ -3175,8 +3180,8 @@ those primaries gives the pipeline higher-authority sources to cite.
    - If you have a direct URL from the citation, fetch it with the
      hyperresearch CLI (same commands as Phase 1):
      ```
-     PYTHONIOENCODING=utf-8 {hpr_path} sources check "<url>" -j
-     PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> --suggested-by <note-id-that-cited-it> --suggested-by-reason "cited as primary source" -j
+     {hpr_path} sources check "<url>" -j
+     {hpr_path} fetch "<url>" --tag <topic> --suggested-by <note-id-that-cited-it> --suggested-by-reason "cited as primary source" -j
      ```
    - If you only have author + title (no URL), use WebSearch to locate it:
      search for `"<author> <title> <year>"` or `"<title> filetype:pdf"`
@@ -3279,7 +3284,7 @@ prompt. No block = this prompt's defaults apply unchanged.
    position in comparisons.md, identify the 2-3 source note IDs that
    the position rests on. Read them in full:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note show <id1> <id2> <id3> -j
+   {hpr_path} note show <id1> <id2> <id3> -j
    ```
    Check: does the original source actually support the committed
    position as stated? Summaries and interim notes can drift from
@@ -3301,14 +3306,14 @@ prompt. No block = this prompt's defaults apply unchanged.
 5. **Search the vault** for existing sources that might already contain
    overturning evidence that the investigators missed:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} search "<adversarial query>" --tag <corpus_tag> -j
+   {hpr_path} search "<adversarial query>" --tag <corpus_tag> -j
    ```
 
 6. **Produce output** at `output_path`:
    ```json
-   {{
+   {
      "gaps": [
-       {{
+       {
          "id": "cc-1",
          "type": "overturning|strengthening|independent-verification",
          "target_position": "which claim/position this source would test",
@@ -3316,9 +3321,9 @@ prompt. No block = this prompt's defaults apply unchanged.
          "source_type": "academic|government|industry|investigative",
          "priority": "critical|high|medium",
          "rationale": "why finding this source matters for the draft"
-       }}
+       }
      ]
-   }}
+   }
    ```
 
    **Cap: << p.corpus_critic_gaps|hyphen >> gaps.** Only `critical` and `high` priority. Do not
@@ -3375,7 +3380,7 @@ login forms. The moment a page asks for something only the account owner
 should do, you run:
 
 ```bash
-PYTHONIOENCODING=utf-8 {hpr_path} escalation human <id> --detail "<one line: site + what the human must do>" -j
+{hpr_path} escalation human <id> --detail "<one line: site + what the human must do>" -j
 ```
 
 and move to the next item. The orchestrator consolidates all needs_human
@@ -3402,7 +3407,7 @@ Repeat up to your assigned batch size (default 10 items):
 
 1. **Claim:**
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} escalation claim --by browser-fetcher --tag <vault_tag> -j
+   {hpr_path} escalation claim --by browser-fetcher --tag <vault_tag> -j
    ```
    `queue_empty: true` → you're done; write your summary and return.
 
@@ -3426,7 +3431,7 @@ Repeat up to your assigned batch size (default 10 items):
 
 4. **Ingest.** Write the extracted content to a scratch file, then:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} escalation ingest <id> --title "<page title>" --body-file <scratch-file> --tag <topic-tag> -j
+   {hpr_path} escalation ingest <id> --title "<page title>" --body-file <scratch-file> --tag <topic-tag> -j
    ```
    One command — it writes the vault note (with `fetch_provider: chrome`
    provenance), records the source row, syncs, and resolves the item. Do
@@ -3434,7 +3439,7 @@ Repeat up to your assigned batch size (default 10 items):
 
 5. **Genuinely unreachable** (dead page, geo-block, content gone):
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} escalation abandon <id> --detail "<why>" -j
+   {hpr_path} escalation abandon <id> --detail "<why>" -j
    ```
    Abandoning is fine — the floor is where we started (source lost).
 
@@ -3451,7 +3456,7 @@ API and blocks headless crawlers; you are the lane.
 4. For the 2-3 highest-citation results directly relevant to the research
    query, queue their links for a future drain:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} escalation add "<paper url>" --reason interactive_needed --tag <vault_tag> --suggested-by <scholar-note-id> --detail "high-citation Scholar hit" -j
+   {hpr_path} escalation add "<paper url>" --reason interactive_needed --tag <vault_tag> --suggested-by <scholar-note-id> --detail "high-citation Scholar hit" -j
    ```
    Cap: one query at a time, small N, human-paced. This is a courtesy lane,
    not a scraper.
@@ -3492,8 +3497,10 @@ You verify that binding, pair by pair.
 
 You are step 14.5 of the hyperresearch V8 pipeline. The report has been
 synthesized (11), critiqued (12), and patched (14). Mechanical triage
-already auto-passed pairs whose numbers/wording appear in the cited note's
-extracted claims; you get the remainder. Your findings go to a second,
+already auto-passed two kinds of pair: a sentence carrying a figure of 2+
+digits that matches one of the cited note's extracted claims or quotes in
+full, and a sentence with no such figure that shares a long run of words
+with them. You get the remainder. Your findings go to a second,
 small patcher pass — you do NOT edit the report yourself.
 
 ## Inputs (from your spawn prompt)
@@ -3509,7 +3516,7 @@ For each assigned pair:
 
 1. Read the cited note's body:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note show <note_id> -j
+   {hpr_path} note show <note_id> -j
    ```
    Batch-read up to 5 ids per call when consecutive pairs cite different notes.
 
@@ -3521,7 +3528,7 @@ For each assigned pair:
      source makes).
    - **unsupported** — nothing in the note backs the sentence.
    - **wrong-source** — the note doesn't back it, but another vault note
-     does. Find it: `PYTHONIOENCODING=utf-8 {hpr_path} claims search "<key phrase>" -j`
+     does. Find it: `{hpr_path} claims search "<key phrase>" -j`
      and name the correct note_id in the finding.
 
    Judge the SOURCE-SENTENCE binding only. Whether the claim is TRUE is not
@@ -3768,7 +3775,7 @@ def _prune_global_step_skills(home: Path) -> str | None:
         suffix = name[len("hyperresearch-"):]
         if not suffix or not suffix[0].isdigit():
             continue
-        if not _is_our_skill_dir(child):
+        if not _is_our_step_skill_dir(child):
             continue
         _remove_skill_dir(child)
         pruned.append(name)
@@ -3788,20 +3795,45 @@ def _write_hook_script(vault_root: Path, hpr_path: str) -> Path:
     return hook_path
 
 
+def _load_hook_config(path: Path) -> tuple[dict, str | None]:
+    """Read a JSON config that install merges a hook into.
+
+    Returns `(settings, None)`, with `{}` for a missing file, or `({}, problem)`
+    when the file exists but is not a JSON object we can read. Such a file
+    still holds the user's settings (JSONC comments and trailing commas are
+    common in hand-edited ones), so the caller must leave it alone: writing
+    `{}` plus our hook over it would destroy them.
+    """
+    if not path.exists():
+        return {}, None
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        return {}, f"is not UTF-8 text (byte {exc.start})"
+    except OSError as exc:
+        return {}, f"could not be read ({exc.strerror or exc})"
+    try:
+        loaded = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return {}, f"is not valid JSON (line {exc.lineno}, column {exc.colno}: {exc.msg})"
+    if not isinstance(loaded, dict):
+        return {}, "is not a JSON object"
+    return loaded, None
+
+
 def _install_claude_hook(vault_root: Path, hpr_path: str) -> str | None:
     """Install PreToolUse hook into .claude/settings.json."""
-    hook_path = _write_hook_script(vault_root, hpr_path)
-
     settings_dir = vault_root / ".claude"
-    settings_dir.mkdir(exist_ok=True)
     settings_path = settings_dir / "settings.json"
+    settings, problem = _load_hook_config(settings_path)
+    if problem:
+        return (
+            f"Claude Code: .claude/settings.json {problem}, so the PreToolUse hook was "
+            "NOT installed and the file was left unchanged. Fix it, then re-run install"
+        )
 
-    settings = {}
-    if settings_path.exists():
-        try:
-            settings = json.loads(settings_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            pass
+    hook_path = _write_hook_script(vault_root, hpr_path)
+    settings_dir.mkdir(exist_ok=True)
 
     hooks = settings.setdefault("hooks", {})
     pre_tool = hooks.setdefault("PreToolUse", [])
@@ -3963,29 +3995,41 @@ def _install_codex_stop_hook(vault_root: Path, hpr_path: str) -> str | None:
     own entry is replaced. No PreToolUse hook: `codex exec` mishandles
     PreToolUse output, and the vault-check reminder is not worth that risk.
     """
-    from hyperresearch.core.codex import merge_stop_hook
+    from hyperresearch.core.codex import merge_stop_hook, user_codex_home
 
-    hooks_path = vault_root / ".codex" / "hooks.json"
-    settings: dict = {}
-    if hooks_path.exists():
-        # An unreadable hooks.json holds the user's hooks in a form we cannot
-        # merge into; overwriting it would destroy them.
-        try:
-            loaded = json.loads(hooks_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            loaded = None
-        if not isinstance(loaded, dict):
-            return (
-                "Codex: .codex/hooks.json is not a JSON object — Stop hook NOT "
-                "installed (fix the file, then re-run install)"
-            )
-        settings = loaded
+    codex_dir = vault_root / ".codex"
+    if codex_dir.resolve() == user_codex_home().resolve():
+        # A vault at the home directory: its .codex/ is Codex's user-level
+        # config, where the hook would gate every Codex session on the
+        # machine. The gate finds this vault from any directory below it.
+        return (
+            f"Codex: Stop hook NOT installed — {codex_dir} is Codex's user-level "
+            "config, where it would run in every Codex session"
+        )
+
+    hooks_path = codex_dir / "hooks.json"
+    settings, problem = _load_hook_config(hooks_path)
+    if problem:
+        return (
+            f"Codex: .codex/hooks.json {problem}, so the Stop hook was NOT installed "
+            "and the file was left unchanged. Fix it, then re-run install"
+        )
 
     merged = merge_stop_hook(settings, hpr_path)
     if merged == settings:
         return None
-    hooks_path.parent.mkdir(parents=True, exist_ok=True)
-    hooks_path.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    try:
+        hooks_path.parent.mkdir(parents=True, exist_ok=True)
+        hooks_path.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        # Codex's workspace-write sandbox keeps .codex/ read-only, so the
+        # first-run bootstrap inside a session cannot add the hook.
+        hpr = hpr_path.replace("\\", "/")
+        return (
+            f"Codex: .codex/hooks.json is not writable ({exc.strerror or exc}) — Stop hook "
+            f"NOT installed. Re-run `{hpr} install --steps-only . --target codex` outside "
+            "the Codex sandbox to add it"
+        )
     return "Codex: .codex/hooks.json (Stop hook: run stop-gate)"
 
 
@@ -4061,8 +4105,7 @@ def _install_width_critic_agent(vault_root: Path, hpr_path: str) -> str | None:
 
 
 def _install_instruction_critic_agent(vault_root: Path, hpr_path: str) -> str | None:
-    # Instruction-critic prompt has no {hpr_path} placeholder currently,
-    # but the .format() call is harmless — it leaves the text untouched.
+    # No str.format() pass: JSON examples in this template use literal braces.
     content = INSTRUCTION_CRITIC_AGENT
     return _write_agent_file(
         vault_root,
@@ -4213,6 +4256,25 @@ def _is_our_skill_dir(path: Path) -> bool:
     except OSError:
         return False
     return any(marker in text for marker in _OWNED_SKILL_MARKERS)
+
+
+def _is_our_step_skill_dir(path: Path) -> bool:
+    """`_is_our_skill_dir` for a dir matched only by its `hyperresearch-` prefix.
+
+    A hand-written `hyperresearch-my-notes` mentions hyperresearch too, so the
+    content marker alone deleted it. Ours carry the provenance header
+    (render.render_header), or, from installs predating it, a step name the
+    package ships: every step name it has ever shipped is still in the roster.
+    """
+    if not _is_our_skill_dir(path):
+        return False
+    if path.name in _HYPERRESEARCH_STEP_SKILLS:
+        return True
+    try:
+        text = (path / "SKILL.md").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return "rendered from profile" in text
 
 
 def _remove_skill_dir(path: Path) -> None:
@@ -4462,7 +4524,8 @@ def _install_hyperresearch_step_skills(
         is_legacy_layercake = child.name.startswith("layercake-")
         if not (is_stale_hpr or is_legacy_layercake):
             continue
-        if not _is_our_skill_dir(child):
+        owned = _is_our_step_skill_dir if is_stale_hpr else _is_our_skill_dir
+        if not owned(child):
             continue
         _remove_skill_dir(child)
         pruned.append(child.name)

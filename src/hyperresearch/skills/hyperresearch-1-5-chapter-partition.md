@@ -33,7 +33,7 @@ Read these inputs:
    - Every atomic item lands in exactly ONE chapter (cross-cutting items go to the chapter that will treat them most deeply; other chapters reference, not re-research).
    - A chapter is a *research unit*: it must be answerable with << dissertation.chapter_source_target|dash >> sources. If a candidate chapter obviously needs more, split it.
    - When `required_section_headings` already implies a chapter structure (the prompt asked for named parts), FOLLOW IT — chapters must map 1:1 onto required top-level headings when they exist.
-   - Fewer than ~12 atomic items → the query doesn't need chaptering; record 1 chapter and note the pipeline degenerates to the flat `full` shape.
+   - Fewer than ~12 atomic items → the query doesn't need chaptering; record 1 chapter and note the pipeline degenerates to the flat `full` shape. This is a deliberate escape hatch below the profile's << dissertation.chapters|dash >> range, not a violation of it; the range applies to queries that do need chaptering.
 
 2. **Write the chapter plan** to `research/runs/<vault_tag>/chapter-plan.json`:
    ```json

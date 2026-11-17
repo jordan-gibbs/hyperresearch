@@ -27,11 +27,13 @@ Returns a small :class:`SafeResponse` dataclass instead of an
 from __future__ import annotations
 
 import ipaddress
+import re
 import socket
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
 import httpx
+import idna
 
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
 
@@ -118,6 +120,30 @@ def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     )
 
 
+def _normalize_hostname(host: str) -> str:
+    """Canonical form for allowlist matching: lowercase, ACE, no trailing dot.
+
+    A trailing dot marks the name as absolute: the same host as the bare name
+    whenever the resolver looks that up as absolute, but a different string
+    to an exact match. IDN hosts arrive as unicode or punycode depending on
+    who typed them. Allowlist matching must not depend on which spelling the
+    URL or the config file used.
+
+    A non-ASCII name goes through idna.encode, the IDNA 2008 encoder httpx
+    applies to a URL host, so it becomes the name httpx would connect to
+    (labels split on the full stops U+3002, U+FF0E and U+FF61 as well as
+    "."), and a name httpx would refuse in a URL raises idna.IDNAError. The
+    stdlib "idna" codec is IDNA 2003 and maps some characters away: it
+    encodes "straße" as "strasse", a different, separately registrable name
+    from the "xn--strae-oqa" that httpx connects to. Matching through that
+    codec would let an allowlist entry for one admit the other.
+    """
+    host = host.lower()
+    if not host.isascii():
+        host = idna.encode(host).decode("ascii")
+    return host.rstrip(".")
+
+
 def _resolve(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
     try:
         return [ipaddress.ip_address(host.strip("[]"))]
@@ -125,7 +151,11 @@ def _resolve(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
         pass
     try:
         infos = socket.getaddrinfo(host, None)
-    except socket.gaierror as exc:
+    except (UnicodeError, OSError) as exc:
+        # gaierror is an OSError. UnicodeError covers names the IDNA codec
+        # rejects while getaddrinfo encodes them (a 300-character label, for
+        # one). Anything but SafeHTTPError escapes the batch fetch path's
+        # per-URL handler and fails the whole batch on one hostile hostname.
         raise SafeHTTPError(f"DNS lookup failed for {host!r}: {exc}") from exc
     addrs: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
     for info in infos:
@@ -143,7 +173,8 @@ def _parse_allowlist(
 
     An entry that parses as an IP network (a bare address counts as a
     /32 or /128) matches by resolved address; anything else matches the
-    URL hostname exactly, case-insensitively. A malformed entry raises
+    URL hostname after both are normalized (case, trailing root dot,
+    IDN/punycode spelling). A malformed entry raises
     :class:`SafeHTTPError` naming it — silently ignoring one would turn
     a typo into a lockout that looks like an SSRF refusal.
     """
@@ -162,6 +193,14 @@ def _parse_allowlist(
                 raise SafeHTTPError(
                     f"invalid allow_private_hosts entry {entry!r}: not a valid CIDR"
                 ) from None
+            if "%" in entry:
+                # Only a scoped IPv6 literal (fe80::1%eth0) legitimately
+                # carries '%', and those parsed as networks above. As a
+                # hostname the entry could never match.
+                raise SafeHTTPError(
+                    f"invalid allow_private_hosts entry {entry!r}: '%' is only "
+                    "valid as an IPv6 scope id on an address literal"
+                )
             if ":" in entry:
                 # host:port. URL hostnames never carry the port, so the entry
                 # would become a hostname that can never match: a silent dead
@@ -170,8 +209,81 @@ def _parse_allowlist(
                     f"invalid allow_private_hosts entry {entry!r}: entries are "
                     "hostnames or CIDRs; drop the port"
                 )
-            hostnames.add(entry.lower())
+            try:
+                hostnames.add(_normalize_hostname(entry))
+            except UnicodeError as exc:  # idna.IDNAError is a UnicodeError
+                # httpx refuses this host in a URL, so the entry could never
+                # match: the same silent dead entry as above.
+                raise SafeHTTPError(
+                    f"invalid allow_private_hosts entry {entry!r}: not a valid "
+                    f"IDNA hostname ({exc})"
+                ) from None
     return frozenset(hostnames), networks
+
+
+# What urlparse strips from the start of a URL (urllib.parse's
+# _WHATWG_C0_CONTROL_OR_SPACE, a private name).
+_C0_CONTROL_OR_SPACE = "".join(chr(c) for c in range(0x20)) + " "
+
+# A host label the WHATWG URL parser reads as an IPv4 number: all decimal
+# digits, or 0x/0X plus hex digits (the "ends in a number" check).
+_WHATWG_NUMERIC_LABEL_RE = re.compile(r"[0-9]+|0[xX][0-9a-fA-F]*")
+
+
+def _check_parser_agreement(stripped_url: str, hostname: str) -> None:
+    """Refuse URLs whose host a WHATWG parser (Chromium) reads differently.
+
+    The gate learns the host from urlparse and httpx, which follow RFC 3986.
+    The crawl4ai lane hands the URL to Chromium, which follows the WHATWG URL
+    standard, so any spelling the two families disagree on lets the gate
+    check one host while the browser connects to another. Such URLs are
+    refused outright; a legitimate page never needs them.
+
+    ``stripped_url`` is the URL with leading C0 controls and spaces removed;
+    ``hostname`` is httpx's raw host for it.
+    """
+    # For http(s) WHATWG treats "\" exactly like "/": it ends the authority.
+    # RFC 3986 parsers keep it as an ordinary character, so for
+    # "http://127.0.0.1\@evil.com/" they report host evil.com while Chromium
+    # connects to 127.0.0.1. Scan the raw authority as the RFC parsers delimit
+    # it (from after "//" to the first "/", "?" or "#"); a backslash there is
+    # a disagreement. One after that point is in the path, query or fragment
+    # under both readings and cannot move the host, so it stays allowed.
+    rest = stripped_url.partition(":")[2]
+    if rest.startswith("//"):
+        authority = re.split(r"[/?#]", rest[2:], maxsplit=1)[0]
+        if "\\" in authority:
+            raise SafeHTTPError(
+                f"refusing URL {stripped_url!r}: backslash in the authority "
+                "(browsers read it as '/', which changes the host)"
+            )
+    if ":" in hostname:
+        # IPv6 literal. WHATWG parses it as an address with no percent
+        # decoding, and the address gate classifies the same literal.
+        return
+    # WHATWG percent-decodes the host ("127.0.0.%31" is 127.0.0.1 to
+    # Chromium); httpx and getaddrinfo take "%" literally.
+    if "%" in hostname:
+        raise SafeHTTPError(
+            f"refusing URL {stripped_url!r}: percent-encoded hostname {hostname!r} "
+            "(browsers decode it to a different host)"
+        )
+    # WHATWG parses a host whose last label is numeric as an IPv4 address in
+    # its own grammar (octal, hex, fewer than four parts: "0x7f.1",
+    # "2130706433"), while getaddrinfo's treatment of those forms varies by
+    # platform and can fall through to DNS. Only the canonical dotted quad,
+    # which every parser reads the same way, is let through.
+    labels = hostname.split(".")
+    if len(labels) > 1 and labels[-1] == "":
+        labels.pop()
+    if _WHATWG_NUMERIC_LABEL_RE.fullmatch(labels[-1]):
+        try:
+            ipaddress.IPv4Address(hostname)
+        except ValueError:
+            raise SafeHTTPError(
+                f"refusing URL {stripped_url!r}: non-canonical numeric host "
+                f"{hostname!r} (browsers parse it as an IPv4 address)"
+            ) from None
 
 
 def check_url(url: str, allow_private_hosts: tuple[str, ...] = ()) -> None:
@@ -186,17 +298,47 @@ def check_url(url: str, allow_private_hosts: tuple[str, ...] = ()) -> None:
     made afterwards re-resolves it (see the module docstring on DNS
     rebinding).
     """
-    parsed = urlparse(url)
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+    except ValueError as exc:
+        # urlparse raises ValueError for some malformed netlocs: unbalanced
+        # IPv6 brackets give "Invalid IPv6 URL". A bare ValueError escapes
+        # the batch fetch path's SafeHTTPError-only per-URL handler.
+        raise SafeHTTPError(f"refusing unparseable URL {url!r}: {exc}") from exc
     if parsed.scheme.lower() not in _ALLOWED_SCHEMES:
         raise SafeHTTPError(
             f"refusing URL with scheme {parsed.scheme!r}; only http/https are allowed"
         )
-    if not parsed.hostname:
+    if not hostname:
         raise SafeHTTPError(f"refusing URL with no hostname: {url!r}")
+    # Check the name the connection will look up, not urlparse's spelling of
+    # it. httpx sends an IDN host in its IDNA 2008 ASCII form, while
+    # getaddrinfo encodes a non-ASCII name with the stdlib "idna" codec (IDNA
+    # 2003), which maps some characters away: "straße" would be looked up as
+    # "strasse", a different name from the "xn--strae-oqa" httpx connects to.
+    #
+    # urlparse drops leading C0 controls and spaces (the WHATWG rule); httpx
+    # reads " http://host/" as a relative URL with no host. Strip the same
+    # characters so both parsers see one host, and refuse a URL httpx still
+    # finds no host in rather than look up an empty name.
+    stripped = url.lstrip(_C0_CONTROL_OR_SPACE)
+    try:
+        hostname = httpx.URL(stripped).raw_host.decode("ascii")
+    except (httpx.InvalidURL, UnicodeError) as exc:
+        # UnicodeError: httpx cannot encode a lone surrogate in the path,
+        # query or fragment, which is what a non-UTF-8 byte in a command-line
+        # argument becomes. InvalidURL also covers tabs, newlines and other
+        # control characters anywhere in the URL, which WHATWG would strip
+        # or percent-encode.
+        raise SafeHTTPError(f"refusing unparseable URL {url!r}: {exc}") from exc
+    if not hostname:
+        raise SafeHTTPError(f"refusing URL with no hostname: {url!r}")
+    _check_parser_agreement(stripped, hostname)
     allowed_hosts, allowed_nets = _parse_allowlist(allow_private_hosts)
-    if parsed.hostname.lower() in allowed_hosts:
+    if _normalize_hostname(hostname) in allowed_hosts:
         return
-    addrs = _resolve(parsed.hostname)
+    addrs = _resolve(hostname)
     if not addrs:
         raise SafeHTTPError(f"refusing URL {url!r}: hostname did not resolve")
     for addr in addrs:
@@ -204,7 +346,7 @@ def check_url(url: str, allow_private_hosts: tuple[str, ...] = ()) -> None:
             addr.version == net.version and addr in net for net in allowed_nets
         ):
             raise SafeHTTPError(
-                f"refusing URL {url!r}: hostname {parsed.hostname} resolves to "
+                f"refusing URL {url!r}: hostname {hostname} resolves to "
                 f"non-public address {addr}"
             )
 

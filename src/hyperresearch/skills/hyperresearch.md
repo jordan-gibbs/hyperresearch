@@ -105,7 +105,7 @@ Before you invoke any step skill, do this:
 
 0. **Auto-init if missing.** Two checks for the first-run-after-global-install case:
    - **Vault check.** If `.hyperresearch/` doesn't exist in the working directory, run `hyperresearch init . --json`. Creates the SQLite vault and `research/` directory.
-<% if platform == "codex" %>   - **Step-files check.** If `.hyperresearch/codex/steps/hyperresearch-1-decompose.md` doesn't exist relative to the working directory, run `hyperresearch install --steps-only . --target codex --json`. Installs the 16 step files (and the `hyperresearch-*` custom agents) that later steps read and spawn.<% else %>   - **Step-skills check.** If `.claude/skills/hyperresearch-1-decompose/SKILL.md` doesn't exist relative to the working directory, run `hyperresearch install --steps-only . --json`. Installs the 16 step skill files needed by `Skill(skill: "hyperresearch-N-...")` calls in later steps.<% endif %>
+<% if platform == "codex" %>   - **Step-files check.** If `.hyperresearch/codex/steps/hyperresearch-1-decompose.md` doesn't exist relative to the working directory, run `hyperresearch install --steps-only . --target codex --json`. Installs the 16 step files (and the `hyperresearch-*` custom agents) that later steps read and spawn, plus the Stop hook in `.codex/hooks.json`. The sandbox keeps `.codex/` read-only, so if the output says the Stop hook was NOT installed because `.codex/hooks.json` is not writable, re-run that one command once with escalated permissions; if escalation is refused or unavailable (as in `codex exec`), carry on without the hook.<% else %>   - **Step-skills check.** If `.claude/skills/hyperresearch-1-decompose/SKILL.md` doesn't exist relative to the working directory, run `hyperresearch install --steps-only . --json`. Installs the 16 step skill files needed by `Skill(skill: "hyperresearch-N-...")` calls in later steps.<% endif %>
 
    If either command fails because the binary isn't on PATH, tell the user to run `pip install hyperresearch` first. If both files already exist, both commands no-op cheaply — safe to run unconditionally.
 
@@ -287,7 +287,7 @@ Ship only after `run finish` reports `"passed": true`: the final report lives at
 ## Invariants you cannot break
 
 1. **PATCHING not REGENERATION after step 11.** Once step 11 produces the final report (or step 10 for light tier), modifications are surgical <% if platform == "codex" %>patch<% else %>Edit<% endif %> hunks only.
-2. **One final report.** Step 11's synthesizer writes the final report ONCE. No re-synthesizing. (Light tier: step 10 writes it once.)
+2. **One final report.** Step 11's synthesizer writes the final report ONCE. No re-synthesizing. (Light tier: step 10 writes it once.) The one exception is the ship gate's `length-in-range` compression pass, which runs the synthesizer on its own output to shorten it, never to re-synthesize from the drafts.
 3. **At least one dialectical locus.** Step 4 must surface ≥1 dialectical locus unless skip is justified.
 4. **Every interim note commits to a position.** Step 5 investigators end with `## Committed position`.
 5. **`research/runs/<vault_tag>/comparisons.md` exists when loci count ≥ 1.** Step 6 is mandatory whenever step 4 produced any loci.

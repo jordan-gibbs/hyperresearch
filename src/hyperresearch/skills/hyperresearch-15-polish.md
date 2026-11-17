@@ -50,7 +50,8 @@ prompt: |
   QUERY FILE: research/runs/<vault_tag>/query.md
 
   PIPELINE POSITION: You are step 15 (polish auditor) of the
-  hyperresearch V8 pipeline — the final step. Step 14 (patcher) applied
+  hyperresearch V8 pipeline — the last editing pass before step 16's
+  readability audit. Step 14 (patcher) applied
 <% if platform == "codex" %>  critic findings as patch hunks. After you return, the orchestrator
   runs the final integrity gate and ships. You only read files and
   apply surgical patches (apply_patch) — never create or rewrite a file.
@@ -61,13 +62,14 @@ prompt: |
   YOUR INPUTS:
   - draft_path: research/notes/final_report_<vault_tag>.md
   - polish_log_path: research/runs/<vault_tag>/polish-log.json   (already stubbed)
+  - wrapper_contract_path: research/wrapper_contract.json   (include ONLY if the file exists; it says whether YAML frontmatter must be kept)
 
   RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/polish.md here, verbatim.
 ```
 
 The polish auditor strips:
 - **Pipeline reference leaks**: `[I\d+]` references, `[[interim-*]]` wiki-links pointing at workspace artifacts (NOT source notes), references to scaffold/comparisons/synthesis-plan files in prose. **Citation wiki-links** of the form `[[<source-note-id>]]` (where the target is a real source note in the vault, not an interim/scaffold workspace file) are PRESERVED when `citation_style == "wikilink"` — they are the citation system, not a leak. Strip wikilinks only when `citation_style` is `"inline"` or `"none"`.
-- Hygiene leaks (YAML frontmatter, scaffold sections, prompt echoes)
+- Hygiene leaks (YAML frontmatter unless the wrapper contract requires it, scaffold sections, prompt echoes)
 - Filler phrases ("It is worth noting", "Importantly", etc.)
 - Redundant sentences / paragraphs that restate prior content
 - Run-on sentences and over-long paragraphs (breaks into smaller units via <% if platform == "codex" %>apply_patch<% else %>Edit<% endif %>)

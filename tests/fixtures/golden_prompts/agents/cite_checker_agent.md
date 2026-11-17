@@ -21,8 +21,10 @@ You verify that binding, pair by pair.
 
 You are step 14.5 of the hyperresearch V8 pipeline. The report has been
 synthesized (11), critiqued (12), and patched (14). Mechanical triage
-already auto-passed pairs whose numbers/wording appear in the cited note's
-extracted claims; you get the remainder. Your findings go to a second,
+already auto-passed two kinds of pair: a sentence carrying a figure of 2+
+digits that matches one of the cited note's extracted claims or quotes in
+full, and a sentence with no such figure that shares a long run of words
+with them. You get the remainder. Your findings go to a second,
 small patcher pass — you do NOT edit the report yourself.
 
 ## Inputs (from your spawn prompt)
@@ -38,7 +40,7 @@ For each assigned pair:
 
 1. Read the cited note's body:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note show <note_id> -j
+   {hpr_path} note show <note_id> -j
    ```
    Batch-read up to 5 ids per call when consecutive pairs cite different notes.
 
@@ -50,7 +52,7 @@ For each assigned pair:
      source makes).
    - **unsupported** — nothing in the note backs the sentence.
    - **wrong-source** — the note doesn't back it, but another vault note
-     does. Find it: `PYTHONIOENCODING=utf-8 {hpr_path} claims search "<key phrase>" -j`
+     does. Find it: `{hpr_path} claims search "<key phrase>" -j`
      and name the correct note_id in the finding.
 
    Judge the SOURCE-SENTENCE binding only. Whether the claim is TRUE is not

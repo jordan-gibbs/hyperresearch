@@ -136,16 +136,132 @@ def test_check_url_rejects_parse_only_loopback_bypasses(url):
     ],
 )
 def test_check_url_rejects_resolver_dependent_loopback_bypasses(url):
-    """`ipaddress.ip_address` rejects these numeric encodings, so they fall to
-    the resolver, which normalizes them to 127.0.0.1. getaddrinfo is stubbed
-    so the test is deterministic and offline. This pins the contract that such
-    forms are *resolved and gated*, not parsed as public — a regression that
-    made `_resolve` parse the literal itself (e.g. via inet_aton) would need to
-    keep blocking them."""
+    """`ipaddress.ip_address` rejects these encodings. The numeric ones are
+    refused before any lookup (a browser parses them as IPv4 in its own
+    grammar); the rest fall to the resolver, which normalizes them to
+    127.0.0.1. getaddrinfo is stubbed so the test is deterministic and
+    offline. Either way they are never parsed as public."""
     with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
         gai.return_value = [(socket.AF_INET, None, None, "", ("127.0.0.1", 0))]
-        with pytest.raises(SafeHTTPError, match="non-public address"):
+        with pytest.raises(SafeHTTPError, match=r"non-public address|numeric host"):
             check_url(url)
+
+
+# ---------------------------------------------------------------------------
+# check_url — RFC 3986 (urlparse, httpx) vs WHATWG (Chromium) disagreements.
+# The crawl4ai lane hands the URL to Chromium, so a spelling the parsers
+# disagree on lets the gate approve one host while the browser connects to
+# another. getaddrinfo is stubbed to a public address: if the gate fell
+# through to resolution, these would be allowed.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def public_dns():
+    with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
+        gai.return_value = [(socket.AF_INET, None, None, "", ("93.184.216.34", 0))]
+        yield gai
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1\\@evil.com/",  # urlparse/httpx: evil.com; Chromium: 127.0.0.1
+        "HTTPS://127.0.0.1\\@evil.com/",
+        "http://127.0.0.1:80\\@evil.com/",
+        "http://user@127.0.0.1\\@evil.com/",
+        "http://169.254.169.254\\@evil.com/latest/meta-data/",
+        "http://127.0.0.1\\@evil.com",  # no path at all
+        " http://127.0.0.1\\@evil.com/",  # after the leading-whitespace strip
+    ],
+)
+def test_check_url_refuses_backslash_in_authority(url, public_dns):
+    with pytest.raises(SafeHTTPError, match="backslash in the authority"):
+        check_url(url)
+
+
+def test_check_url_backslash_then_private_userinfo_host_still_refused():
+    """The mirror image: the RFC parsers see 127.0.0.1, Chromium sees
+    evil.com. Fetching it would be harmless in the browser, but the gate
+    must not let it through on any lane."""
+    with pytest.raises(SafeHTTPError):
+        check_url("http://evil.com\\@127.0.0.1/")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://example.com/path\\with\\backslash",
+        "https://example.com/a?q=C:\\dir\\file",
+        "https://example.com/#frag\\x",
+        "https://example.com?\\@127.0.0.1",
+    ],
+)
+def test_check_url_allows_backslash_after_the_authority(url, public_dns):
+    """Past the first '/', '?' or '#', every parser is in the path, query or
+    fragment. Chromium turns a path backslash into '/', which changes the
+    path but cannot move the host, so these stay fetchable."""
+    check_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["http:\\\\127.0.0.1/", "http:/\\127.0.0.1/", "http:/127.0.0.1/", "http:127.0.0.1/"],
+)
+def test_check_url_refuses_whatwg_only_authority_forms(url):
+    """WHATWG finds a host in all of these (it skips any mix of slashes and
+    backslashes after a special scheme); the RFC parsers find none."""
+    with pytest.raises(SafeHTTPError, match="no hostname"):
+        check_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1\t@evil.com/",  # WHATWG strips tab/newline anywhere
+        "http://127.0.0.1\n@evil.com/",
+        "http://127.0.0.1\r\\@evil.com/",
+        "http://127.0.0.1\x00@evil.com/",
+    ],
+)
+def test_check_url_refuses_control_characters_inside_the_url(url, public_dns):
+    with pytest.raises(SafeHTTPError, match="unparseable"):
+        check_url(url)
+
+
+@pytest.mark.parametrize(
+    "url", ["http://127.0.0.%31/", "http://%31%32%37.0.0.1/", "http://%6cocalhost/"]
+)
+def test_check_url_refuses_percent_encoded_host(url, public_dns):
+    """Chromium percent-decodes the host; httpx and getaddrinfo do not."""
+    with pytest.raises(SafeHTTPError, match="percent-encoded hostname"):
+        check_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.1/",
+        "http://0x7f.1/",
+        "http://0177.0.0.1/",
+        "http://127.0.0.1./",
+        "http://example.0x10/",
+        "http://1.2.3.4.5/",
+    ],
+)
+def test_check_url_refuses_non_canonical_numeric_host(url, public_dns):
+    """WHATWG reads a host whose last label is numeric as IPv4 in its own
+    grammar; getaddrinfo's reading varies by platform and may fall to DNS.
+    httpx itself rejects some of these ("Invalid IPv4")."""
+    with pytest.raises(SafeHTTPError, match=r"numeric host|Invalid IPv4"):
+        check_url(url)
+
+
+@pytest.mark.parametrize(
+    "url", ["http://8.8.8.8/", "http://example.com/", "http://a1.example.com/", "http://x.com123/"]
+)
+def test_check_url_numeric_rule_spares_ordinary_hosts(url, public_dns):
+    check_url(url)
 
 
 def test_check_url_uppercase_http_scheme_is_normalized_then_ip_gated():
@@ -412,6 +528,187 @@ def test_safe_get_redirect_to_allowlisted_private_host_is_followed():
 
 
 # ---------------------------------------------------------------------------
+# Hostname spellings: allowlist matching follows DNS equivalence, not string
+# equality. The resolver is stubbed to answer with a private address, so a
+# spelling that misses its entry is refused rather than looked up for real.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("url", "entry"),
+    [
+        # A trailing dot marks an absolute name: same host when looked up as one.
+        ("http://mirror.internal./x", "mirror.internal"),
+        ("http://mirror.internal/x", "mirror.internal."),
+        ("http://Mirror.INTERNAL./x", "mirror.internal"),
+        # IDN hosts arrive as unicode or punycode depending on who typed them.
+        ("http://münchen.example/x", "xn--mnchen-3ya.example"),
+        ("http://xn--mnchen-3ya.example/x", "münchen.example"),
+    ],
+)
+def test_allowlist_hostname_matches_dns_equivalent_spelling(url, entry):
+    with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
+        gai.return_value = [(socket.AF_INET, None, None, "", ("10.0.0.5", 0))]
+        check_url(url, allow_private_hosts=(entry,))
+
+
+@pytest.mark.parametrize(
+    ("url", "entry"),
+    [
+        ("http://strasse.example/x", "straße.example"),
+        ("http://straße.example/x", "strasse.example"),
+    ],
+)
+def test_allowlist_hostname_does_not_match_idna2003_mapping(url, entry):
+    """IDNA 2003 (the stdlib "idna" codec) maps "straße" to "strasse", but
+    httpx sends "xn--strae-oqa": two separately registrable names. An entry
+    for one must not admit the other."""
+    with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
+        gai.return_value = [(socket.AF_INET, None, None, "", ("10.0.0.5", 0))]
+        with pytest.raises(SafeHTTPError, match="non-public address"):
+            check_url(url, allow_private_hosts=(entry,))
+
+
+def test_allowlist_entry_with_ideographic_full_stop_names_the_dotted_host():
+    """IDNA and httpx separate labels on U+3002, so this entry names
+    "mirror.internal", not the single label its punycode would spell."""
+    entry = "mirror\u3002internal"
+    one_label = "xn--" + entry.encode("punycode").decode("ascii")
+    with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
+        gai.return_value = [(socket.AF_INET, None, None, "", ("10.0.0.5", 0))]
+        check_url("http://mirror.internal/x", allow_private_hosts=(entry,))
+        with pytest.raises(SafeHTTPError, match="non-public address"):
+            check_url(f"http://{one_label}/x", allow_private_hosts=(entry,))
+
+
+@pytest.mark.parametrize("entry", ["fe80::1%eth0", "[fe80::1%eth0]"])
+def test_allowlist_scoped_ipv6_entry_parses_as_its_address(entry):
+    """A scoped entry is an address, not a hostname, and matches by address
+    bits whatever the scope."""
+    import ipaddress
+
+    from hyperresearch.web.safe_http import _parse_allowlist
+
+    hostnames, networks = _parse_allowlist((entry,))
+    assert hostnames == frozenset()
+    assert len(networks) == 1
+    assert ipaddress.ip_address("fe80::1") in networks[0]
+
+
+def test_allowlist_scoped_ipv6_url_allowed_by_bracketed_scoped_entry():
+    check_url("http://[fe80::1%eth0]/x", allow_private_hosts=("[fe80::1%eth0]",))
+
+
+def test_scoped_ipv6_url_refused_without_entry():
+    with pytest.raises(SafeHTTPError, match="non-public address"):
+        check_url("http://[fe80::1%eth0]/x")
+
+
+def test_allowlist_percent_in_non_address_entry_is_a_loud_error():
+    with pytest.raises(SafeHTTPError, match="scope id"):
+        check_url("http://8.8.8.8/", allow_private_hosts=("my%host",))
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "\uff45xample.com",  # fullwidth "e"
+        "mu\u0308nchen.example",  # NFD: "u" plus a combining diaeresis
+        "ex\u00adample.com",  # soft hyphen
+        "\u200b.example",  # zero-width space
+    ],
+)
+def test_allowlist_entry_httpx_would_refuse_is_a_loud_error(entry):
+    """httpx refuses each of these hosts in a URL (IDNA 2008 rejects them), so
+    the entry could never match and must not be accepted silently."""
+    with pytest.raises(SafeHTTPError, match="not a valid IDNA hostname"):
+        check_url("http://8.8.8.8/", allow_private_hosts=(entry,))
+
+
+# ---------------------------------------------------------------------------
+# The gate looks up the name the connection will. httpx sends an IDN host in
+# its IDNA 2008 form, while getaddrinfo encodes a unicode name with the stdlib
+# IDNA 2003 codec, which maps the deviation characters (ß, ς, ZWJ, ZWNJ) to a
+# different name. A zone owner could point the two at different addresses.
+# ---------------------------------------------------------------------------
+
+
+_WIRE_FORMS = [
+    ("http://straße.example/x", "xn--strae-oqa.example"),  # IDNA 2003: strasse
+    # Final sigma; IDNA 2003 folds it to the medial sigma, "xn--4xa".
+    ("http://ς.example/x", "xn--3xa.example"),
+    # Devanagari ka, virama, ZERO WIDTH JOINER, ssa; IDNA 2003 drops the ZWJ
+    ("http://\u0915\u094d\u200d\u0937.example/x", "xn--11b2ezcw70k.example"),
+]
+
+
+@pytest.mark.parametrize(("url", "wire_host"), _WIRE_FORMS)
+def test_check_url_resolves_the_name_httpx_connects_to(url, wire_host):
+    assert httpx.URL(url).raw_host.decode("ascii") == wire_host
+    with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
+        gai.return_value = [(socket.AF_INET, None, None, "", ("8.8.8.8", 0))]
+        check_url(url)
+    assert [c.args[0] for c in gai.call_args_list] == [wire_host]
+
+
+def test_safe_get_resolves_the_name_each_hop_requests():
+    """Every hop, the entry URL included, is checked on the host its request
+    is sent to."""
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(request.url.raw_host.decode("ascii"))
+        if request.url.path == "/start":
+            location = "http://ς.example/paper".encode()
+            return httpx.Response(302, headers=[(b"location", location)])
+        return httpx.Response(200, content=b"ok")
+
+    with patch("hyperresearch.web.safe_http.socket.getaddrinfo") as gai:
+        gai.return_value = [(socket.AF_INET, None, None, "", ("8.8.8.8", 0))]
+        resp = safe_get(
+            "http://straße.example/start", max_bytes=1024,
+            transport=httpx.MockTransport(handler),
+        )
+    assert resp.content == b"ok"
+    assert requested == ["xn--strae-oqa.example", "xn--3xa.example"]
+    assert [c.args[0] for c in gai.call_args_list] == requested
+
+
+# ---------------------------------------------------------------------------
+# Exception containment: check_url raises SafeHTTPError and nothing else, so
+# the batch fetch path's per-URL handler can skip a bad URL
+# ---------------------------------------------------------------------------
+
+
+def test_check_url_malformed_ipv6_brackets_raise_safe_error():
+    """urlparse() itself raises ValueError("Invalid IPv6 URL") here."""
+    with pytest.raises(SafeHTTPError, match="unparseable"):
+        check_url("http://[::1/x")
+
+
+def test_check_url_overlong_label_raises_safe_error():
+    """getaddrinfo raises UnicodeError, not gaierror, when IDNA encoding
+    rejects a 300-character label. No lookup is sent."""
+    with pytest.raises(SafeHTTPError, match="DNS lookup failed"):
+        check_url("http://" + "a" * 300 + ".com/x")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://8.8.8.8/pa\udcffper.pdf",
+        "http://8.8.8.8/x?q=\udcff",
+        "http://8.8.8.8/x#\ud800",
+    ],
+)
+def test_check_url_unencodable_url_raises_safe_error(url):
+    """A lone surrogate (what a non-UTF-8 byte in a command-line argument
+    becomes) makes httpx.URL raise UnicodeEncodeError."""
+    with pytest.raises(SafeHTTPError, match="unparseable"):
+        check_url(url)
+
+
+# ---------------------------------------------------------------------------
 # allow_private_hosts entry hygiene
 # ---------------------------------------------------------------------------
 
@@ -429,3 +726,17 @@ def test_allowlist_bracketed_ipv6_entry_admits_the_literal():
     """A bracketed IPv6 entry (URL notation) parses as the address itself
     instead of becoming a hostname that never matches."""
     check_url("http://[::1]/", allow_private_hosts=("[::1]",))
+
+
+@pytest.mark.parametrize("url", [" http://8.8.8.8/", "\t http://8.8.8.8/", "\x00http://8.8.8.8/"])
+def test_check_url_strips_leading_whitespace_as_urlparse_does(url):
+    """urlparse drops leading C0 controls and spaces; httpx alone reads the
+    URL as relative and finds no host. The gate checks the same host both
+    see instead of looking up an empty name."""
+    check_url(url)
+
+
+@pytest.mark.parametrize("url", [" http://127.0.0.1/", "\x0bhttp://10.0.0.1/"])
+def test_check_url_leading_whitespace_still_ip_gated(url):
+    with pytest.raises(SafeHTTPError, match="non-public address"):
+        check_url(url)

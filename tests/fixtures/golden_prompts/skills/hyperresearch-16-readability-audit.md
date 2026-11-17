@@ -59,7 +59,8 @@ prompt: |
 
   RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/polish.md here, verbatim.
 
-  Write recommendations as a JSON array per the schema in your agent
+  Write recommendations as a JSON object (`recommendations` array plus
+  `summary`) per the schema in your agent
   prompt. Cap at 50 recommendations, prioritized by impact.
 ```
 
@@ -159,8 +160,8 @@ This is the audit trail. If a future review finds a readability problem we shoul
 
 ---
 
-## Pipeline complete
+## Next: the ship gate
 
-Return to the entry skill (`hyperresearch`). Mark all todos complete. Tell the user the final report path.
+Return to the entry skill (`hyperresearch`) and run its **Final integrity gate** (`run finish`). Mark all todos complete. Only after `run finish` reports `"passed": true` (or the run is honestly `blocked` after 3 fix rounds), tell the user the final report path and list any still-queued escalations.
 
-You're done.
+The run is not done until the gate has spoken.

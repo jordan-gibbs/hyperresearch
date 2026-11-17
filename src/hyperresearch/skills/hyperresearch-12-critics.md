@@ -57,7 +57,7 @@ Read these inputs:
      RUN DIRECTIVES: append the FULL contents of research/runs/<vault_tag>/shims/critics.md here, verbatim.
    ```
 
-3. **Wait for all critics.** If one fails, you can proceed with the partial set, but log the absence to the run log — the patch pass is less robust with missing critic coverage. **Do NOT skip the instruction-critic specifically** — it's the only critic measuring prompt adherence, which is the dimension with the widest variance.
+3. **Wait for all critics.** If one fails, re-spawn it once. If it fails again, you can proceed with the partial set: write its output file yourself as `{"findings": [], "critic_failed": "<reason>"}` (the ship gate requires all four findings files to exist) and log the absence to the run log — the patch pass is less robust with missing critic coverage. **Do NOT skip the instruction-critic specifically** — it's the only critic measuring prompt adherence, which is the dimension with the widest variance.
 
 4. **Do not read the findings yourself and apply them.** The patcher (step 14) reads the findings. Your job is to hand them to the patcher — AFTER step 13 (gap-fetch) runs.
 
@@ -65,7 +65,7 @@ Read these inputs:
 
 ## Exit criterion
 
-- All 4 critic findings JSONs exist (`research/runs/<vault_tag>/critic-findings-<name>.json`)
+- All 4 critic findings JSONs exist (`research/runs/<vault_tag>/critic-findings-<name>.json`), a failed critic's as the empty `critic_failed` stub from step 3
 - Each is valid JSON with a `findings` array
 
 ---

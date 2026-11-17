@@ -10,6 +10,8 @@ import json
 
 from mcp.server.fastmcp import FastMCP
 
+from hyperresearch.search.filters import parent_subtree_filter
+
 server = FastMCP("hyperresearch", instructions=(
     "hyperresearch is an agent-driven research knowledge base. Use these tools to search, read, "
     "and navigate research notes with wiki-links, tags, and summaries. Notes live in the research/ "
@@ -18,6 +20,15 @@ server = FastMCP("hyperresearch", instructions=(
 ))
 
 _vault = None
+
+# Most rows one tool call returns. search_notes ships full note bodies, and
+# SQLite reads a negative LIMIT as "no limit", so an unchecked value (from a
+# prompt-injected agent, say) dumps the whole vault into one response.
+_MAX_RESULTS = 200
+
+
+def _clamp_limit(limit: int) -> int:
+    return max(1, min(limit, _MAX_RESULTS))
 
 
 def _get_vault():
@@ -47,8 +58,9 @@ def search_notes(
         tag: Filter by tag (comma-separated for multiple, AND logic)
         status: Filter by status (draft, review, evergreen, stale, deprecated, archive)
         parent: Filter by parent topic (e.g. "ml/deep-learning")
-        limit: Max results to return (default 10)
+        limit: Max results to return (default 10, at most 200)
     """
+    limit = _clamp_limit(limit)
     vault = _get_vault()
     vault.auto_sync()
     from hyperresearch.search.filters import SearchFilters
@@ -153,8 +165,9 @@ def list_notes(status: str = "", tag: str = "", parent: str = "", sort: str = "u
         clauses.append("n.id IN (SELECT note_id FROM tags WHERE tag = ?)")
         params.append(tag.lower())
     if parent:
-        clauses.append("(n.parent = ? OR n.parent LIKE ?)")
-        params.extend([parent, parent + "/%"])
+        clause, values = parent_subtree_filter(parent)
+        clauses.append(clause)
+        params.extend(values)
     where = " AND ".join(clauses)
     sort_map = {"created": "n.created DESC", "updated": "COALESCE(n.updated, n.created) DESC",
                 "title": "n.title ASC", "words": "n.word_count DESC"}
@@ -194,8 +207,9 @@ def get_hubs(limit: int = 20) -> str:
     """Get the most-linked-to notes in the research base (hub notes).
 
     Args:
-        limit: Max results (default 20)
+        limit: Max results (default 20, at most 200)
     """
+    limit = _clamp_limit(limit)
     vault = _get_vault()
     vault.auto_sync()
     rows = vault.db.execute(
@@ -283,8 +297,9 @@ def list_sources(domain: str = "", limit: int = 50) -> str:
 
     Args:
         domain: Filter by domain (e.g. "arxiv.org"). Leave empty for all.
-        limit: Max results (default 50)
+        limit: Max results (default 50, at most 200)
     """
+    limit = _clamp_limit(limit)
     vault = _get_vault()
     if domain:
         rows = vault.db.execute(
@@ -302,7 +317,7 @@ def list_sources(domain: str = "", limit: int = 50) -> str:
 
 
 @server.tool()
-def fetch_url(url: str, tags: str = "", provider: str = "") -> str:
+async def fetch_url(url: str, tags: str = "", provider: str = "") -> str:
     """Fetch a URL and save it as a research note.
 
     Args:
@@ -310,17 +325,21 @@ def fetch_url(url: str, tags: str = "", provider: str = "") -> str:
         tags: Comma-separated tags (e.g. "ml,transformers")
         provider: Web provider override (leave empty for default)
     """
-    from hyperresearch.core.fetcher import fetch_and_save
+    import anyio
+
+    from hyperresearch.core.fetcher import prepare_fetch, save_fetched
 
     vault = _get_vault()
     vault.auto_sync()
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
     try:
-        result = fetch_and_save(
-            vault, url, tags=tag_list,
-            provider_name=provider or None,
-        )
+        # Only the network fetch leaves the loop thread (#118): a sync fetch here
+        # stalls every other request, and the vault's sqlite connection only
+        # works on the thread that opened it, so prepare/save stay on this one.
+        prov = prepare_fetch(vault, url, provider_name=provider or None)
+        fetched = await anyio.to_thread.run_sync(prov.fetch, url)
+        result = save_fetched(vault, url, prov, fetched, tags=tag_list)
         return json.dumps({"ok": True, "data": result})
     except ValueError as e:
         return json.dumps({"ok": False, "error": str(e), "error_code": "DUPLICATE_URL"})
@@ -340,7 +359,7 @@ def create_note(title: str, body: str, tags: str = "", source: str = "", summary
         summary: One-line summary (auto-generated if empty)
     """
     from hyperresearch.core.enrich import enrich_note_file
-    from hyperresearch.core.note import write_note
+    from hyperresearch.core.note import indexed_note_ids, write_note
     from hyperresearch.core.sync import compute_sync_plan, execute_sync
 
     vault = _get_vault()
@@ -360,6 +379,7 @@ def create_note(title: str, body: str, tags: str = "", source: str = "", summary
         source=source or None,
         summary=summary or None,
         extra_frontmatter=extra if extra else None,
+        taken_ids=indexed_note_ids(vault.db),
     )
 
     enrich_note_file(note_path, vault.db, tag_list)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from pathlib import Path
 from urllib.parse import urlparse
 
 
@@ -50,6 +51,38 @@ def reclaim_orphaned_source_row(
     )
 
 
+def discard_unindexed_note(vault, note_path: Path, raw_file: str | None = None) -> str | None:
+    """Check, after sync, that the notes row for ``note_path``'s id is this file.
+
+    The fetch paths record ``sources`` and ``assets`` under ``note_path.stem``.
+    When sync refused the file (another file already holds that id), those rows
+    would land on the other note: the duplicate-url check then answers
+    "already fetched" with the wrong note, and the fetched text is never
+    indexed. Returns None when the file is indexed under its id. Otherwise,
+    like the duplicate-url race path in ``cli/fetch.py``, removes the file and
+    its raw artifact (``raw_file``, relative to ``research/``), re-syncs, and
+    returns an error naming the file and the id's owner.
+    """
+    from hyperresearch.core.sync import compute_sync_plan, execute_sync
+
+    note_id = note_path.stem
+    rel = note_path.relative_to(vault.root).as_posix()
+    row = vault.db.execute("SELECT path FROM notes WHERE id = ?", (note_id,)).fetchone()
+    if row is not None and row["path"] == rel:
+        return None
+    note_path.unlink(missing_ok=True)
+    if raw_file:
+        (vault.root / "research" / raw_file).unlink(missing_ok=True)
+    plan = compute_sync_plan(vault)
+    if plan.to_delete:
+        execute_sync(vault, plan)
+    owner = f"belongs to {row['path']}" if row is not None else "is not in the index"
+    return (
+        f"{rel} was not indexed: its id '{note_id}' {owner}. "
+        "The file was removed and no source was recorded, so the fetch can be retried."
+    )
+
+
 def fetch_and_save(
     vault,
     url: str,
@@ -64,13 +97,34 @@ def fetch_and_save(
 
     Raises:
         ValueError: If URL is already fetched.
-        RuntimeError: If fetch fails.
+        RuntimeError: If fetch fails, or sync does not index the new note.
     """
-    from hyperresearch.core.note import write_note
-    from hyperresearch.core.sync import compute_sync_plan, execute_sync
+    prov = prepare_fetch(vault, url, provider_name=provider_name, visible=visible)
+    result = prov.fetch(url)
+    return save_fetched(
+        vault, url, prov, result,
+        tags=tags, title=title, parent=parent, save_assets=save_assets,
+    )
+
+
+def prepare_fetch(
+    vault,
+    url: str,
+    provider_name: str | None = None,
+    visible: bool = False,
+):
+    """Refuse a duplicate URL and build the provider that will fetch it.
+
+    ``fetch_and_save`` is prepare -> ``prov.fetch(url)`` -> ``save_fetched``.
+    The split lets the MCP server run only the network fetch in a worker
+    thread while the DB work stays on its loop thread, where the sqlite
+    connection was opened (#118).
+
+    Raises:
+        ValueError: If URL is already fetched.
+    """
     from hyperresearch.web.base import get_provider
 
-    tags = tags or []
     conn = vault.db
 
     # Check if URL already fetched (an orphaned row — note deleted — is not a duplicate)
@@ -95,8 +149,29 @@ def fetch_and_save(
         settings=vault.config.fetch,
         gates=vault.config.junk,
     )
+    return prov
 
-    result = prov.fetch(url)
+
+def save_fetched(
+    vault,
+    url: str,
+    prov,
+    result,
+    tags: list[str] | None = None,
+    title: str | None = None,
+    parent: str | None = None,
+    save_assets: bool = False,
+) -> dict:
+    """Gate a fetched ``result`` and save it as a research note. Returns result dict.
+
+    Raises:
+        RuntimeError: If the result is a login wall or junk.
+    """
+    from hyperresearch.core.note import indexed_note_ids, write_note
+    from hyperresearch.core.sync import compute_sync_plan, execute_sync
+
+    tags = tags or []
+    conn = vault.db
 
     # Detect login redirects — abort, but escalate to the browser lane
     if result.looks_like_login_wall(url, vault.config.junk):
@@ -159,6 +234,7 @@ def fetch_and_save(
         source=url,
         parent=parent,
         extra_frontmatter=extra_meta,
+        taken_ids=indexed_note_ids(conn),
     )
 
     # Save raw file (PDF, etc.) if present
@@ -200,6 +276,10 @@ def fetch_and_save(
     plan = compute_sync_plan(vault)
     if plan.to_add or plan.to_update:
         execute_sync(vault, plan)
+
+    refused = discard_unindexed_note(vault, note_path, raw_file_path)
+    if refused:
+        raise RuntimeError(refused)
 
     # Record source (upsert: an orphaned row for this url may already exist)
     content_hash = hashlib.sha256(result.content.encode("utf-8")).hexdigest()[:16]
