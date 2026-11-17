@@ -150,7 +150,8 @@ def import_vault(
         imported = [item for item, _, _ in copied]
     else:
         from hyperresearch.cli.note import _file_identity
-        from hyperresearch.core.sync import _has_frontmatter, compute_sync_plan, execute_sync
+        from hyperresearch.core.frontmatter import has_frontmatter
+        from hyperresearch.core.sync import compute_sync_plan, execute_sync
         plan = compute_sync_plan(vault)
         result = execute_sync(vault, plan)
 
@@ -186,7 +187,7 @@ def import_vault(
                         "the index holds different content at this path, so sync did not "
                         "index the copy: run sync --force"
                     )
-                elif _has_frontmatter(path):
+                elif has_frontmatter(path):
                     reason = "sync did not index it"
                 else:
                     reason = "no YAML frontmatter: sync indexes only files that open with ---"
