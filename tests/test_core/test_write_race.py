@@ -147,7 +147,7 @@ def test_compute_sync_plan_skips_a_file_removed_after_listing(tmp_vault, monkeyp
     if indexed:
         execute_sync(tmp_vault, compute_sync_plan(tmp_vault))
 
-    real_probe = sync_mod._has_frontmatter
+    real_probe = sync_mod.has_frontmatter
 
     def probe_then_remove(path: Path) -> bool:
         has = real_probe(path)
@@ -155,7 +155,7 @@ def test_compute_sync_plan_skips_a_file_removed_after_listing(tmp_vault, monkeyp
             path.unlink()
         return has
 
-    monkeypatch.setattr(sync_mod, "_has_frontmatter", probe_then_remove)
+    monkeypatch.setattr(sync_mod, "has_frontmatter", probe_then_remove)
     plan = compute_sync_plan(tmp_vault)
 
     assert gone not in plan.to_add
