@@ -350,7 +350,7 @@ def backfill_dois(vault, tag: str | None = None) -> int:
 
     Updates note frontmatter + DB. Returns count of notes that gained a doi.
     """
-    from hyperresearch.core.frontmatter import parse_frontmatter, render_note
+    from hyperresearch.core.frontmatter import parse_frontmatter, write_frontmatter
 
     conn = vault.db
     query = (
@@ -373,7 +373,7 @@ def backfill_dois(vault, tag: str | None = None) -> int:
         if not doi:
             continue
         meta.doi = doi
-        note_path.write_text(render_note(meta, body), encoding="utf-8")
+        write_frontmatter(note_path, meta, body, vault.root)
         conn.execute("UPDATE notes SET doi = ? WHERE id = ?", (doi, row["id"]))
         gained += 1
     if gained:
@@ -417,7 +417,7 @@ def score_sources(
     `rate_limited` is "the API refused to answer" — those notes are NOT
     marked enriched, so the next run retries them.
     """
-    from hyperresearch.core.frontmatter import parse_frontmatter, render_note
+    from hyperresearch.core.frontmatter import parse_frontmatter, write_frontmatter
     from hyperresearch.core.quality import compute_quality_scores
 
     conn = vault.db
@@ -478,7 +478,7 @@ def score_sources(
             fm.citation_count = meta_result["citation_count"]
             fm.venue = meta_result["venue"]
             fm.is_retracted = is_retracted
-            note_path.write_text(render_note(fm, body), encoding="utf-8")
+            write_frontmatter(note_path, fm, body, vault.root)
 
         scored += 1
         if is_retracted:

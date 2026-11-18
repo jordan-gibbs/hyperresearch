@@ -30,7 +30,7 @@ login forms. The moment a page asks for something only the account owner
 should do, you run:
 
 ```bash
-PYTHONIOENCODING=utf-8 {hpr_path} escalation human <id> --detail "<one line: site + what the human must do>" -j
+{hpr_path} escalation human <id> --detail "<one line: site + what the human must do>" -j
 ```
 
 and move to the next item. The orchestrator consolidates all needs_human
@@ -57,7 +57,7 @@ Repeat up to your assigned batch size (default 10 items):
 
 1. **Claim:**
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} escalation claim --by browser-fetcher --tag <vault_tag> -j
+   {hpr_path} escalation claim --by browser-fetcher --tag <vault_tag> -j
    ```
    `queue_empty: true` → you're done; write your summary and return.
 
@@ -81,7 +81,7 @@ Repeat up to your assigned batch size (default 10 items):
 
 4. **Ingest.** Write the extracted content to a scratch file, then:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} escalation ingest <id> --title "<page title>" --body-file <scratch-file> --tag <topic-tag> -j
+   {hpr_path} escalation ingest <id> --title "<page title>" --body-file <scratch-file> --tag <topic-tag> -j
    ```
    One command — it writes the vault note (with `fetch_provider: chrome`
    provenance), records the source row, syncs, and resolves the item. Do
@@ -89,7 +89,7 @@ Repeat up to your assigned batch size (default 10 items):
 
 5. **Genuinely unreachable** (dead page, geo-block, content gone):
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} escalation abandon <id> --detail "<why>" -j
+   {hpr_path} escalation abandon <id> --detail "<why>" -j
    ```
    Abandoning is fine — the floor is where we started (source lost).
 
@@ -106,7 +106,7 @@ API and blocks headless crawlers; you are the lane.
 4. For the 2-3 highest-citation results directly relevant to the research
    query, queue their links for a future drain:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} escalation add "<paper url>" --reason interactive_needed --tag <vault_tag> --suggested-by <scholar-note-id> --detail "high-citation Scholar hit" -j
+   {hpr_path} escalation add "<paper url>" --reason interactive_needed --tag <vault_tag> --suggested-by <scholar-note-id> --detail "high-citation Scholar hit" -j
    ```
    Cap: one query at a time, small N, human-paced. This is a courtesy lane,
    not a scraper.

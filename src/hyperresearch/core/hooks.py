@@ -2008,7 +2008,7 @@ the 20-50 sources most relevant to YOUR angle.
 
 1. **Batch-read in chunks of 5-8 IDs.** Stay within output limits:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note show <id1> <id2> <id3> <id4> <id5> -j
+   {hpr_path} note show <id1> <id2> <id3> <id4> <id5> -j
    ```
    Repeat until every ID in `must_read_note_ids` has been read. If a
    batch returns truncated bodies, re-read those IDs individually with
@@ -2834,14 +2834,14 @@ prompt. No block = this prompt's defaults apply unchanged.
 
 1. **Check for an existing analysis.** Before writing anything, search:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note list --tag <vault_tag> --type source-analysis --all --json
+   {hpr_path} note list --tag <vault_tag> --type source-analysis --all --json
    ```
    Then filter for any note whose body contains `[[<source_note_id>]]`.
    If one exists, report back to the parent — do NOT duplicate.
 
 2. **Read the source.** Pull the full body:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note show <source_note_id> -j
+   {hpr_path} note show <source_note_id> -j
    ```
    Hold the full body in your context. Most sources fit comfortably —
    even 500-page PDFs usually extract to <300K words. If the source
@@ -2891,7 +2891,7 @@ prompt. No block = this prompt's defaults apply unchanged.
 
 5. **Create the source-analysis note:**
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note new "Source Analysis — <short title>" \\
+   {hpr_path} note new "Source Analysis — <short title>" \\
      --type source-analysis \\
      --tag <vault_tag> \\
      --tag source-analysis \\
@@ -3048,10 +3048,8 @@ If you get a browser crash or "failed to launch" error:
 
 ## Commands
 
-On Windows, ALWAYS prefix commands with `PYTHONIOENCODING=utf-8`:
-
 ```bash
-PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> -j
+{hpr_path} fetch "<url>" --tag <topic> -j
 ```
 
 ### Utility flag — `--utility-score`
@@ -3061,7 +3059,7 @@ When your assigned batch carries a utility score next to a URL (e.g.
 frontmatter and feeds the vault's composite quality ranking:
 
 ```bash
-PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> --utility-score 14 -j
+{hpr_path} fetch "<url>" --tag <topic> --utility-score 14 -j
 ```
 
 DOIs and arXiv ids are captured automatically during fetch — you do not
@@ -3073,7 +3071,7 @@ When fetching a URL that was referenced by a source you already processed,
 pass `--suggested-by <note-id>` to create the citation chain in the vault:
 
 ```bash
-PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" \\
+{hpr_path} fetch "<url>" \\
   --tag <topic> \\
   --suggested-by <source-note-id> \\
   --suggested-by-reason "<one-line reason>" \\
@@ -3088,17 +3086,17 @@ If you're fetching a seed source directly from the parent agent's URL list
 For each URL the parent agent gave you:
 
 1. Check if it's already fetched:
-   `PYTHONIOENCODING=utf-8 {hpr_path} sources check "<url>" -j`
+   `{hpr_path} sources check "<url>" -j`
 
 2. If not already fetched, fetch it:
-   `PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> -j`
+   `{hpr_path} fetch "<url>" --tag <topic> -j`
 
 3. After fetching, read the note content:
-   `PYTHONIOENCODING=utf-8 {hpr_path} note show <note-id> -j`
+   `{hpr_path} note show <note-id> -j`
 
 4. **Quality check** — read the content and decide:
    - Is this actually relevant to the research topic? If completely off-topic, deprecate it:
-     `PYTHONIOENCODING=utf-8 {hpr_path} note update <note-id> --status deprecated -j`
+     `{hpr_path} note update <note-id> --status deprecated -j`
    - Is the content meaningful (not junk)? If junk, deprecate it.
    - Is this a duplicate? If so, deprecate the worse copy.
 
@@ -3107,8 +3105,8 @@ For each URL the parent agent gave you:
    and fetch the primary sources in Phase 2.
 
 5. If the content is good, write a real summary and add tags:
-   `PYTHONIOENCODING=utf-8 {hpr_path} note update <note-id> --summary "<specific summary>" -j`
-   `PYTHONIOENCODING=utf-8 {hpr_path} note update <note-id> --add-tag <specific-tag> -j`
+   `{hpr_path} note update <note-id> --summary "<specific summary>" -j`
+   `{hpr_path} note update <note-id> --add-tag <specific-tag> -j`
 
    **Summary length is proportional to the source's substantive density.**
    - **Short/thin:** 1-2 specific sentences.
@@ -3182,8 +3180,8 @@ those primaries gives the pipeline higher-authority sources to cite.
    - If you have a direct URL from the citation, fetch it with the
      hyperresearch CLI (same commands as Phase 1):
      ```
-     PYTHONIOENCODING=utf-8 {hpr_path} sources check "<url>" -j
-     PYTHONIOENCODING=utf-8 {hpr_path} fetch "<url>" --tag <topic> --suggested-by <note-id-that-cited-it> --suggested-by-reason "cited as primary source" -j
+     {hpr_path} sources check "<url>" -j
+     {hpr_path} fetch "<url>" --tag <topic> --suggested-by <note-id-that-cited-it> --suggested-by-reason "cited as primary source" -j
      ```
    - If you only have author + title (no URL), use WebSearch to locate it:
      search for `"<author> <title> <year>"` or `"<title> filetype:pdf"`
@@ -3286,7 +3284,7 @@ prompt. No block = this prompt's defaults apply unchanged.
    position in comparisons.md, identify the 2-3 source note IDs that
    the position rests on. Read them in full:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note show <id1> <id2> <id3> -j
+   {hpr_path} note show <id1> <id2> <id3> -j
    ```
    Check: does the original source actually support the committed
    position as stated? Summaries and interim notes can drift from
@@ -3308,7 +3306,7 @@ prompt. No block = this prompt's defaults apply unchanged.
 5. **Search the vault** for existing sources that might already contain
    overturning evidence that the investigators missed:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} search "<adversarial query>" --tag <corpus_tag> -j
+   {hpr_path} search "<adversarial query>" --tag <corpus_tag> -j
    ```
 
 6. **Produce output** at `output_path`:
@@ -3382,7 +3380,7 @@ login forms. The moment a page asks for something only the account owner
 should do, you run:
 
 ```bash
-PYTHONIOENCODING=utf-8 {hpr_path} escalation human <id> --detail "<one line: site + what the human must do>" -j
+{hpr_path} escalation human <id> --detail "<one line: site + what the human must do>" -j
 ```
 
 and move to the next item. The orchestrator consolidates all needs_human
@@ -3409,7 +3407,7 @@ Repeat up to your assigned batch size (default 10 items):
 
 1. **Claim:**
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} escalation claim --by browser-fetcher --tag <vault_tag> -j
+   {hpr_path} escalation claim --by browser-fetcher --tag <vault_tag> -j
    ```
    `queue_empty: true` → you're done; write your summary and return.
 
@@ -3433,7 +3431,7 @@ Repeat up to your assigned batch size (default 10 items):
 
 4. **Ingest.** Write the extracted content to a scratch file, then:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} escalation ingest <id> --title "<page title>" --body-file <scratch-file> --tag <topic-tag> -j
+   {hpr_path} escalation ingest <id> --title "<page title>" --body-file <scratch-file> --tag <topic-tag> -j
    ```
    One command — it writes the vault note (with `fetch_provider: chrome`
    provenance), records the source row, syncs, and resolves the item. Do
@@ -3441,7 +3439,7 @@ Repeat up to your assigned batch size (default 10 items):
 
 5. **Genuinely unreachable** (dead page, geo-block, content gone):
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} escalation abandon <id> --detail "<why>" -j
+   {hpr_path} escalation abandon <id> --detail "<why>" -j
    ```
    Abandoning is fine — the floor is where we started (source lost).
 
@@ -3458,7 +3456,7 @@ API and blocks headless crawlers; you are the lane.
 4. For the 2-3 highest-citation results directly relevant to the research
    query, queue their links for a future drain:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} escalation add "<paper url>" --reason interactive_needed --tag <vault_tag> --suggested-by <scholar-note-id> --detail "high-citation Scholar hit" -j
+   {hpr_path} escalation add "<paper url>" --reason interactive_needed --tag <vault_tag> --suggested-by <scholar-note-id> --detail "high-citation Scholar hit" -j
    ```
    Cap: one query at a time, small N, human-paced. This is a courtesy lane,
    not a scraper.
@@ -3518,7 +3516,7 @@ For each assigned pair:
 
 1. Read the cited note's body:
    ```bash
-   PYTHONIOENCODING=utf-8 {hpr_path} note show <note_id> -j
+   {hpr_path} note show <note_id> -j
    ```
    Batch-read up to 5 ids per call when consecutive pairs cite different notes.
 
@@ -3530,7 +3528,7 @@ For each assigned pair:
      source makes).
    - **unsupported** — nothing in the note backs the sentence.
    - **wrong-source** — the note doesn't back it, but another vault note
-     does. Find it: `PYTHONIOENCODING=utf-8 {hpr_path} claims search "<key phrase>" -j`
+     does. Find it: `{hpr_path} claims search "<key phrase>" -j`
      and name the correct note_id in the finding.
 
    Judge the SOURCE-SENTENCE binding only. Whether the claim is TRUE is not
@@ -3777,7 +3775,7 @@ def _prune_global_step_skills(home: Path) -> str | None:
         suffix = name[len("hyperresearch-"):]
         if not suffix or not suffix[0].isdigit():
             continue
-        if not _is_our_skill_dir(child):
+        if not _is_our_step_skill_dir(child):
             continue
         _remove_skill_dir(child)
         pruned.append(name)
@@ -4260,6 +4258,25 @@ def _is_our_skill_dir(path: Path) -> bool:
     return any(marker in text for marker in _OWNED_SKILL_MARKERS)
 
 
+def _is_our_step_skill_dir(path: Path) -> bool:
+    """`_is_our_skill_dir` for a dir matched only by its `hyperresearch-` prefix.
+
+    A hand-written `hyperresearch-my-notes` mentions hyperresearch too, so the
+    content marker alone deleted it. Ours carry the provenance header
+    (render.render_header), or, from installs predating it, a step name the
+    package ships: every step name it has ever shipped is still in the roster.
+    """
+    if not _is_our_skill_dir(path):
+        return False
+    if path.name in _HYPERRESEARCH_STEP_SKILLS:
+        return True
+    try:
+        text = (path / "SKILL.md").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return "rendered from profile" in text
+
+
 def _remove_skill_dir(path: Path) -> None:
     """Delete a skill directory and everything under it."""
     import shutil
@@ -4507,7 +4524,8 @@ def _install_hyperresearch_step_skills(
         is_legacy_layercake = child.name.startswith("layercake-")
         if not (is_stale_hpr or is_legacy_layercake):
             continue
-        if not _is_our_skill_dir(child):
+        owned = _is_our_step_skill_dir if is_stale_hpr else _is_our_skill_dir
+        if not owned(child):
             continue
         _remove_skill_dir(child)
         pruned.append(child.name)
