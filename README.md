@@ -98,6 +98,17 @@ The repo is a Claude Code plugin marketplace, a Codex plugin marketplace, and a 
 
 If Claude Code does not pick up the newly installed skills and subagents, restart it in the same directory and run `/hyperresearch <question>`. Codex discovers skills at session start, so on first use the bootstrap reads the freshly installed entry skill directly; later sessions can start with `$hyperresearch <question>`.
 
+### OpenCode (community adapter)
+
+OpenCode is not yet an officially supported harness. A community adapter under [`opencode/`](opencode/README.md) renders the same installed pipeline into native OpenCode skills, subagents, commands and config — globally, so `/hyperresearch` works from any directory. It reads the output of `hyperresearch install` and does not change the CLI or the Claude Code / Codex installs:
+
+```bash
+python opencode/build_opencode.py --scope global --repo .
+python opencode/test_opencode.py --repo . --scope global
+```
+
+Then reload OpenCode (`/reload`) and ask for deep research or invoke `/hyperresearch <question>`. See [`opencode/README.md`](opencode/README.md) for scope options, translations and limitations.
+
 ### Codex
 
 The same pipeline runs on the [OpenAI Codex CLI](https://github.com/openai/codex).
