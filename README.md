@@ -44,7 +44,7 @@ Read a full report before you install anything. These are unedited Deep runs fro
 
 - [Toast vs Square vs Clover](https://hyperresearch.ai/samples/restaurant-pos-competitor-analysis?utm_source=github&utm_medium=readme): a restaurant POS competitor analysis, built mostly from SEC filings (241 sources)
 - [Buying a $2M HVAC business](https://hyperresearch.ai/samples/buying-an-hvac-business?utm_source=github&utm_medium=readme): multiples, SBA loans and diligence (213 sources)
-- [Who is winning AI coding agents, October 2026](https://hyperresearch.ai/samples/ai-coding-agents?utm_source=github&utm_medium=readme) (259 sources)
+- [System 1 Decision Models](https://reports.hyperresearch.ai/s/ux3kUa7cm8SkK6Yui87k86Op9A0RQ_5g1Uoh2phjegc) (259 sources)
 - [Snowflake vs Databricks](https://hyperresearch.ai/samples/snowflake-vs-databricks?utm_source=github&utm_medium=readme): a costed first year for a 2,000-person AWS buyer, from filings and both rate cards (259 sources)
 
 These are the same kind of hosted Deep runs that put Hyperresearch at #1 on DRACO, at 77.7 (10 tasks). Our Finance, Academic and Law reports were produced by our current Deep writer from the research each task's run collected. Method and per-task scores are on the [benchmark page](https://hyperresearch.ai/benchmarks/draco?utm_source=github&utm_medium=readme).
